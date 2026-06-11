@@ -17,29 +17,38 @@ Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
 migrate via the existing `migrate_to_new_tarball` path.
 
-## Cascade disposition (vs the 18 steps in setup_steps_wsl.rs)
+## Cascade disposition (vs the CURRENT 21 StepDefs in setup_steps_wsl.rs)
 
-**Fully baked → REMOVE these steps:**
+(Step ids, not numbers — the public hd-setup-steps skill still says "18
+steps" and is stale. The distro import itself lives in
+`WslDistroRuntime::setup_and_start`, before the cascade: it keeps
+download+sha+`wsl --import`+start, loses user-creation and Phase A, and
+**the distro now boots as `adom`, not root — audit `wsl -d` call sites**.)
 
-| # | Step | Baked as |
-|---|------|----------|
-| 4 | install-gallia | `~/gallia` snapshot (latest main, NO .git) + npm install + full install.mjs deploy (skills/hooks/permissions/settings), gated on its "Installation complete!" marker |
-| 8 | install-hd-skills | 34 skills, shared/ + wsl2/ buckets, flat at `~/.claude/skills/hd-*/` |
-| 10 | verify-adom-desktop | adom-desktop CLI 1.8.125 at `/usr/local/bin` (latest version.json at bake) |
-| 15 | install-claude-cli | claude 2.1.173, official layout (`~/.local/share/claude/versions/` + `~/.local/bin/claude` symlink), PATH in .bashrc, proot-verified at build |
-| 16 | install-claude-ext | anthropic.claude-code (latest Open VSX at bake) registered in code-server; `extensions.autoUpdate: true` keeps it current |
+**Fully baked → REMOVE these 7 steps:**
 
-**Partially baked → SLIM these steps:**
+| Step id | Baked as |
+|---------|----------|
+| install-gallia | `~/gallia` snapshot (latest main, NO .git) + npm install + full install.mjs deploy (skills/hooks/permissions/settings), gated on its "Installation complete!" marker |
+| install-adom-cli | adom-cli at `/usr/local/bin` (wiki static at bake; install.mjs refreshes it too) |
+| install-hd-skills | 34 skills, shared/ + wsl2/ buckets, flat at `~/.claude/skills/hd-*/` |
+| verify-adom-desktop | adom-desktop CLI 1.8.125 at `/usr/local/bin` (latest version.json at bake) |
+| install-claude-cli | claude 2.1.173, official layout (`~/.local/share/claude/versions/` + `~/.local/bin/claude` symlink), PATH in .bashrc, proot-verified at build |
+| install-claude-ext | anthropic.claude-code (latest Open VSX at bake) registered in code-server; `extensions.autoUpdate: true` keeps it current |
+| *(plus the bakeable halves below)* | |
 
-| # | Step | Baked | Keep at runtime |
-|---|------|-------|-----------------|
-| 1 | ensure-workspace | adom user 1001 + sudoers + wsl.conf (**`default=adom` — v0 booted as root; audit `wsl -d` call sites**), code-server installed | WSL2 check, download+sha, `wsl --import`, start code-server |
-| 3 | install-adom-vscode | binary + .vsix registered (in `--list-extensions`) | iframe reload + `:8821/health` poll (activation proof — extensions only activate on first webview load) |
-| 7 | configure-vscode | settings.json (exact step payload: dark mode, Claude perms, Copilot off, silent ports, **no model pin**) + workbench.html trusted-domains patch | layout half only (sidebars/panel/welcome/activity-bar — webview IndexedDB state, unbakeable) |
+**Partially baked → SLIM these 2 steps:**
 
-**Unchanged (machine/user-specific):** 2 wait-codeserver, 5 set-env-vars,
-6 inject-api-key, 9 ensure-adom-desktop, 11–13 relay, 14 test-adom-cli,
-17 claude-auth, 18 welcome. Plus per-boot `init-host-internal.sh`.
+| Step id | Baked | Keep at runtime |
+|---------|-------|-----------------|
+| install-adom-vscode | binary + .vsix registered (in `--list-extensions`) | iframe reload + `:8821/health` poll (activation proof — extensions only activate on first webview load) |
+| configure-vscode | settings.json (exact step payload: dark mode, Claude perms, Copilot off, silent ports, **no model pin**) + workbench.html trusted-domains patch | layout half only (sidebars/panel/welcome/activity-bar — webview IndexedDB state, unbakeable) |
+
+**Unchanged (machine/user/runtime-specific), 12 steps:** wait-codeserver,
+set-env-vars, inject-api-key, ensure-adom-desktop, start-relay,
+test-direct-connect, test-relay, test-adom-cli, claude-auth, ensure-sse,
+verify-workspace, welcome, open-welcome. Plus per-boot
+`init-host-internal.sh`.
 
 ## Public-build guarantees (smoke-tested every bake)
 
