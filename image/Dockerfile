@@ -127,4 +127,4 @@ EXPOSE 8080
 # Never `docker run` in production — the rootfs is exported for `wsl --import`.
 # The CMD documents the entrypoint HD starts inside the distro.
 CMD ["code-server", "--bind-addr", "0.0.0.0:8080", "--auth", "none", \
-     "--disable-telemetry", "/home/adom/project"]
+     "--disable-telemetry", "--disable-update-check", "/home/adom/project"]

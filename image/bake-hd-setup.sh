@@ -72,24 +72,42 @@ as_adom '/usr/local/bin/adom-vscode install 2>&1 | sed "s/\x1b\[[0-9;]*m//g" | t
 as_adom 'V=$(ls -1 /tmp/adom-vscode-*.vsix 2>/dev/null | head -1); test -n "$V" && '"$CS"' --install-extension "$V" --force 2>&1 | tail -3'
 as_adom "$CS --list-extensions 2>/dev/null | grep -qi adom"
 
-# ── step 7: configure-vscode — settings.json ──────────────────────────────
-# EXACT payload from setup_steps_wsl.rs "configure-vscode". The runtime
-# step re-affirms the same content idempotently. Note: NO model pin —
-# Claude Code picks the default model itself.
-log "step 7: code-server settings.json"
+# ── step configure-vscode: settings.json ──────────────────────────────────
+# setup_steps_wsl.rs "configure-vscode" payload PLUS the chat/UI disables
+# the cloud reference container carries (chat.agent, navigationControl,
+# secondary sidebar, copilot/git auth off) — without these the baked
+# editor opens VS Code's built-in "Build with Agent" chat panel (caught
+# by pup visual test 2026-06-11). Note: NO model pin — Claude Code picks
+# the default model itself.
+# ⚠ If HD's runtime configure-vscode step still rewrites settings.json,
+# its payload in setup_steps_wsl.rs must gain these keys too, or first
+# launch resurrects the chat panel.
+log "configure-vscode: settings.json"
 install -d -o adom -g adom -m 0755 /home/adom/.local/share/code-server/User
 cat > /home/adom/.local/share/code-server/User/settings.json <<'SETTINGS'
 {
   "security.workspace.trust.enabled": false,
+  "security.workspace.trust.untrustedFiles": "open",
   "workbench.startupEditor": "none",
   "workbench.activityBar.location": "default",
+  "workbench.activityBar.iconClickBehavior": "toggle",
   "workbench.colorTheme": "Default Dark Modern",
   "workbench.statusBar.visible": false,
+  "workbench.navigationControl.enabled": false,
+  "workbench.secondarySideBar.visible": false,
+  "workbench.secondarySideBar.defaultVisibility": "hidden",
   "claudeCode.allowDangerouslySkipPermissions": true,
   "claudeCode.initialPermissionMode": "bypassPermissions",
   "claudeCode.preferredLocation": "panel",
+  "chat.agent.enabled": false,
+  "chat.commandCenter.enabled": false,
+  "chat.agentsControl.enabled": false,
+  "chat.unifiedAgentsBar.enabled": false,
   "github.copilot.chat.enabled": false,
   "github.copilot.enable": { "*": false },
+  "github.gitAuthentication": false,
+  "git.autofetch": false,
+  "scm.defaultViewMode": "tree",
   "security.trustedDomains": ["*"],
   "workbench.trustedDomains.promptInTrustedWorkspace": false,
   "remote.portsAttributes": { "8821": { "onAutoForward": "silent" } },
@@ -99,6 +117,18 @@ cat > /home/adom/.local/share/code-server/User/settings.json <<'SETTINGS'
 }
 SETTINGS
 chown adom:adom /home/adom/.local/share/code-server/User/settings.json
+
+# code-server's own update-check nags ("v4.x has been released!") —
+# disable via config.yaml (caught by pup visual test 2026-06-11). HD's
+# code-server start command should also pass --disable-update-check.
+install -d -o adom -g adom -m 0755 /home/adom/.config/code-server
+cat > /home/adom/.config/code-server/config.yaml <<'CSCONF'
+bind-addr: 0.0.0.0:8080
+auth: none
+disable-telemetry: true
+disable-update-check: true
+CSCONF
+chown adom:adom /home/adom/.config/code-server/config.yaml
 
 # ── step 7: configure-vscode — trusted-domains workbench.html patch ───────
 # Suppresses the 'open external website?' dialog by seeding VS Code's
@@ -147,6 +177,11 @@ rm -f /home/adom/.local/bin/adom-desktop
 as_adom 'adom-desktop --version'
 
 # ── tidy ───────────────────────────────────────────────────────────────────
+# install.mjs leaves an empty {"mcpServers":{}} at ~/project/.mcp.json —
+# visible bake debris in a fresh user's explorer (pup visual test
+# 2026-06-11). project-content/{schematics,screenshots} stays: that's the
+# intentional Adom workspace convention tools save into.
+rm -f /home/adom/project/.mcp.json
 rm -f /tmp/adom-vscode-*.vsix /tmp/install-mjs.log
 as_adom 'npm cache clean --force >/dev/null 2>&1 || true'
 log "done"

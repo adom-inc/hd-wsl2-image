@@ -190,6 +190,12 @@ in_root "set -e; code-server --version; node --version; git --version; \
       || { echo 'MISSING dark-mode settings.json'; exit 1; }; \
   jq -e 'has(\"claudeCode.selectedModel\") | not' /home/adom/.local/share/code-server/User/settings.json >/dev/null \
       || { echo 'LEAK: vscode settings pin a model'; exit 1; }; \
+  jq -e '.\"chat.agent.enabled\" == false and .\"workbench.navigationControl.enabled\" == false' \
+      /home/adom/.local/share/code-server/User/settings.json >/dev/null \
+      || { echo 'MISSING chat/agent-UI disables in vscode settings'; exit 1; }; \
+  grep -q 'disable-update-check: true' /home/adom/.config/code-server/config.yaml \
+      || { echo 'MISSING code-server disable-update-check'; exit 1; }; \
+  test ! -e /home/adom/project/.mcp.json || { echo 'LEAK: bake debris .mcp.json in project'; exit 1; }; \
   grep -q __hdTrustedDomains /usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.html \
       || { echo 'MISSING trusted-domains patch'; exit 1; }; \
   ls /home/adom/.claude/skills/ | grep -q '^hd-' || { echo 'MISSING hd skills'; exit 1; }; \

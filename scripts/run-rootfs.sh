@@ -54,4 +54,4 @@ exec "${PROOT}" -r "${ROOT}" -b /proc -b /dev -b /etc/resolv.conf:/etc/resolv.co
     /usr/bin/env -i HOME=/home/adom USER=adom SHELL=/bin/bash TERM=xterm-256color \
     LANG=en_US.UTF-8 \
     PATH=/home/adom/.local/bin:/home/adom/.claude/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin \
-    /usr/bin/code-server --bind-addr "0.0.0.0:${PORT}" --auth none --disable-telemetry /home/adom/project
+    /usr/bin/code-server --bind-addr "0.0.0.0:${PORT}" --auth none --disable-telemetry --disable-update-check /home/adom/project
