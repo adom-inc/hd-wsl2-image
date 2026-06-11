@@ -1,17 +1,17 @@
-# Handoff: golden WSL2 image v4 — the setup cascade is now pre-baked
+# Handoff: golden WSL2 image v5 — the setup cascade is now pre-baked
 
 Paste this into the main Hydrogen Desktop thread.
 
 ---
 
-Golden image **v4** pre-runs HD's WSL2 setup cascade at image-build time.
+Golden image **v5** pre-runs HD's WSL2 setup cascade at image-build time.
 Built from `adom-inc/hd-wsl2-image` (public repo), hosted as a GitHub
 Release asset:
 
-- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v4/adom-golden-v4.tar.gz
-- **SHA256:** `c78c345c0d88f2e74a5f2c00a31f0cb121784c3b1e8fa9f6b35da2fc0e9cbbd8`
+- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v5/adom-golden-v5.tar.gz
+- **SHA256:** `1459da27f5d5587e217ced5ca4808bb365540a24519390ddc4c48732e40914bf`
 - **Size:** 552 MB
-- **Version:** `v4` (for `TARBALL_VERSION`)
+- **Version:** `v5` (for `TARBALL_VERSION`)
 
 Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
@@ -66,7 +66,7 @@ verify-workspace, welcome, open-welcome. Plus per-boot
 
 ## wsl.rs cleanups this enables
 
-1. Consts → v4 values above; download message "~30 MB" → "~550 MB".
+1. Consts → v5 values above; download message "~30 MB" → "~550 MB".
 2. `run_bootstrap_synchronously`: nothing left to install — drop from the
    hot path (in-image bootstrap.sh is a non-fatal updater, always exit 0).
 3. The networking/DNS gate before the first apt call is dead code.
@@ -80,5 +80,6 @@ verify-workspace, welcome, open-welcome. Plus per-boot
   (`static/apps/gallia-bundle/gallia-bundle.tar.gz` on the wiki), so the
   baked snapshot adds no new exposure.
 - Rebuild procedure: `skills/golden-image-bake/SKILL.md` (monthly cadence).
-- CI workflow (docker build + ghcr.io) is staged in `.github-pending/`,
-  blocked on gh token scopes (`workflow`, `write:packages`).
+- CI is LIVE: `gh workflow run build-golden-image -f version=vN` builds,
+  smokes, releases, AND pushes ghcr.io/adom-inc/hd-wsl2-image (publicly
+  pullable, single layer = the rootfs). v5 is the first CI-built release.

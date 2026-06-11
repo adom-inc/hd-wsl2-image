@@ -24,6 +24,19 @@ has no docker) — **keep them in lockstep** when editing either.
 
 ## Procedure
 
+**Preferred path — CI (real docker, full smoke incl. native claude verify):**
+
+```bash
+cd /home/adom/project/hd-wsl2-image && git pull --ff-only
+gh release list --repo adom-inc/hd-wsl2-image     # pick next vN
+gh workflow run build-golden-image -f version=vN
+gh run watch $(gh run list --workflow build-golden-image --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
+# CI does build + smoke + release + ghcr push. Then SKIP to step 5 (verify).
+# Needs the GALLIA_TOKEN repo secret (read access to gallia + hydrogen-desktop).
+```
+
+**Fallback path — local chroot build** (CI down, or iterating on the recipe):
+
 ```bash
 cd /home/adom/project/hd-wsl2-image
 git pull --ff-only
