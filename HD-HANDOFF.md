@@ -1,17 +1,17 @@
-# Handoff: golden WSL2 image v3 — the setup cascade is now pre-baked
+# Handoff: golden WSL2 image v4 — the setup cascade is now pre-baked
 
 Paste this into the main Hydrogen Desktop thread.
 
 ---
 
-Golden image **v3** pre-runs HD's WSL2 setup cascade at image-build time.
+Golden image **v4** pre-runs HD's WSL2 setup cascade at image-build time.
 Built from `adom-inc/hd-wsl2-image` (public repo), hosted as a GitHub
 Release asset:
 
-- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v3/adom-golden-v3.tar.gz
-- **SHA256:** `16cb3e2cfc0ffe1f87d7f9544fce5636e74878ec438e005937c16fb80d6f1b0d`
+- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v4/adom-golden-v4.tar.gz
+- **SHA256:** `c78c345c0d88f2e74a5f2c00a31f0cb121784c3b1e8fa9f6b35da2fc0e9cbbd8`
 - **Size:** 552 MB
-- **Version:** `v3` (for `TARBALL_VERSION`)
+- **Version:** `v4` (for `TARBALL_VERSION`)
 
 Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
@@ -42,7 +42,7 @@ download+sha+`wsl --import`+start, loses user-creation and Phase A, and
 | Step id | Baked | Keep at runtime |
 |---------|-------|-----------------|
 | install-adom-vscode | binary + .vsix registered (in `--list-extensions`) | iframe reload + `:8821/health` poll (activation proof — extensions only activate on first webview load) |
-| configure-vscode | settings.json (exact step payload: dark mode, Claude perms, Copilot off, silent ports, **no model pin**) + workbench.html trusted-domains patch | layout half only (sidebars/panel/welcome/activity-bar — webview IndexedDB state, unbakeable) |
+| configure-vscode | settings.json (exact step payload: dark mode, Claude perms, Copilot off, silent ports, **no model pin**) + workbench.html trusted-domains patch | layout slivers only: close sidebars/panel/welcome on first show. Activity-bar trim is NOW BAKED (workbench.html seeds pinnedViewlets2 once per profile) — keep the welcome re-apply as backstop, drop the interactive hide |
 
 **Unchanged (machine/user/runtime-specific), 12 steps:** wait-codeserver,
 set-env-vars, inject-api-key, ensure-adom-desktop, start-relay,
@@ -66,7 +66,7 @@ verify-workspace, welcome, open-welcome. Plus per-boot
 
 ## wsl.rs cleanups this enables
 
-1. Consts → v3 values above; download message "~30 MB" → "~550 MB".
+1. Consts → v4 values above; download message "~30 MB" → "~550 MB".
 2. `run_bootstrap_synchronously`: nothing left to install — drop from the
    hot path (in-image bootstrap.sh is a non-fatal updater, always exit 0).
 3. The networking/DNS gate before the first apt call is dead code.
