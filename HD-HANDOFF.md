@@ -4,14 +4,14 @@ Paste this into the main Hydrogen Desktop thread.
 
 ---
 
-Golden image **v2** pre-runs HD's WSL2 setup cascade at image-build time.
+Golden image **v3** pre-runs HD's WSL2 setup cascade at image-build time.
 Built from `adom-inc/hd-wsl2-image` (public repo), hosted as a GitHub
 Release asset:
 
-- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v2/adom-golden-v2.tar.gz
-- **SHA256:** `7e13c68e0baca87691cf0a150741937b2f2042dd36455842e350274b041c193d`
+- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v3/adom-golden-v3.tar.gz
+- **SHA256:** `16cb3e2cfc0ffe1f87d7f9544fce5636e74878ec438e005937c16fb80d6f1b0d`
 - **Size:** 552 MB
-- **Version:** `v2` (for `TARBALL_VERSION`)
+- **Version:** `v3` (for `TARBALL_VERSION`)
 
 Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
