@@ -1,77 +1,75 @@
-# Handoff: golden WSL2 image replaces the thin-tarball setup flow
+# Handoff: golden WSL2 image v2 — the setup cascade is now pre-baked
 
 Paste this into the main Hydrogen Desktop thread.
 
 ---
 
-A golden WSL2 rootfs image now exists that eliminates most of HD's WSL
-setup steps. Built from `adom-inc/hd-wsl2-image` (public repo), hosted as
-a GitHub Release asset:
+Golden image **v2** pre-runs HD's WSL2 setup cascade at image-build time.
+Built from `adom-inc/hd-wsl2-image` (public repo), hosted as a GitHub
+Release asset:
 
-- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v1/adom-golden-v1.tar.gz
-- **SHA256:** `aa24401588f43e2cbaee1d0faa4a83fc4291557658963ca14dbef4f156972131`
-- **Size:** 378 MB (396,023,562 bytes) (vs 30 MB thin tarball — but the thin flow downloaded
-  ~200 MB at first run anyway, from Ubuntu mirrors + GitHub + the wiki)
-- **Version:** `v1` (for `TARBALL_VERSION`)
+- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v2/adom-golden-v2.tar.gz
+- **SHA256:** `7e13c68e0baca87691cf0a150741937b2f2042dd36455842e350274b041c193d`
+- **Size:** 552 MB
+- **Version:** `v2` (for `TARBALL_VERSION`)
 
-## What's baked in (no longer done at install time)
+Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
+`TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
+migrate via the existing `migrate_to_new_tarball` path.
 
-- Full apt baseline at **cloud-image parity** (`docker/Dockerfile` package
-  list: build-essential, cmake, node, npm, python3, gh, etc.) — Ubuntu
-  24.04.4, glibc 2.39
-- **code-server 4.112.0** installed — starts seconds after import
-- **adom user (1001:1001)** + passwordless sudo + `/home/adom/project`
-- `/etc/wsl.conf` with `default=adom` and `systemd=true` ⚠️ v0 defaulted
-  to **root**; any `wsl -d Adom-Workspace` invocation that assumed root
-  now runs as `adom` (with sudo available) — audit those call sites
-- Adom CLIs in `/usr/local/bin`: adom-cli, adom-wiki, adom-vscode,
-  adom-mouser, adom-digikey, adom-jlcpcb, adom-parts-search, adom-gchat
-  (+ their `install` skill payloads where they succeeded at bake time)
-- `/var/lib/adom-bootstrap/phase-a-done` sentinel pre-written
-- `/etc/adom-golden-version` = `v1`
-- `/opt/adom/bootstrap.sh` replaced with a **non-fatal updater** (always
-  exits 0; fetches install.mjs if it's ever published, otherwise logs a
-  skip)
+## Cascade disposition (vs the 18 steps in setup_steps_wsl.rs)
 
-## What this lets you delete/simplify in `hd-app/src/runtime/wsl.rs`
+**Fully baked → REMOVE these steps:**
 
-1. Update the three consts: `TARBALL_URL_PLACEHOLDER`,
-   `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION = "v1"`. Existing v0
-   installs migrate via the existing `migrate_to_new_tarball` path.
-2. `run_bootstrap_synchronously`: no longer installs anything. The 6-min
-   timeout can drop to ~30 s, or the call can be skipped entirely on the
-   hot path (fire-and-forget the updater).
-3. The **networking/DNS gate before the first apt call** is dead code —
-   there is no apt at first run anymore.
-4. Progress UI: "downloading adom-thin.tar.gz (~30 MB)" → golden image
-   size; remove the apt/code-server install progress phases.
-5. `start_code_server`'s "wait for code-server to appear on PATH" loop
-   collapses — it's always present.
-6. Keep per-boot: `init-host-internal.sh` (host.docker.internal) and
-   `wsl --import` recovery — unchanged.
+| # | Step | Baked as |
+|---|------|----------|
+| 4 | install-gallia | `~/gallia` snapshot (latest main, NO .git) + npm install + full install.mjs deploy (skills/hooks/permissions/settings), gated on its "Installation complete!" marker |
+| 8 | install-hd-skills | 34 skills, shared/ + wsl2/ buckets, flat at `~/.claude/skills/hd-*/` |
+| 10 | verify-adom-desktop | adom-desktop CLI 1.8.125 at `/usr/local/bin` (latest version.json at bake) |
+| 15 | install-claude-cli | claude 2.1.173, official layout (`~/.local/share/claude/versions/` + `~/.local/bin/claude` symlink), PATH in .bashrc, proot-verified at build |
+| 16 | install-claude-ext | anthropic.claude-code (latest Open VSX at bake) registered in code-server; `extensions.autoUpdate: true` keeps it current |
 
-## Facts discovered while building this (independent of the golden image)
+**Partially baked → SLIM these steps:**
 
-- **bootstrap.sh Phase B has been silently dead**: the hardcoded
-  `https://wiki-ufypy5dpx93o.adom.cloud/static/install.mjs` returns 404
-  (install.mjs only exists inside the private gallia repo; it was never
-  published to the wiki). The `|| true` in `run_bootstrap_synchronously`'s
-  bash invocation swallowed this. So v0 first-runs never installed gallia
-  skills or Adom CLIs — the golden image fixes the CLI half outright;
-  gallia-on-first-run remains an open design question (it's a private
-  repo, so it can't be baked into a publicly hosted image).
-- The shipped v0 tarball (30 MB) was the **bare** Ubuntu export — the
-  wsl-thin Dockerfile's code-server bake never shipped.
-- v0 hosting is John's dev container proxy URL — replaced by the GitHub
-  Release URL above.
+| # | Step | Baked | Keep at runtime |
+|---|------|-------|-----------------|
+| 1 | ensure-workspace | adom user 1001 + sudoers + wsl.conf (**`default=adom` — v0 booted as root; audit `wsl -d` call sites**), code-server installed | WSL2 check, download+sha, `wsl --import`, start code-server |
+| 3 | install-adom-vscode | binary + .vsix registered (in `--list-extensions`) | iframe reload + `:8821/health` poll (activation proof — extensions only activate on first webview load) |
+| 7 | configure-vscode | settings.json (exact step payload: dark mode, Claude perms, Copilot off, silent ports, **no model pin**) + workbench.html trusted-domains patch | layout half only (sidebars/panel/welcome/activity-bar — webview IndexedDB state, unbakeable) |
 
-## Rebuilding the image
+**Unchanged (machine/user-specific):** 2 wait-codeserver, 5 set-env-vars,
+6 inject-api-key, 9 ensure-adom-desktop, 11–13 relay, 14 test-adom-cli,
+17 claude-auth, 18 welcome. Plus per-boot `init-host-internal.sh`.
 
-- Canonical recipe: `image/Dockerfile` in adom-inc/hd-wsl2-image
-- Built without docker via `scripts/build-rootfs.sh` (chroot-based, runs
-  in an Adom cloud container)
-- A GitHub Actions workflow (docker build + ghcr.io push + release) is
-  sitting in `.github-pending/` — it lands once the gh token gains
-  `workflow` + `write:packages` scopes
-  (`gh auth refresh -h github.com -s workflow,write:packages,read:org,repo,gist`).
-  Until then, ghcr.io hosting is pending; the release asset is canonical.
+## Public-build guarantees (smoke-tested every bake)
+
+- **No GitHub auth anywhere**: no `gallia/.git`, gallia's 30-min
+  stale-detector hook (`check-updates.sh`) removed from
+  `~/.claude/settings.json`. Updates ship as new image versions
+  (monthly bake — see `skills/golden-image-bake/SKILL.md`).
+- **No model pins**: gallia itself no longer writes `settings.model`
+  (gallia commit `f9acf2c` — Claude Code picks the default model, and
+  pre-existing gallia-written pins incl. `opus[1m]` are deleted on next
+  install.mjs run); code-server settings carry no
+  `claudeCode.selectedModel`.
+- No shared telemetry ID: `~/.claude.json` / statsig state generated
+  during build verification is scrubbed.
+
+## wsl.rs cleanups this enables
+
+1. Consts → v2 values above; download message "~30 MB" → "~550 MB".
+2. `run_bootstrap_synchronously`: nothing left to install — drop from the
+   hot path (in-image bootstrap.sh is a non-fatal updater, always exit 0).
+3. The networking/DNS gate before the first apt call is dead code.
+4. `start_code_server`'s wait-for-binary loop collapses (always present).
+
+## Other facts
+
+- v0's bootstrap Phase B (wiki install.mjs fetch) was always a 404 —
+  silently swallowed by `|| true`. v0 first-runs never had CLIs/skills.
+- gallia content was already publicly distributed
+  (`static/apps/gallia-bundle/gallia-bundle.tar.gz` on the wiki), so the
+  baked snapshot adds no new exposure.
+- Rebuild procedure: `skills/golden-image-bake/SKILL.md` (monthly cadence).
+- CI workflow (docker build + ghcr.io) is staged in `.github-pending/`,
+  blocked on gh token scopes (`workflow`, `write:packages`).

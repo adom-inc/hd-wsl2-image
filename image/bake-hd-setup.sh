@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# bake-hd-setup.sh — pre-run HD's setup cascade at IMAGE BUILD time.
+#
+# Run as root inside the rootfs (chroot or docker RUN). Each section names
+# the setup step it subsumes in
+# hydrogen-desktop/src-tauri/crates/hd-app/src/setup_steps_wsl.rs — keep
+# the two in lockstep. With these baked, the runtime cascade reduces to the
+# machine/user-specific steps only: ensure-workspace (wsl --import),
+# wait-codeserver, set-env-vars (live proxy port), inject-api-key,
+# ensure-adom-desktop (host side), start-relay/test-* (relay), claude-auth,
+# and welcome.
+#
+# NOTHING here may require GitHub authentication — this image is public and
+# installs on machines with no GitHub identity. Sources used: the local
+# gallia snapshot (staged by the builder), the public Adom wiki, Open VSX,
+# and claude.ai. install.mjs's `gh release download` attempts fail
+# unauthenticated and fall back to wiki URLs by design.
+
+set -euo pipefail
+log() { echo "[bake-hd-setup] $*"; }
+as_adom() { runuser -u adom -- bash -lc "$1"; }
+
+WIKI_BASE="${WIKI_BASE:-https://wiki-ufypy5dpx93o.adom.cloud}"
+CS=/usr/lib/code-server/bin/code-server
+
+# ── step 4: install-gallia ─────────────────────────────────────────────────
+# npm install must produce node_modules (hard gate, mirrors the cascade).
+# install.mjs is gated on its own "Installation complete" marker, NOT its
+# exit code — it exits non-zero even on a fully successful install.
+log "step 4: gallia npm install + install.mjs"
+test -d /home/adom/gallia || { echo "gallia snapshot missing — builder must stage it first" >&2; exit 1; }
+as_adom 'cd ~/gallia && npm install --no-audit --no-fund 2>&1 | tail -3 && test -d node_modules'
+as_adom 'node ~/gallia/install.mjs --project ~/project > /tmp/install-mjs.log 2>&1 || true; tail -25 /tmp/install-mjs.log; grep -q "Installation complete" /tmp/install-mjs.log'
+
+# ── step 15: install-claude-cli ────────────────────────────────────────────
+# Official installer → ~/.local/bin/claude (symlink to
+# ~/.local/share/claude/versions/<ver>). PATH line is idempotent (and
+# install.mjs §0 writes it too). The ~235 MB download cache is deleted —
+# it would otherwise ship in the image for nothing.
+#
+# The claude binary (bun-based) REQUIRES /proc and aborts without it. In
+# docker (CI) /proc exists and the installer self-completes + verifies.
+# In the chroot builder there is no /proc: the installer still downloads
+# AND checksum-verifies the binary, but its final `claude install` step
+# core-dumps — so we finish the versions/<ver> + symlink layout manually
+# (mirroring what `claude install` creates) and scripts/build-rootfs.sh
+# functionally verifies the binary afterwards under proot with /proc bound.
+log "step 15: claude CLI"
+if [ -e /proc/self ]; then
+    as_adom 'curl -fsSL --connect-timeout 15 https://claude.ai/install.sh -o /tmp/claude-install.sh && bash /tmp/claude-install.sh 2>&1 | tail -4; rm -f /tmp/claude-install.sh'
+    as_adom '~/.local/bin/claude --version'
+else
+    log "  no /proc (chroot build) — completing the installer's layout manually"
+    as_adom 'curl -fsSL --connect-timeout 15 https://claude.ai/install.sh -o /tmp/claude-install.sh && { bash /tmp/claude-install.sh 2>&1 | tail -4 || true; }; rm -f /tmp/claude-install.sh'
+    as_adom 'BIN="$(ls -1 ~/.claude/downloads/claude-*-linux-x64 2>/dev/null | sort -V | tail -1)"; test -s "$BIN"; VER="$(basename "$BIN" | sed "s/^claude-//; s/-linux-x64$//")"; install -D -m 0755 "$BIN" ~/.local/share/claude/versions/"$VER"; mkdir -p ~/.local/bin; ln -sfn ~/.local/share/claude/versions/"$VER" ~/.local/bin/claude'
+    as_adom 'test -L ~/.local/bin/claude && test -s "$(readlink -f ~/.local/bin/claude)"'
+fi
+as_adom 'grep -q "/.local/bin" ~/.bashrc || printf "export PATH=\"\$HOME/.local/bin:\$PATH\"\n" >> ~/.bashrc'
+as_adom 'rm -rf ~/.claude/downloads'
+
+# ── step 16: install-claude-ext ────────────────────────────────────────────
+log "step 16: Claude Code extension (Open VSX)"
+as_adom "$CS --install-extension anthropic.claude-code --force 2>&1 | tail -3"
+as_adom "$CS --list-extensions 2>/dev/null | grep -qi claude"
+
+# ── step 3: install-adom-vscode (extension half; binary baked earlier) ────
+# `adom-vscode install` drops the .vsix at /tmp + skill + completions but
+# does NOT register with code-server (proven 2026-05-31) — register the
+# .vsix explicitly, then verify, exactly like the cascade.
+log "step 3: adom-vscode extension"
+as_adom '/usr/local/bin/adom-vscode install 2>&1 | sed "s/\x1b\[[0-9;]*m//g" | tail -6 || true'
+as_adom 'V=$(ls -1 /tmp/adom-vscode-*.vsix 2>/dev/null | head -1); test -n "$V" && '"$CS"' --install-extension "$V" --force 2>&1 | tail -3'
+as_adom "$CS --list-extensions 2>/dev/null | grep -qi adom"
+
+# ── step 7: configure-vscode — settings.json ──────────────────────────────
+# EXACT payload from setup_steps_wsl.rs "configure-vscode". The runtime
+# step re-affirms the same content idempotently. Note: NO model pin —
+# Claude Code picks the default model itself.
+log "step 7: code-server settings.json"
+install -d -o adom -g adom -m 0755 /home/adom/.local/share/code-server/User
+cat > /home/adom/.local/share/code-server/User/settings.json <<'SETTINGS'
+{
+  "security.workspace.trust.enabled": false,
+  "workbench.startupEditor": "none",
+  "workbench.activityBar.location": "default",
+  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.statusBar.visible": false,
+  "claudeCode.allowDangerouslySkipPermissions": true,
+  "claudeCode.initialPermissionMode": "bypassPermissions",
+  "claudeCode.preferredLocation": "panel",
+  "github.copilot.chat.enabled": false,
+  "github.copilot.enable": { "*": false },
+  "security.trustedDomains": ["*"],
+  "workbench.trustedDomains.promptInTrustedWorkspace": false,
+  "remote.portsAttributes": { "8821": { "onAutoForward": "silent" } },
+  "remote.otherPortsAttributes": { "onAutoForward": "silent" },
+  "extensions.autoUpdate": true,
+  "extensions.autoCheckUpdates": true
+}
+SETTINGS
+chown adom:adom /home/adom/.local/share/code-server/User/settings.json
+
+# ── step 7: configure-vscode — trusted-domains workbench.html patch ───────
+# Suppresses the 'open external website?' dialog by seeding VS Code's
+# IndexedDB state on every page load. Same patch + marker as the cascade.
+log "step 7: trusted-domains workbench.html patch"
+WB=/usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.html
+if [ -f "$WB" ] && ! grep -q __hdTrustedDomains "$WB"; then
+    sed -i 's#</head>#<script>(function(){try{var r=indexedDB.open("vscode-web-state-db-global",1);r.onsuccess=function(e){var d=e.target.result;try{var t=d.transaction("ItemTable","readwrite");t.objectStore("ItemTable").put(JSON.stringify(["*"]),"http.linkProtectionTrustedDomains");}catch(_){}}}catch(_){}window.__hdTrustedDomains=1;})();</script></head>#' "$WB"
+fi
+grep -q __hdTrustedDomains "$WB"
+
+# ── step 8: install-hd-skills ──────────────────────────────────────────────
+# Builder stages hydrogen-desktop/skills/public-facing/{shared,wsl2} at
+# /tmp/hd-skills. Flat install, shared + wsl2 buckets only (never docker/).
+log "step 8: HD self-awareness skills"
+if [ -d /tmp/hd-skills ]; then
+    count=0
+    for bucket in shared wsl2; do
+        for d in /tmp/hd-skills/${bucket}/hd-*/; do
+            [ -f "${d}SKILL.md" ] || continue
+            name="$(basename "$d")"
+            install -D -o adom -g adom -m 0644 "${d}SKILL.md" "/home/adom/.claude/skills/${name}/SKILL.md"
+            count=$((count + 1))
+        done
+    done
+    rm -rf /tmp/hd-skills
+    log "  installed ${count} HD skills"
+    [ "$count" -gt 0 ]
+else
+    log "  /tmp/hd-skills not staged — skipping (non-fatal, mirrors the cascade)"
+fi
+
+# ── step 10: verify-adom-desktop (CLI half) ───────────────────────────────
+# Latest published AD CLI via version.json (wiki v2 → v1 mirror fallback),
+# same resolution order as ad_install::resolve_latest_ad.
+log "step 10: adom-desktop CLI"
+VJ="$(curl -fsSL https://git-wiki-ktqxite5iglh.adom.cloud/api/v1/pages/adom-desktop/files/version.json 2>/dev/null \
+   || curl -fsSL "${WIKI_BASE}/static/apps/adom-desktop/version.json")"
+AD_URL="$(echo "$VJ" | jq -r '.cli.linux_x86_64.binary_url')"
+[ -n "$AD_URL" ] && [ "$AD_URL" != "null" ]
+curl -fsSL "$AD_URL" -o /usr/local/bin/adom-desktop
+chmod 0755 /usr/local/bin/adom-desktop
+# A stale ~/.local/bin/adom-desktop (occasionally created by older gallia
+# install.mjs runs) would shadow /usr/local/bin in PATH — remove it.
+rm -f /home/adom/.local/bin/adom-desktop
+as_adom 'adom-desktop --version'
+
+# ── tidy ───────────────────────────────────────────────────────────────────
+rm -f /tmp/adom-vscode-*.vsix /tmp/install-mjs.log
+as_adom 'npm cache clean --force >/dev/null 2>&1 || true'
+log "done"

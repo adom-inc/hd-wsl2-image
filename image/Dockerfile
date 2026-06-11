@@ -87,18 +87,28 @@ COPY bootstrap.sh /opt/adom/bootstrap.sh
 RUN chmod +x /etc/init-host-internal.sh /opt/adom/bootstrap.sh \
     && chown -R adom:adom /opt/adom
 
-# Per-binary skill payloads → /home/adom/.claude/skills. Best-effort: a CLI
-# whose `install` needs live Adom credentials or a running container skips
-# here and is picked up by the first-run updater instead.
-USER adom
-RUN set -ux; \
-    adom-cli skills install || echo "bake: adom-cli skills install deferred to first run"; \
-    adom-wiki install --bin-dir /tmp/adom-wiki-scratch || echo "bake: adom-wiki install deferred"; \
-    rm -rf /tmp/adom-wiki-scratch; \
-    for b in adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
-        "$b" install || echo "bake: $b install deferred to first run"; \
-    done; \
-    exit 0
+# gallia + HD skills, staged into the build context by CI:
+#   gallia/    — adom-inc/gallia working tree, .git ALREADY STRIPPED (the
+#                public image must not carry the private remote or require
+#                GitHub auth; scripts/build-rootfs.sh tars the local clone
+#                with --exclude=.git instead)
+#   hd-skills/ — hydrogen-desktop/skills/public-facing/{shared,wsl2}
+COPY --chown=adom:adom gallia /home/adom/gallia
+COPY hd-skills /tmp/hd-skills
+
+# bake-hd-setup.sh pre-runs HD's setup cascade (gallia npm + install.mjs,
+# claude CLI, Claude Code + adom-vscode extensions, VS Code settings +
+# trusted domains, HD skills, adom-desktop CLI) — shared verbatim with
+# scripts/build-rootfs.sh. public-scrub.sh then removes the gallia
+# stale-detector hook (30-min git fetch against the private repo) and
+# other GitHub-auth assumptions; updates arrive as new image versions,
+# not git pulls.
+USER root
+COPY bake-hd-setup.sh /tmp/bake-hd-setup.sh
+RUN bash /tmp/bake-hd-setup.sh && rm -f /tmp/bake-hd-setup.sh
+
+COPY public-scrub.sh /tmp/public-scrub.sh
+RUN bash /tmp/public-scrub.sh && rm -f /tmp/public-scrub.sh
 
 # Phase A of the legacy bootstrap (apt baseline + code-server) is fully baked
 # above — write its sentinel so any older bootstrap.sh that still checks it

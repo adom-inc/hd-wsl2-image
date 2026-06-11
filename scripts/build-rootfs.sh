@@ -18,7 +18,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VER="${GOLDEN_VERSION:-v1}"
+VER="${GOLDEN_VERSION:-v2}"
 CSV="${CODE_SERVER_VERSION:-4.112.0}"
 WIKI_BASE="${WIKI_BASE:-https://wiki-ufypy5dpx93o.adom.cloud}"
 WORK="${WORK:-/tmp/hd-golden-build}"
@@ -113,15 +113,56 @@ sudo install -m 0755 image/init-host-internal.sh "${ROOT}/etc/init-host-internal
 sudo install -D -m 0755 image/bootstrap.sh "${ROOT}/opt/adom/bootstrap.sh"
 in_root "chown -R adom:adom /opt/adom"
 
-# ── 7. skill payloads as the adom user (best-effort, same as Dockerfile) ──
-log "skill payloads"
-in_root "runuser -u adom -- bash -lc ' \
-    adom-cli skills install || echo \"bake: adom-cli skills install deferred to first run\"; \
-    adom-wiki install --bin-dir /tmp/adom-wiki-scratch || echo \"bake: adom-wiki install deferred\"; \
-    rm -rf /tmp/adom-wiki-scratch; \
-    for b in adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
-        \$b install || echo \"bake: \$b install deferred to first run\"; \
-    done; exit 0'"
+# ── 7. stage gallia snapshot + HD skills, then bake the HD setup steps ────
+# gallia: the local working tree, NO .git — the public image must not
+# carry the private remote or require GitHub auth. Updates ship as new
+# image versions (monthly bake), not as in-place git pulls.
+GALLIA_SRC="${GALLIA_SRC:-${HOME}/gallia}"
+log "staging gallia from ${GALLIA_SRC}"
+[[ -d "${GALLIA_SRC}/skills" ]] || { echo "gallia working tree not found at ${GALLIA_SRC}" >&2; exit 1; }
+sudo rm -rf "${ROOT}/home/adom/gallia"
+sudo mkdir -p "${ROOT}/home/adom/gallia"
+sudo tar -C "${GALLIA_SRC}" --exclude=.git --exclude=node_modules -cf - . | sudo tar -C "${ROOT}/home/adom/gallia" -xf -
+in_root "chown -R adom:adom /home/adom/gallia"
+
+# HD self-awareness skills (shared/ + wsl2/ buckets) staged for step 8.
+HD_SKILLS_SRC="${HD_SKILLS_SRC:-${HOME}/project/hydrogen-desktop/skills/public-facing}"
+log "staging HD skills from ${HD_SKILLS_SRC}"
+[[ -d "${HD_SKILLS_SRC}/shared" ]] || { echo "HD skills not found at ${HD_SKILLS_SRC}" >&2; exit 1; }
+sudo rm -rf "${ROOT}/tmp/hd-skills"
+sudo mkdir -p "${ROOT}/tmp/hd-skills"
+sudo cp -r "${HD_SKILLS_SRC}/shared" "${HD_SKILLS_SRC}/wsl2" "${ROOT}/tmp/hd-skills/"
+
+# bake-hd-setup.sh pre-runs the HD setup cascade (gallia install.mjs,
+# claude CLI, Claude Code + adom-vscode extensions, VS Code settings,
+# trusted domains, HD skills, adom-desktop CLI) — shared with Dockerfile.
+log "bake HD setup steps"
+sudo install -m 0755 image/bake-hd-setup.sh "${ROOT}/tmp/bake-hd-setup.sh"
+in_root "bash /tmp/bake-hd-setup.sh && rm -f /tmp/bake-hd-setup.sh"
+
+# ── 7e. functional claude verification (proot, host side) ─────────────────
+# The bun-based claude binary needs /proc, which the chroot lacks — verify
+# it with proot binding the host /proc. Then remove any state files the
+# run generated: a baked ~/.claude.json would ship one shared anonymous
+# telemetry/user ID to every install.
+PROOT="${WORK}/proot"
+if [[ ! -x "${PROOT}" ]]; then
+    curl -fsSL -o "${PROOT}" https://proot.gitlab.io/proot/bin/proot
+    chmod +x "${PROOT}"
+fi
+log "verify claude CLI under proot"
+CLAUDE_V="$("${PROOT}" -r "${ROOT}" -b /proc -b /dev -w /home/adom \
+    /usr/bin/env HOME=/home/adom USER=adom PATH=/usr/local/bin:/usr/bin:/bin \
+    /home/adom/.local/bin/claude --version 2>/dev/null | head -1)"
+echo "  claude --version → ${CLAUDE_V}"
+[[ "${CLAUDE_V}" == *"Claude Code"* ]] || { echo "claude CLI failed proot verification" >&2; exit 1; }
+sudo rm -rf "${ROOT}/home/adom/.claude.json" "${ROOT}/home/adom/.claude.json.backup" \
+    "${ROOT}/home/adom/.claude/statsig" "${ROOT}/home/adom/.cache"
+
+# ── 7c. public scrub (shared with image/Dockerfile) ────────────────────────
+log "public scrub"
+sudo install -m 0755 image/public-scrub.sh "${ROOT}/tmp/public-scrub.sh"
+in_root "bash /tmp/public-scrub.sh && rm -f /tmp/public-scrub.sh"
 
 # ── 8. sentinel + version stamp ────────────────────────────────────────────
 in_root "mkdir -p /var/lib/adom-bootstrap \
@@ -135,7 +176,30 @@ in_root "set -e; code-server --version; node --version; git --version; \
   test -f /var/lib/adom-bootstrap/phase-a-done; cat /etc/adom-golden-version; \
   for b in adom-cli adom-wiki adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
       test -x /usr/local/bin/\$b || { echo \"MISSING \$b\"; exit 1; }; done; \
-  id adom | grep -q uid=1001; echo SMOKE-OK"
+  id adom | grep -q uid=1001; \
+  test -f /home/adom/.claude/skills/adom/SKILL.md || { echo 'MISSING gallia skills'; exit 1; }; \
+  test -d /home/adom/gallia/node_modules || { echo 'MISSING gallia node_modules'; exit 1; }; \
+  test ! -e /home/adom/gallia/.git || { echo 'LEAK: gallia .git in image'; exit 1; }; \
+  test -L /home/adom/.local/bin/claude && test -s \"\$(readlink -f /home/adom/.local/bin/claude)\" \
+      || { echo 'MISSING claude CLI'; exit 1; }; \
+  runuser -u adom -- /usr/lib/code-server/bin/code-server --list-extensions 2>/dev/null | grep -qi '^anthropic.claude-code' \
+      || { echo 'MISSING claude-code extension'; exit 1; }; \
+  runuser -u adom -- /usr/lib/code-server/bin/code-server --list-extensions 2>/dev/null | grep -qi '^adom' \
+      || { echo 'MISSING adom-vscode extension'; exit 1; }; \
+  jq -e '.\"workbench.colorTheme\" == \"Default Dark Modern\"' /home/adom/.local/share/code-server/User/settings.json >/dev/null \
+      || { echo 'MISSING dark-mode settings.json'; exit 1; }; \
+  jq -e 'has(\"claudeCode.selectedModel\") | not' /home/adom/.local/share/code-server/User/settings.json >/dev/null \
+      || { echo 'LEAK: vscode settings pin a model'; exit 1; }; \
+  grep -q __hdTrustedDomains /usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.html \
+      || { echo 'MISSING trusted-domains patch'; exit 1; }; \
+  ls /home/adom/.claude/skills/ | grep -q '^hd-' || { echo 'MISSING hd skills'; exit 1; }; \
+  test -x /usr/local/bin/adom-desktop || { echo 'MISSING adom-desktop CLI'; exit 1; }; \
+  jq -e 'has(\"model\") | not' /home/adom/.claude/settings.json >/dev/null \
+      || { echo 'LEAK: settings.json pins a model'; exit 1; }; \
+  jq -e '[(.hooks.UserPromptSubmit // [])[] | (.hooks // [])[] | .command // \"\"] \
+          | any(contains(\"check-updates\")) | not' /home/adom/.claude/settings.json >/dev/null \
+      || { echo 'LEAK: gallia update hook still registered'; exit 1; }; \
+  echo SMOKE-OK"
 
 # ── 10. cleanup + pack ─────────────────────────────────────────────────────
 log "cleanup"
