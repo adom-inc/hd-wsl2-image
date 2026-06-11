@@ -1,4 +1,4 @@
-# Handoff: golden WSL2 image v2 — the setup cascade is now pre-baked
+# Handoff: golden WSL2 image v3 — the setup cascade is now pre-baked
 
 Paste this into the main Hydrogen Desktop thread.
 
@@ -66,7 +66,7 @@ verify-workspace, welcome, open-welcome. Plus per-boot
 
 ## wsl.rs cleanups this enables
 
-1. Consts → v2 values above; download message "~30 MB" → "~550 MB".
+1. Consts → v3 values above; download message "~30 MB" → "~550 MB".
 2. `run_bootstrap_synchronously`: nothing left to install — drop from the
    hot path (in-image bootstrap.sh is a non-fatal updater, always exit 0).
 3. The networking/DNS gate before the first apt call is dead code.
