@@ -1,0 +1,109 @@
+name: build-golden-image
+
+# Builds the golden WSL2 rootfs, smoke-tests it, then publishes it two ways:
+#   1. GitHub Release asset  — the flat .tar.gz that HD's WslDistroRuntime
+#      downloads and feeds to `wsl --import` (primary distribution channel;
+#      public repo → anonymous HTTPS download).
+#   2. ghcr.io single-layer image — `docker import` of the same rootfs, so
+#      the registry copy's one layer blob IS the rootfs (pullable without
+#      docker via the OCI registry HTTP API if ever needed).
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag / image version (e.g. v1)"
+        required: true
+        default: "v1"
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Private repos — needs a token with read access to adom-inc/gallia
+      # and adom-inc/hydrogen-desktop stored as the GALLIA_TOKEN repo
+      # secret. .git is stripped: the public image must not carry the
+      # private remotes or require auth.
+      - name: Snapshot gallia + HD skills into build context
+        env:
+          GALLIA_TOKEN: ${{ secrets.GALLIA_TOKEN }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${GALLIA_TOKEN}@github.com/adom-inc/gallia.git" image/gallia
+          rm -rf image/gallia/.git image/gallia/node_modules
+          git clone --depth 1 --filter=blob:none --sparse \
+            "https://x-access-token:${GALLIA_TOKEN}@github.com/adom-inc/hydrogen-desktop.git" /tmp/hd-checkout
+          git -C /tmp/hd-checkout sparse-checkout set skills/public-facing
+          mkdir -p image/hd-skills
+          cp -r /tmp/hd-checkout/skills/public-facing/shared /tmp/hd-checkout/skills/public-facing/wsl2 image/hd-skills/
+          rm -rf /tmp/hd-checkout
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg GOLDEN_VERSION="${{ inputs.version }}" \
+            -t golden image/
+
+      - name: Smoke test
+        run: |
+          docker run --rm golden bash -lc '
+            set -e
+            code-server --version
+            node --version
+            test -f /etc/wsl.conf
+            test -x /etc/init-host-internal.sh
+            test -x /opt/adom/bootstrap.sh
+            test -f /var/lib/adom-bootstrap/phase-a-done
+            cat /etc/adom-golden-version
+            for b in adom-cli adom-wiki adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do
+              test -x /usr/local/bin/$b || { echo "MISSING $b"; exit 1; }
+            done
+            id adom | grep -q "uid=1001"
+            test -f /home/adom/.claude/skills/adom/SKILL.md
+            test -d /home/adom/gallia
+            test ! -e /home/adom/gallia/.git
+            jq -e "has(\"model\") | not" /home/adom/.claude/settings.json
+            jq -e "[(.hooks.UserPromptSubmit // [])[] | (.hooks // [])[] | .command // \"\"] | any(contains(\"check-updates\")) | not" /home/adom/.claude/settings.json
+            jq -e ".\"chat.agent.enabled\" == false" /home/adom/.local/share/code-server/User/settings.json
+            grep -q "disable-update-check: true" /home/adom/.config/code-server/config.yaml
+            test ! -e /home/adom/project/.mcp.json
+            echo SMOKE-OK
+          '
+
+      - name: Export flat rootfs
+        run: |
+          docker create --name exp golden
+          docker export exp -o "adom-golden-${{ inputs.version }}.tar"
+          docker rm exp
+          gzip -9 "adom-golden-${{ inputs.version }}.tar"
+          sha256sum "adom-golden-${{ inputs.version }}.tar.gz" \
+            | tee "adom-golden-${{ inputs.version }}.tar.gz.sha256"
+          ls -lh adom-golden-*
+
+      - name: Push single-layer image to ghcr.io
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker import "adom-golden-${{ inputs.version }}.tar.gz" \
+            "ghcr.io/${{ github.repository }}:${{ inputs.version }}"
+          docker tag "ghcr.io/${{ github.repository }}:${{ inputs.version }}" \
+            "ghcr.io/${{ github.repository }}:latest"
+          docker push "ghcr.io/${{ github.repository }}:${{ inputs.version }}"
+          docker push "ghcr.io/${{ github.repository }}:latest"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ inputs.version }}" \
+            "adom-golden-${{ inputs.version }}.tar.gz" \
+            "adom-golden-${{ inputs.version }}.tar.gz.sha256" \
+            --title "Golden WSL2 rootfs ${{ inputs.version }}" \
+            --notes "Flat rootfs for \`wsl --import\`. Ubuntu 24.04 + code-server + Adom CLIs baked. SHA256 in the .sha256 asset. Built by the build-golden-image workflow from this tag's Dockerfile." \
+            || gh release upload "${{ inputs.version }}" \
+                 "adom-golden-${{ inputs.version }}.tar.gz" \
+                 "adom-golden-${{ inputs.version }}.tar.gz.sha256" --clobber
