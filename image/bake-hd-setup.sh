@@ -130,15 +130,42 @@ disable-update-check: true
 CSCONF
 chown adom:adom /home/adom/.config/code-server/config.yaml
 
-# ── step 7: configure-vscode — trusted-domains workbench.html patch ───────
-# Suppresses the 'open external website?' dialog by seeding VS Code's
-# IndexedDB state on every page load. Same patch + marker as the cascade.
-log "step 7: trusted-domains workbench.html patch"
+# ── step configure-vscode: workbench.html IndexedDB state seed ────────────
+# One injected script, runs on every page load, seeds VS Code's per-origin
+# IndexedDB state:
+#   1. trusted domains "*" — suppresses the 'open external website?' dialog
+#      (same as the cascade's patch)
+#   2. activity bar: unpin Search/SCM/Run-and-Debug via
+#      workbench.activity.pinnedViewlets2 — replaces the cascade's
+#      interactive :8821 hide-activitybar step. Seeded ONCE per profile
+#      (adom.activityBarSeeded marker) so a user who deliberately re-pins
+#      them is never fought. First-ever paint can race VS Code's startup
+#      read — any reload (HD's setup reloads the iframe anyway) applies it.
+log "configure-vscode: workbench.html state seed (trusted domains + activity bar)"
 WB=/usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.html
-if [ -f "$WB" ] && ! grep -q __hdTrustedDomains "$WB"; then
-    sed -i 's#</head>#<script>(function(){try{var r=indexedDB.open("vscode-web-state-db-global",1);r.onsuccess=function(e){var d=e.target.result;try{var t=d.transaction("ItemTable","readwrite");t.objectStore("ItemTable").put(JSON.stringify(["*"]),"http.linkProtectionTrustedDomains");}catch(_){}}}catch(_){}window.__hdTrustedDomains=1;})();</script></head>#' "$WB"
-fi
+python3 - "$WB" <<'PY'
+import sys
+wb = sys.argv[1]
+html = open(wb).read()
+SCRIPT = ('<script>(function(){try{var r=indexedDB.open("vscode-web-state-db-global",1);'
+ 'r.onsuccess=function(e){var d=e.target.result;'
+ 'try{var t=d.transaction("ItemTable","readwrite");t.objectStore("ItemTable").put(JSON.stringify(["*"]),"http.linkProtectionTrustedDomains")}catch(_){}'
+ 'try{var t1=d.transaction("ItemTable","readonly");var os1=t1.objectStore("ItemTable");'
+ 'var sg=os1.get("adom.activityBarSeeded");sg.onsuccess=function(){if(sg.result)return;'
+ 'var pg=os1.get("workbench.activity.pinnedViewlets2");pg.onsuccess=function(){'
+ 'var arr=[];try{if(pg.result)arr=JSON.parse(pg.result)}catch(_){}'
+ 'var ids=["workbench.view.search","workbench.view.scm","workbench.view.debug"];'
+ 'ids.forEach(function(id){var f=null;for(var i=0;i<arr.length;i++){if(arr[i].id===id)f=arr[i]}'
+ 'if(f){f.pinned=false}else{arr.push({id:id,pinned:false,visible:false})}});'
+ 'try{var t2=d.transaction("ItemTable","readwrite");var o2=t2.objectStore("ItemTable");'
+ 'o2.put(JSON.stringify(arr),"workbench.activity.pinnedViewlets2");o2.put("1","adom.activityBarSeeded")}catch(_){}}}}catch(_){}};'
+ 'window.__hdTrustedDomains=1;window.__hdAbSeed=1}catch(_){}})();</script>')
+if '__hdAbSeed' not in html:
+    html = html.replace('</head>', SCRIPT + '</head>')
+    open(wb, 'w').write(html)
+PY
 grep -q __hdTrustedDomains "$WB"
+grep -q adom.activityBarSeeded "$WB"
 
 # ── step 8: install-hd-skills ──────────────────────────────────────────────
 # Builder stages hydrogen-desktop/skills/public-facing/{shared,wsl2} at
