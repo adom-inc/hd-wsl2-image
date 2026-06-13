@@ -17,13 +17,38 @@ Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
 migrate via the existing `migrate_to_new_tarball` path.
 
+## ⚠ DEFAULT USER: the image declares `adom`, but `wsl --import` may not honor it
+
+The shipped image's `/etc/wsl.conf` has `[user] default=adom` (verified by
+reading the v6 release tarball directly — NOT `default=root`; that string
+only appears in the LEGACY `wsl-thin/wsl.conf`, which is dead). But a baked
+`[user] default` is **not reliably applied by `wsl --import`** — imported
+distros commonly boot as **root** until the registry `DefaultUid` is set, or
+the distro is terminated so wsl.conf is re-read on next launch. So despite
+the conf, a fresh import can still drop you at a root shell.
+
+Two fixes — DO BOTH:
+1. In `WslDistroRuntime::setup_and_start`, right after `wsl --import`, FORCE
+   the default user: write `DefaultUid=1001` (0x3E9) to
+   `HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss\{distro-guid}`, or
+   run a one-time `wsl --terminate Adom-Workspace` so the next launch reads
+   wsl.conf. Verify with `wsl -d Adom-Workspace -- id` → `uid=1001(adom)`.
+2. Never RELY on the default in callers. `adom-desktop wsl_exec` already
+   REQUIRES an explicit `user` arg (`wsl -d <distro> -u <user> -- bash -lc`),
+   so it's only as safe as what each caller passes — pass `adom`. Audit
+   every BARE `wsl -d Adom-Workspace` (no `-u`) and every `run_script
+   interpreter:bash` cascade call; those are the ones that silently inherit
+   root if fix #1 hasn't taken. Skills that say "default user is adom" are
+   correct about the IMAGE but assume fix #1 is in place at runtime.
+
 ## Cascade disposition (vs the CURRENT 21 StepDefs in setup_steps_wsl.rs)
 
 (Step ids, not numbers — the public hd-setup-steps skill still says "18
 steps" and is stale. The distro import itself lives in
 `WslDistroRuntime::setup_and_start`, before the cascade: it keeps
-download+sha+`wsl --import`+start, loses user-creation and Phase A, and
-**the distro now boots as `adom`, not root — audit `wsl -d` call sites**.)
+download+sha+`wsl --import`+start, loses user-creation and Phase A. Default
+user = adom per the image, but see the DEFAULT USER warning above — force
+DefaultUid after import, and audit every `wsl -d` call site.)
 
 **Fully baked → REMOVE these 7 steps:**
 
