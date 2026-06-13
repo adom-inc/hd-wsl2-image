@@ -56,9 +56,9 @@ DefaultUid after import, and audit every `wsl -d` call site.)
 |---------|----------|
 | install-gallia | `~/gallia` snapshot (latest main, NO .git) + npm install + full install.mjs deploy (skills/hooks/permissions/settings), gated on its "Installation complete!" marker |
 | install-adom-cli | adom-cli at `/usr/local/bin` (wiki static at bake; install.mjs refreshes it too) |
-| install-hd-skills | 34 skills, shared/ + wsl2/ buckets, flat at `~/.claude/skills/hd-*/` |
+| install-hd-skills | 42 skills, shared/ + wsl2/ buckets, flat at `~/.claude/skills/hd-*/` |
 | verify-adom-desktop | adom-desktop CLI 1.8.125 at `/usr/local/bin` (latest version.json at bake) |
-| install-claude-cli | claude 2.1.173, official layout (`~/.local/share/claude/versions/` + `~/.local/bin/claude` symlink), PATH in .bashrc, proot-verified at build |
+| install-claude-cli | claude 2.1.177, official layout (`~/.local/share/claude/versions/` + `~/.local/bin/claude` symlink), PATH in .bashrc, proot-verified at build |
 | install-claude-ext | anthropic.claude-code (latest Open VSX at bake) registered in code-server; `extensions.autoUpdate: true` keeps it current |
 | *(plus the bakeable halves below)* | |
 
