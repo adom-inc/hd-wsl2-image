@@ -196,6 +196,8 @@ in_root "set -e; code-server --version; node --version; git --version; \
   grep -q 'disable-update-check: true' /home/adom/.config/code-server/config.yaml \
       || { echo 'MISSING code-server disable-update-check'; exit 1; }; \
   test ! -e /home/adom/project/.mcp.json || { echo 'LEAK: bake debris .mcp.json in project'; exit 1; }; \
+  test -z \"\$(find /home/adom ! -user adom -print -quit)\" \
+      || { echo \"OWNERSHIP: non-adom path under /home/adom: \$(find /home/adom ! -user adom -print -quit)\"; exit 1; }; \
   grep -q adom.activityBarSeeded /usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.html \
       || { echo 'MISSING trusted-domains patch'; exit 1; }; \
   ls /home/adom/.claude/skills/ | grep -q '^hd-' || { echo 'MISSING hd skills'; exit 1; }; \

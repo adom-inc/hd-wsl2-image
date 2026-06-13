@@ -177,7 +177,12 @@ if [ -d /tmp/hd-skills ]; then
         for d in /tmp/hd-skills/${bucket}/hd-*/; do
             [ -f "${d}SKILL.md" ] || continue
             name="$(basename "$d")"
-            install -D -o adom -g adom -m 0644 "${d}SKILL.md" "/home/adom/.claude/skills/${name}/SKILL.md"
+            # NOTE: `install -D -o adom -g adom` applies the owner to the FILE
+            # only — the parent dir it auto-creates lands root:root (this bake
+            # runs as root), leaving adom unable to delete/rename the skill dir.
+            # Create the dir explicitly as adom, THEN install the file.
+            install -d -o adom -g adom -m 0755 "/home/adom/.claude/skills/${name}"
+            install -o adom -g adom -m 0644 "${d}SKILL.md" "/home/adom/.claude/skills/${name}/SKILL.md"
             count=$((count + 1))
         done
     done
@@ -211,4 +216,15 @@ as_adom 'adom-desktop --version'
 rm -f /home/adom/project/.mcp.json
 rm -f /tmp/adom-vscode-*.vsix /tmp/install-mjs.log
 as_adom 'npm cache clean --force >/dev/null 2>&1 || true'
+
+# ── ownership sweep (belt + suspenders) ────────────────────────────────────
+# Definitive guarantee that the user's entire home tree is adom-owned. The
+# bake runs as root and mixes as_adom / root-side file creation; any tool
+# (now or future) that writes a root-owned path under /home/adom would
+# silently leave the user unable to delete it (the 'install -D' skill-dir
+# trap that shipped in v1-v5 was exactly this). One sweep closes the whole
+# class. /home/adom is a user home — nothing in it should be root-owned.
+# -h so symlinks (e.g. ~/.local/bin/claude) get their own ownership set,
+# not their targets'.
+chown -Rh adom:adom /home/adom
 log "done"

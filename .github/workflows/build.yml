@@ -72,6 +72,7 @@ jobs:
             jq -e ".\"chat.agent.enabled\" == false" /home/adom/.local/share/code-server/User/settings.json
             grep -q "disable-update-check: true" /home/adom/.config/code-server/config.yaml
             test ! -e /home/adom/project/.mcp.json
+            test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak under /home/adom:"; find /home/adom ! -user adom; exit 1; }
             echo SMOKE-OK
           '
 
