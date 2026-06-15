@@ -85,6 +85,7 @@ jobs:
             jq -e ".\"extensions.autoUpdate\" == true and .\"extensions.autoCheckUpdates\" == true" /home/adom/.local/share/code-server/User/settings.json
             grep -q "disable-update-check: true" /home/adom/.config/code-server/config.yaml
             grep -qE "^[[:space:]]*systemd[[:space:]]*=[[:space:]]*true" /etc/wsl.conf
+            test -x /usr/lib/systemd/systemd && test -e /sbin/init || { echo "MISSING systemd binary (PID 1 would fall back to /init, timer never fires)"; exit 1; }
             test ! -e /home/adom/project/.mcp.json
             test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak under /home/adom:"; find /home/adom ! -user adom; exit 1; }
             if [ -e /usr/local/bin/adom-workspace-updater ]; then

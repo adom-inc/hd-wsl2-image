@@ -75,7 +75,8 @@ in_root "apt-get update"
 in_root "apt-get install -y --no-install-recommends \
     ca-certificates curl wget git jq unzip zip tar gnupg openssh-client \
     sudo locales build-essential cmake pkg-config libssl-dev \
-    nodejs npm python3 python3-pip"
+    nodejs npm python3 python3-pip \
+    systemd systemd-sysv"
 
 log "github cli"
 in_root "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -211,6 +212,8 @@ in_root "set -e; code-server --version; node --version; git --version; \
       || { echo 'MISSING chat/agent-UI disables in vscode settings'; exit 1; }; \
   grep -q 'disable-update-check: true' /home/adom/.config/code-server/config.yaml \
       || { echo 'MISSING code-server disable-update-check'; exit 1; }; \
+  test -x /usr/lib/systemd/systemd && test -e /sbin/init \
+      || { echo 'MISSING systemd (wsl.conf says systemd=true but no systemd binary → PID 1 falls back to /init, timer never fires)'; exit 1; }; \
   jq -e '.\"extensions.autoUpdate\" == true and .\"extensions.autoCheckUpdates\" == true' \
       /home/adom/.local/share/code-server/User/settings.json >/dev/null \
       || { echo 'MISSING extensions.autoUpdate/autoCheckUpdates'; exit 1; }; \
