@@ -95,6 +95,10 @@ RUN chmod +x /etc/init-host-internal.sh /opt/adom/bootstrap.sh \
 #   hd-skills/ — hydrogen-desktop/skills/public-facing/{shared,wsl2}
 COPY --chown=adom:adom gallia /home/adom/gallia
 COPY hd-skills /tmp/hd-skills
+# workspace-updater daemon (HD auto-update Part B). CI always creates this dir;
+# it's populated only once feature/hd-auto-update is on main. bake-hd-setup.sh
+# guards on the .sh file, so an empty dir (pre-merge) cleanly skips the daemon.
+COPY workspace-updater /tmp/workspace-updater
 
 # bake-hd-setup.sh pre-runs HD's setup cascade (gallia npm + install.mjs,
 # claude CLI, Claude Code + adom-vscode extensions, VS Code settings +

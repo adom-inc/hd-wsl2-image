@@ -133,6 +133,22 @@ sudo rm -rf "${ROOT}/tmp/hd-skills"
 sudo mkdir -p "${ROOT}/tmp/hd-skills"
 sudo cp -r "${HD_SKILLS_SRC}/shared" "${HD_SKILLS_SRC}/wsl2" "${ROOT}/tmp/hd-skills/"
 
+# HD workspace-updater daemon (HD auto-update Part B) — staged for the daemon
+# step in bake-hd-setup.sh. GUARDED: only present once feature/hd-auto-update
+# is merged to hydrogen-desktop main (path absent pre-merge → bake skips).
+HD_UPDATER_SRC="${HD_UPDATER_SRC:-${HOME}/project/hydrogen-desktop/src-tauri/crates/hd-app/resources/workspace-updater}"
+if [[ -f "${HD_UPDATER_SRC}/adom-workspace-updater.sh" ]]; then
+    log "staging workspace-updater daemon from ${HD_UPDATER_SRC}"
+    sudo rm -rf "${ROOT}/tmp/workspace-updater"
+    sudo mkdir -p "${ROOT}/tmp/workspace-updater"
+    sudo cp "${HD_UPDATER_SRC}/adom-workspace-updater.sh" \
+            "${HD_UPDATER_SRC}/adom-workspace-updater.service" \
+            "${HD_UPDATER_SRC}/adom-workspace-updater.timer" \
+            "${ROOT}/tmp/workspace-updater/"
+else
+    log "workspace-updater source absent (pre-merge) — daemon bake will skip"
+fi
+
 # bake-hd-setup.sh pre-runs the HD setup cascade (gallia install.mjs,
 # claude CLI, Claude Code + adom-vscode extensions, VS Code settings,
 # trusted domains, HD skills, adom-desktop CLI) — shared with Dockerfile.
@@ -195,6 +211,17 @@ in_root "set -e; code-server --version; node --version; git --version; \
       || { echo 'MISSING chat/agent-UI disables in vscode settings'; exit 1; }; \
   grep -q 'disable-update-check: true' /home/adom/.config/code-server/config.yaml \
       || { echo 'MISSING code-server disable-update-check'; exit 1; }; \
+  jq -e '.\"extensions.autoUpdate\" == true and .\"extensions.autoCheckUpdates\" == true' \
+      /home/adom/.local/share/code-server/User/settings.json >/dev/null \
+      || { echo 'MISSING extensions.autoUpdate/autoCheckUpdates'; exit 1; }; \
+  if [ -e /usr/local/bin/adom-workspace-updater ]; then \
+      test -x /usr/local/bin/adom-workspace-updater || { echo 'workspace-updater not executable'; exit 1; }; \
+      [ \"\$(/usr/local/bin/adom-workspace-updater --version 2>/dev/null)\" = 'adom-workspace-updater 0.1.2' ] \
+          || { echo \"workspace-updater version != 0.1.2: \$(/usr/local/bin/adom-workspace-updater --version 2>/dev/null)\"; exit 1; }; \
+      test -L /etc/systemd/system/timers.target.wants/adom-workspace-updater.timer \
+          || { echo 'workspace-updater timer not enabled'; exit 1; }; \
+      echo 'workspace-updater daemon: baked + timer enabled'; \
+  else echo 'workspace-updater: not baked (pre-merge)'; fi; \
   test ! -e /home/adom/project/.mcp.json || { echo 'LEAK: bake debris .mcp.json in project'; exit 1; }; \
   test -z \"\$(find /home/adom ! -user adom -print -quit)\" \
       || { echo \"OWNERSHIP: non-adom path under /home/adom: \$(find /home/adom ! -user adom -print -quit)\"; exit 1; }; \

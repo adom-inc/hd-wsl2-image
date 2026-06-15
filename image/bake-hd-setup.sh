@@ -208,6 +208,38 @@ chmod 0755 /usr/local/bin/adom-desktop
 rm -f /home/adom/.local/bin/adom-desktop
 as_adom 'adom-desktop --version'
 
+# ── HD in-distro workspace-updater daemon (Part B of HD auto-update) ───────
+# Staged at /tmp/workspace-updater by the builder (CI sparse-checkout / chroot
+# cp from hydrogen-desktop main). GUARDED: if absent (pre-merge of
+# feature/hd-auto-update), skip cleanly so the monthly cron never breaks; once
+# the files are on main, the bake installs the daemon so a FRESH image has it
+# before HD's first launch. HD also bootstraps it into EXISTING distros via
+# ensure_workspace_updater every launch — so this bake is purely first-install.
+# The daemon's FIRST run installs the Codex VS Code extension, then converges
+# the workspace to the wiki manifest (SHA-verified, never-downgrade, surgical).
+# Codex is NOT baked — the daemon adds it at runtime.
+if [ -f /tmp/workspace-updater/adom-workspace-updater.sh ]; then
+    log "workspace-updater daemon (HD auto-update)"
+    # LF-only (source is LF; install preserves bytes). chmod +x the script.
+    install -m 0755 /tmp/workspace-updater/adom-workspace-updater.sh /usr/local/bin/adom-workspace-updater
+    install -m 0644 /tmp/workspace-updater/adom-workspace-updater.service /etc/systemd/system/adom-workspace-updater.service
+    install -m 0644 /tmp/workspace-updater/adom-workspace-updater.timer   /etc/systemd/system/adom-workspace-updater.timer
+    # README.md intentionally NOT shipped.
+    # Enable the timer so it fires on first systemd boot (wsl.conf has
+    # systemd=true). `systemctl enable` just writes the wants-symlink (works
+    # offline); fall back to the symlink directly if systemctl is absent in
+    # the minimal rootfs.
+    systemctl enable adom-workspace-updater.timer 2>/dev/null || {
+        mkdir -p /etc/systemd/system/timers.target.wants
+        ln -sf /etc/systemd/system/adom-workspace-updater.timer \
+               /etc/systemd/system/timers.target.wants/adom-workspace-updater.timer
+    }
+    rm -rf /tmp/workspace-updater
+    log "  daemon $(/usr/local/bin/adom-workspace-updater --version 2>/dev/null) installed + timer enabled"
+else
+    log "workspace-updater not staged — skipping (pre-merge of feature/hd-auto-update)"
+fi
+
 # ── tidy ───────────────────────────────────────────────────────────────────
 # install.mjs leaves an empty {"mcpServers":{}} at ~/project/.mcp.json —
 # visible bake debris in a fresh user's explorer (pup visual test
