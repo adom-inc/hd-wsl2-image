@@ -58,17 +58,10 @@ fi
 as_adom 'grep -q "/.local/bin" ~/.bashrc || printf "export PATH=\"\$HOME/.local/bin:\$PATH\"\n" >> ~/.bashrc'
 as_adom 'rm -rf ~/.claude/downloads'
 
-# ── step 16: install-claude-ext + Codex (Open VSX) ─────────────────────────
+# ── step 16: install-claude-ext ────────────────────────────────────────────
 log "step 16: Claude Code extension (Open VSX)"
 as_adom "$CS --install-extension anthropic.claude-code --force 2>&1 | tail -3"
 as_adom "$CS --list-extensions 2>/dev/null | grep -qi claude"
-# Codex (openai.chatgpt) baked alongside so it's present + active on first run —
-# no spurious first-boot "Codex has an update" banner. The workspace-updater's
-# manifest still lists codex as a version floor + reload-detection hook; baking
-# just makes it instant instead of arriving on the first daemon tick.
-log "step 16b: Codex extension (openai.chatgpt, Open VSX)"
-as_adom "$CS --install-extension openai.chatgpt --force 2>&1 | tail -3"
-as_adom "$CS --list-extensions 2>/dev/null | grep -qi '^openai.chatgpt'"
 
 # ── step 3: install-adom-vscode (extension half; binary baked earlier) ────
 # `adom-vscode install` drops the .vsix at /tmp + skill + completions but

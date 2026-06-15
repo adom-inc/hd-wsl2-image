@@ -76,7 +76,6 @@ jobs:
               test -x /usr/local/bin/$b || { echo "MISSING $b"; exit 1; }
             done
             id adom | grep -q "uid=1001"
-            /usr/lib/code-server/bin/code-server --list-extensions | grep -qi "^openai.chatgpt" || { echo "MISSING Codex extension"; exit 1; }
             test -f /home/adom/.claude/skills/adom/SKILL.md
             test -d /home/adom/gallia
             test ! -e /home/adom/gallia/.git
