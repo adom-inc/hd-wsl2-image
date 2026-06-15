@@ -15,7 +15,14 @@ Canonical recipe: `image/Dockerfile`; the chroot builder
 `scripts/build-rootfs.sh` is its docker-less translation (this container
 has no docker) — **keep them in lockstep** when editing either.
 
-## ⏳ PENDING bake addition — in-distro workspace-updater daemon (do on next bake)
+## ✅ DONE (v8) — in-distro workspace-updater daemon baked
+
+(Shipped in v8: systemd + systemd-sysv installed so PID 1 is systemd and the
+timer fires; daemon at /usr/local/bin/adom-workspace-updater 0.1.2 + enabled
+timer; Codex NOT baked — daemon installs it on first boot. The section below is
+the reference for how it's wired.)
+
+## (reference) workspace-updater daemon bake
 
 **Gate: ONLY after `feature/hd-auto-update` is merged into hydrogen-desktop
 `main`.** Check first: `git ls-tree -r --name-only origin/main -- \
