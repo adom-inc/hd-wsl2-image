@@ -1,17 +1,17 @@
-# Handoff: golden WSL2 image v8 — the setup cascade is now pre-baked
+# Handoff: golden WSL2 image v9 — the setup cascade is now pre-baked
 
 Paste this into the main Hydrogen Desktop thread.
 
 ---
 
-Golden image **v8** pre-runs HD's WSL2 setup cascade at image-build time.
+Golden image **v9** pre-runs HD's WSL2 setup cascade at image-build time.
 Built from `adom-inc/hd-wsl2-image` (public repo), hosted as a GitHub
 Release asset:
 
-- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v8/adom-golden-v8.tar.gz
-- **SHA256:** `bf2280332fb4b90681dbd78b8b843d9dfc61b89bfc087980f8fd6efd5034d461`
+- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v9/adom-golden-v9.tar.gz
+- **SHA256:** `8182ae574574a725ef8f79a36dd3547f01e466ae2060003f2b08d32a07b781a8`
 - **Size:** 552 MB
-- **Version:** `v8` (for `TARBALL_VERSION`)
+- **Version:** `v9` (for `TARBALL_VERSION`)
 
 Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
@@ -72,7 +72,7 @@ DefaultUid after import, and audit every `wsl -d` call site.)
 |---------|----------|
 | install-gallia | `~/gallia` snapshot (latest main, NO .git) + npm install + full install.mjs deploy (skills/hooks/permissions/settings), gated on its "Installation complete!" marker |
 | install-adom-cli | adom-cli at `/usr/local/bin` (wiki static at bake; install.mjs refreshes it too) |
-| install-hd-skills | 42 skills, shared/ + wsl2/ buckets, flat at `~/.claude/skills/hd-*/` |
+| install-hd-skills | 44 skills, shared/ + wsl2/ buckets, flat at `~/.claude/skills/hd-*/` |
 | verify-adom-desktop | adom-desktop CLI 1.8.125 at `/usr/local/bin` (latest version.json at bake) |
 | install-claude-cli | claude 2.1.177, official layout (`~/.local/share/claude/versions/` + `~/.local/bin/claude` symlink), PATH in .bashrc, proot-verified at build |
 | install-claude-ext | anthropic.claude-code (latest Open VSX at bake) registered in code-server; `extensions.autoUpdate: true` keeps it current |
@@ -107,7 +107,7 @@ verify-workspace, welcome, open-welcome. Plus per-boot
 
 ## wsl.rs cleanups this enables
 
-1. Consts → v8 values above; download message "~30 MB" → "~550 MB".
+1. Consts → v9 values above; download message "~30 MB" → "~550 MB".
 2. `run_bootstrap_synchronously`: nothing left to install — drop from the
    hot path (in-image bootstrap.sh is a non-fatal updater, always exit 0).
 3. The networking/DNS gate before the first apt call is dead code.
