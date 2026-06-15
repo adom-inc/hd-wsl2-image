@@ -15,6 +15,58 @@ Canonical recipe: `image/Dockerfile`; the chroot builder
 `scripts/build-rootfs.sh` is its docker-less translation (this container
 has no docker) — **keep them in lockstep** when editing either.
 
+## ⏳ PENDING bake addition — in-distro workspace-updater daemon (do on next bake)
+
+**Gate: ONLY after `feature/hd-auto-update` is merged into hydrogen-desktop
+`main`.** Check first: `git ls-tree -r --name-only origin/main -- \
+src-tauri/crates/hd-app/resources/workspace-updater/` — if it returns the
+files, the gate is open; if empty, SKIP this section (not merged yet).
+
+HD now ships an in-distro auto-updater. HD bootstraps it into the distro on
+every launch (`ensure_workspace_updater`), so existing AND new users get it
+without an image change — baking it just means a fresh image has the daemon
+present before HD's first launch. **Part C invariant (HOLD IT):** the golden
+image is FIRST-INSTALL ONLY — never add anything that re-images or migrates
+an existing user's distro. All ongoing updates flow through the daemon in
+place; the image only benefits brand-new installs.
+
+**KEEP everything currently baked** (code-server, claude-code extension,
+adom-vscode, gallia, CLIs — all of it stays). The daemon does NOT replace
+the bake. Its **first** update installs the **Codex VS Code extension**
+(which we do NOT bake) and thereafter converges the container to the live
+manifest (SHA-verified, never-downgrade, surgical):
+`https://wiki.adom.inc/api/v1/pages/hd-workspace-tooling/files/manifest.json`
+
+Source (hydrogen-desktop main, post-merge):
+`src-tauri/crates/hd-app/resources/workspace-updater/`
+  - `adom-workspace-updater.sh`      → `/usr/local/bin/adom-workspace-updater` (chmod +x)
+  - `adom-workspace-updater.service` → `/etc/systemd/system/`
+  - `adom-workspace-updater.timer`   → `/etc/systemd/system/` (then `systemctl enable`)
+  - `README.md` — reference only, do NOT ship into the image
+
+Implementation (apply when the gate opens), in lockstep across all three:
+1. **CI** `.github/workflows/build.yml` — extend the HD sparse-checkout to
+   also stage the updater dir alongside `skills/public-facing`, copy it to
+   `image/workspace-updater/`.
+2. **chroot** `scripts/build-rootfs.sh` — stage from the local checkout:
+   `sudo cp -r ~/project/hydrogen-desktop/src-tauri/crates/hd-app/resources/workspace-updater "${ROOT}/tmp/"`
+3. **`image/bake-hd-setup.sh`** — new step (runs as root):
+   ```bash
+   install -m 0755 /tmp/workspace-updater/adom-workspace-updater.sh /usr/local/bin/adom-workspace-updater
+   install -m 0644 /tmp/workspace-updater/adom-workspace-updater.service /etc/systemd/system/
+   install -m 0644 /tmp/workspace-updater/adom-workspace-updater.timer   /etc/systemd/system/
+   systemctl enable adom-workspace-updater.timer    # writes the multi-user.target.wants symlink; works offline in chroot/docker
+   rm -rf /tmp/workspace-updater
+   ```
+   (`systemctl enable` on a .timer works without a running systemd — it just
+   creates the wants-symlink. If the chroot lacks `systemctl`, fall back to
+   `ln -s ../adom-workspace-updater.timer /etc/systemd/system/timers.target.wants/`.)
+4. **Smoke** (build-rootfs.sh + CI): assert
+   `test -x /usr/local/bin/adom-workspace-updater`,
+   `test -f /etc/systemd/system/adom-workspace-updater.timer`, and the enable
+   symlink exists. Do NOT assert Codex is present — the daemon installs it at
+   runtime, not at bake.
+
 ## Preconditions
 
 - `~/gallia` exists and is freshly pulled (`cd ~/gallia && git pull --ff-only`)
