@@ -131,6 +131,33 @@ sha256sum /tmp/verify.tar.gz   # must equal the .sha256 asset
 rm -f /tmp/verify.tar.gz
 ```
 
+## 6. ALWAYS show John the latest in pup (John's standing preference)
+
+After every successful release, open the NEW version in pup so John can see
+it — don't wait to be asked. Serve the just-released rootfs via the
+`golden-image-test` Method B (proot) and point a pup window at it:
+
+```bash
+# download + unpack the rootfs to an ADOM-OWNED path (NOT a sudo-made /tmp dir —
+# root-owned dirs cause curl 'Failure writing output', exit 23)
+mkdir -p /home/adom/goldentmp && cd /home/adom/goldentmp
+curl -fsSL -o adom-golden-vN.tar.gz "https://github.com/adom-inc/hd-wsl2-image/releases/download/vN/adom-golden-vN.tar.gz"
+sudo rm -rf rootfs-vN && mkdir -p rootfs-vN && sudo tar --numeric-owner -xzf adom-golden-vN.tar.gz -C rootfs-vN
+# serve via proot as a RUN_IN_BACKGROUND Bash task (a `&`-in-shell child gets
+# reaped → exit 144; the harness-tracked background task persists):
+#   <PROOT> -r rootfs-vN -b /proc -b /dev -b /etc/resolv.conf:/etc/resolv.conf -w /home/adom \
+#     env -i HOME=/home/adom USER=adom ... PATH=... \
+#     /usr/bin/code-server --bind-addr 0.0.0.0:38082 --auth none --disable-telemetry --disable-update-check /home/adom/project
+# then point pup at the proxy URL (NEVER localhost — browser is outside the container):
+adom-desktop browser_navigate '{"sessionId":"golden-v8","url":"https://<slug>.adom.cloud/proxy/38082/?vN"}'
+```
+
+Confirm it's really the new version: in a terminal there,
+`cat /etc/adom-golden-version` must read vN (the marker is baked per-image, so
+a stale pup window pointed at an old rootfs will show the OLD version — that's
+how John caught a v8 window after v9 shipped). Reload once so the activity-bar
+trim applies (first virgin paint races the seed). Hand John the proxy URL.
+
 ## Hand-off to HD
 
 HD consumes the image via three consts in
