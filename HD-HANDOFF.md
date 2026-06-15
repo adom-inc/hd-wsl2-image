@@ -1,21 +1,37 @@
-# Handoff: golden WSL2 image v7 — the setup cascade is now pre-baked
+# Handoff: golden WSL2 image v8 — the setup cascade is now pre-baked
 
 Paste this into the main Hydrogen Desktop thread.
 
 ---
 
-Golden image **v7** pre-runs HD's WSL2 setup cascade at image-build time.
+Golden image **v8** pre-runs HD's WSL2 setup cascade at image-build time.
 Built from `adom-inc/hd-wsl2-image` (public repo), hosted as a GitHub
 Release asset:
 
-- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v7/adom-golden-v7.tar.gz
-- **SHA256:** `8aaa95def6842b2a328950698683c7c79921454108df1f8b9ae8caf7fff31c07`
+- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v8/adom-golden-v8.tar.gz
+- **SHA256:** `bf2280332fb4b90681dbd78b8b843d9dfc61b89bfc087980f8fd6efd5034d461`
 - **Size:** 552 MB
-- **Version:** `v7` (for `TARBALL_VERSION`)
+- **Version:** `v8` (for `TARBALL_VERSION`)
 
 Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
 migrate via the existing `migrate_to_new_tarball` path.
+
+
+## v8 adds: systemd PID 1 + the workspace-updater daemon
+
+- **systemd is now installed** (apt `systemd` + `systemd-sysv`). wsl.conf has
+  `[boot] systemd=true`, so WSL launches systemd as PID 1 → the daemon's
+  timer actually fires. (v1–v7 declared systemd=true but never installed the
+  binary, so PID 1 fell back to WSL's /init shim and no timer ran.)
+- **In-distro workspace-updater daemon baked** (HD auto-update Part B):
+  /usr/local/bin/adom-workspace-updater 0.1.2 + .service/.timer enabled
+  (OnBootSec=2min, every 2h, User=adom). On first boot it fetches
+  wiki.adom.inc/.../hd-workspace-tooling/manifest.json and converges the
+  workspace — its FIRST job is installing the Codex extension (deliberately
+  NOT baked, so first boot is the live end-to-end test of the updater).
+- settings.json bakes extensions.autoUpdate + autoCheckUpdates so the store
+  self-updates extensions + drives HD's reload banner.
 
 ## ⚠ DEFAULT USER: the image declares `adom`, but `wsl --import` may not honor it
 
@@ -91,7 +107,7 @@ verify-workspace, welcome, open-welcome. Plus per-boot
 
 ## wsl.rs cleanups this enables
 
-1. Consts → v7 values above; download message "~30 MB" → "~550 MB".
+1. Consts → v8 values above; download message "~30 MB" → "~550 MB".
 2. `run_bootstrap_synchronously`: nothing left to install — drop from the
    hot path (in-image bootstrap.sh is a non-fatal updater, always exit 0).
 3. The networking/DNS gate before the first apt call is dead code.
