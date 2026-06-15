@@ -77,6 +77,7 @@ jobs:
             done
             id adom | grep -q "uid=1001"
             test -f /home/adom/.claude/skills/adom/SKILL.md
+            for s in hd-instapcb hd-eda-discovery; do test -f /home/adom/.claude/skills/$s/SKILL.md || { echo "MISSING required HD skill: $s"; exit 1; }; done
             test -d /home/adom/gallia
             test ! -e /home/adom/gallia/.git
             jq -e "has(\"model\") | not" /home/adom/.claude/settings.json
