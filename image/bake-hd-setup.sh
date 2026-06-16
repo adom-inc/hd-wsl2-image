@@ -249,6 +249,20 @@ else
     log "workspace-updater not staged — skipping (pre-merge of feature/hd-auto-update)"
 fi
 
+# ── cron: a first-class scheduling service for anyone in this distro ──────────
+# John 2026-06-15: make crontab available to every workspace user out of the box. The `cron`
+# package is in the apt baseline; ENABLE cron.service so the daemon runs at boot (systemd=true),
+# so `crontab -e` / `crontab -l` and per-user jobs Just Work. `systemctl enable` writes the
+# wants-symlink offline; fall back to the symlink directly if systemctl is absent in the chroot.
+log "enabling cron.service (crontab available to all distro users)"
+systemctl enable cron.service 2>/dev/null || {
+    mkdir -p /etc/systemd/system/multi-user.target.wants
+    ln -sf /lib/systemd/system/cron.service \
+           /etc/systemd/system/multi-user.target.wants/cron.service 2>/dev/null \
+    || ln -sf /usr/lib/systemd/system/cron.service \
+              /etc/systemd/system/multi-user.target.wants/cron.service 2>/dev/null || true
+}
+
 # ── tidy ───────────────────────────────────────────────────────────────────
 # install.mjs leaves an empty {"mcpServers":{}} at ~/project/.mcp.json —
 # visible bake debris in a fresh user's explorer (pup visual test

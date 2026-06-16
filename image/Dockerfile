@@ -18,7 +18,10 @@
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ARG CODE_SERVER_VERSION=4.112.0
+# code-server is a BAKED CORE FEATURE and self-updates; the workspace-updater no longer manages it
+# (John 2026-06-15 — pinning an exact version made the updater re-dpkg it on every fresh install).
+# Bake the LATEST stable so a fresh install is current out of the box. (Latest as of 2026-06-16.)
+ARG CODE_SERVER_VERSION=4.124.2
 ARG GOLDEN_VERSION=dev
 ARG WIKI_BASE=https://wiki-ufypy5dpx93o.adom.cloud
 
@@ -45,6 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     systemd \
     systemd-sysv \
+    cron \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
        | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \

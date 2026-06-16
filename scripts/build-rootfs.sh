@@ -19,7 +19,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VER="${GOLDEN_VERSION:-v2}"
-CSV="${CODE_SERVER_VERSION:-4.112.0}"
+CSV="${CODE_SERVER_VERSION:-4.124.2}"  # latest stable; code-server self-updates + updater no longer manages it
 WIKI_BASE="${WIKI_BASE:-https://wiki-ufypy5dpx93o.adom.cloud}"
 WORK="${WORK:-/tmp/hd-golden-build}"
 ROOT="${WORK}/rootfs"
@@ -76,7 +76,7 @@ in_root "apt-get install -y --no-install-recommends \
     ca-certificates curl wget git jq unzip zip tar gnupg openssh-client \
     sudo locales build-essential cmake pkg-config libssl-dev \
     nodejs npm python3 python3-pip \
-    systemd systemd-sysv"
+    systemd systemd-sysv cron"
 
 log "github cli"
 in_root "curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
