@@ -225,6 +225,15 @@ if [ -f /tmp/workspace-updater/adom-workspace-updater.sh ]; then
     install -m 0644 /tmp/workspace-updater/adom-workspace-updater.service /etc/systemd/system/adom-workspace-updater.service
     install -m 0644 /tmp/workspace-updater/adom-workspace-updater.timer   /etc/systemd/system/adom-workspace-updater.timer
     # README.md intentionally NOT shipped.
+    # HARDEN the timer at bake time so the image is correct regardless of which HD branch the
+    # builder pulled the source from (John 2026-06-15): the updater MUST NOT run during boot.
+    # Persistent=true made systemd treat the never-run timer as "missed" on a fresh import and fire
+    # it IMMEDIATELY at boot (dpkg -i code-server + ext installs in the core boot path → is-system-
+    # running --wait blocked for minutes). Strip any Persistent= and force a 5-min OnBootSec delay.
+    sed -i '/^[[:space:]]*Persistent[[:space:]]*=/d' /etc/systemd/system/adom-workspace-updater.timer
+    grep -qiE '^[[:space:]]*OnBootSec' /etc/systemd/system/adom-workspace-updater.timer \
+        && sed -i 's/^[[:space:]]*OnBootSec[[:space:]]*=.*/OnBootSec=5min/' /etc/systemd/system/adom-workspace-updater.timer \
+        || sed -i '/^\[Timer\]/a OnBootSec=5min' /etc/systemd/system/adom-workspace-updater.timer
     # Enable the timer so it fires on first systemd boot (wsl.conf has
     # systemd=true). `systemctl enable` just writes the wants-symlink (works
     # offline); fall back to the symlink directly if systemctl is absent in

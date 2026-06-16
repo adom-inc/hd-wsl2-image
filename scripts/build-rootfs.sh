@@ -100,6 +100,13 @@ in_root "groupadd -g 1001 adom \
   && chmod 0440 /etc/sudoers.d/adom \
   && mkdir -p /home/adom/project && chown adom:adom /home/adom/project"
 
+# LOCKSTEP with image/Dockerfile (John 2026-06-15):
+# (a) enable LINGER for adom so user@1001.service starts at boot, not lazily on first login —
+#     otherwise WSL interop times out ("CreateLoginSession ... uid=1001") → degraded + flaky logins.
+# (b) drop the pam_lastlog.so line (module absent in the slim base → "faulty module" on every login).
+in_root "mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/adom"
+in_root "for f in /etc/pam.d/login /etc/pam.d/common-session /etc/pam.d/common-session-noninteractive; do [ -f \"\$f\" ] && sed -i 's/^\([[:space:]]*session[[:space:]].*pam_lastlog\.so.*\)\$/# \1  # removed: module absent in slim image/' \"\$f\" || true; done; true"
+
 # ── 5. Adom CLIs from the public wiki static path ──────────────────────────
 log "adom CLIs"
 in_root "set -e; curl -fsSL '${WIKI_BASE}/static/skills/adom-cli/adom-cli' -o /usr/local/bin/adom-cli; \
@@ -223,8 +230,15 @@ in_root "set -e; code-server --version; node --version; git --version; \
           || { echo \"workspace-updater version != 0.1.2: \$(/usr/local/bin/adom-workspace-updater --version 2>/dev/null)\"; exit 1; }; \
       test -L /etc/systemd/system/timers.target.wants/adom-workspace-updater.timer \
           || { echo 'workspace-updater timer not enabled'; exit 1; }; \
-      echo 'workspace-updater daemon: baked + timer enabled'; \
+      ! grep -qi '^Persistent' /etc/systemd/system/adom-workspace-updater.timer \
+          || { echo 'updater timer has Persistent= → fires at boot on a fresh import (dpkg in the boot path)'; exit 1; }; \
+      echo 'workspace-updater daemon: baked + timer enabled (no Persistent)'; \
   else echo 'workspace-updater: not baked (pre-merge)'; fi; \
+  test -e /var/lib/systemd/linger/adom \
+      || { echo 'MISSING adom linger (user@1001 wont start at boot → WSL CreateLoginSession timeout → degraded)'; exit 1; }; \
+  ! grep -rslE '^[[:space:]]*session[[:space:]].*pam_lastlog\\.so' /etc/pam.d/ >/dev/null \
+      || { echo 'pam_lastlog.so still ACTIVE in /etc/pam.d (faulty-module log on every login)'; exit 1; }; \
+  echo 'adom user-session: linger enabled + pam_lastlog removed'; \
   test ! -e /home/adom/project/.mcp.json || { echo 'LEAK: bake debris .mcp.json in project'; exit 1; }; \
   test -z \"\$(find /home/adom ! -user adom -print -quit)\" \
       || { echo \"OWNERSHIP: non-adom path under /home/adom: \$(find /home/adom ! -user adom -print -quit)\"; exit 1; }; \

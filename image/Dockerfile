@@ -71,6 +71,23 @@ RUN groupadd -g 1001 adom \
     && mkdir -p /home/adom/project \
     && chown adom:adom /home/adom/project
 
+# WSL2 + systemd: ENABLE LINGER for adom so its systemd --user instance (user@1001.service)
+# starts at boot instead of lazily on first login. Without this, the FIRST `wsl -d ... -u adom`
+# login RACES the on-demand user-session startup and WSL's interop times out — observed in the v9
+# boot log: "WSL (2 - Interop) ERROR: CreateLoginSession:2732: Timed out waiting for user session
+# for uid=1001". That timeout is what leaves systemd `degraded` and makes early adom logins flaky.
+# enable-linger is just a marker file under /var/lib/systemd/linger, so it's safe to create at
+# build time (no systemd running in the builder); logind honors it at boot. (John 2026-06-15)
+RUN mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/adom
+
+# Drop the pam_lastlog.so line from PAM: the slim base image doesn't ship that module, so EVERY
+# login logged "PAM unable to dlopen(pam_lastlog.so): ... No such file or directory / adding faulty
+# module: pam_lastlog.so" (seen in the v9 boot log). Cosmetic but noisy + alarming. Comment it out
+# everywhere it appears. (John 2026-06-15)
+RUN for f in /etc/pam.d/login /etc/pam.d/common-session /etc/pam.d/common-session-noninteractive; do \
+        [ -f "$f" ] && sed -i 's/^\([[:space:]]*session[[:space:]].*pam_lastlog\.so.*\)$/# \1  # removed: module absent in slim image/' "$f" || true; \
+    done; true
+
 # Adom CLIs from the public wiki static path — the same URLs install.mjs
 # uses as its no-auth fallback. Baking them removes the wiki round-trips
 # from first run; the bootstrap updater reconciles to latest afterwards.
