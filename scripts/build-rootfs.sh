@@ -226,7 +226,7 @@ in_root "set -e; code-server --version; node --version; git --version; \
       || { echo 'MISSING extensions.autoUpdate/autoCheckUpdates'; exit 1; }; \
   if [ -e /usr/local/bin/adom-workspace-updater ]; then \
       test -x /usr/local/bin/adom-workspace-updater || { echo 'workspace-updater not executable'; exit 1; }; \
-      [ \"\$(/usr/local/bin/adom-workspace-updater --version 2>/dev/null)\" = 'adom-workspace-updater 0.1.5' ] \
+      [ \"\$(/usr/local/bin/adom-workspace-updater --version 2>/dev/null)\" = 'adom-workspace-updater 0.1.6' ] \
           || { echo \"workspace-updater version != 0.1.2: \$(/usr/local/bin/adom-workspace-updater --version 2>/dev/null)\"; exit 1; }; \
       test -L /etc/systemd/system/timers.target.wants/adom-workspace-updater.timer \
           || { echo 'workspace-updater timer not enabled'; exit 1; }; \

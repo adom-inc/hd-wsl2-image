@@ -91,7 +91,7 @@ jobs:
             test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak under /home/adom:"; find /home/adom ! -user adom; exit 1; }
             if [ -e /usr/local/bin/adom-workspace-updater ]; then
               test -x /usr/local/bin/adom-workspace-updater
-              [ "$(/usr/local/bin/adom-workspace-updater --version)" = "adom-workspace-updater 0.1.5" ] || { echo "updater version mismatch"; exit 1; }
+              [ "$(/usr/local/bin/adom-workspace-updater --version)" = "adom-workspace-updater 0.1.6" ] || { echo "updater version mismatch"; exit 1; }
               test -L /etc/systemd/system/timers.target.wants/adom-workspace-updater.timer || { echo "updater timer not enabled"; exit 1; }
               ! grep -qi "^Persistent" /etc/systemd/system/adom-workspace-updater.timer || { echo "updater timer has Persistent= → fires at boot on fresh import"; exit 1; }
               echo "workspace-updater: baked + timer enabled (no Persistent)"
