@@ -1,11 +1,26 @@
 ---
 name: golden-image-test
-description: Test the HD golden WSL2 rootfs two ways — PRIMARY is importing it into the user's real WSL2 on their Windows laptop via adom-desktop (real systemd PID 1 → exercises the timer + workspace-updater daemon); QUICK is proot + code-server inside this container (browser surface only, no systemd). Use when the user says "test the golden image", "run the golden image", "serve the rootfs", "let me see the golden code-server", "verify the image config", or reports something wrong/missing in a golden image build. Every confirmed gap gets added to image/bake-hd-setup.sh AND a smoke assertion in scripts/build-rootfs.sh — that is the rule.
+description: Test/preview the HD golden WSL2 rootfs by importing it into a DISPOSABLE WSL2 distro on the user's Windows laptop via adom-desktop (real systemd PID 1 → exercises the timer + workspace-updater daemon AND gives a real code-server to pup). Use when the user says "test the golden image", "run the golden image", "serve the rootfs", "let me see the golden code-server", "verify the image config", or reports something wrong/missing in a golden image build. Every confirmed gap gets added to image/bake-hd-setup.sh AND a smoke assertion in scripts/build-rootfs.sh — that is the rule.
 ---
 
-# Golden image testing — two methods + the feedback loop
+# Golden image testing — the feedback loop
 
-## METHOD A (PRIMARY, REAL) — import into the laptop's WSL2 via AD
+## ⛔ NEVER proot/run code-server in THIS cloud container
+
+Read `cloud-container-safety`. The cloud Docker container runs the boot
+code-server as the unsupervised foreground child of PID 1, with no
+supervisor — a nested `proot` code-server (or any second `code-server
+--bind-addr`) is a real, un-isolated process competing for the same memory,
+and it has **bricked the container before** (corrupted boot launcher → admin
+rebuild). So: do NOT use `scripts/run-rootfs.sh` here, do NOT `./run-rootfs`,
+do NOT start any code-server in this container. Building/inspecting a rootfs
+tarball (tar -t, reading files, ownership audits) is fine; *running a server
+out of one here is not.* The ONLY place to boot the image + pup its
+code-server is a disposable WSL2 distro on the laptop (Method below) or the
+Azure VM. `scripts/run-rootfs.sh` is kept for a real Linux host ONLY, never
+the cloud container.
+
+## THE test — import into a DISPOSABLE WSL2 distro on the laptop via AD
 
 The user's Windows laptop has real WSL2 (it runs HD), so importing the
 tarball there boots it as a genuine distro with **systemd as PID 1** — the
@@ -29,33 +44,20 @@ adom-desktop run_script '{"interpreter":"powershell","scriptB64":"<b64: wsl -d g
 #    wsl -d golden-test-vN -u root -- systemctl start adom-workspace-updater.service
 #    wsl -d golden-test-vN -- cat /home/adom/.adom/workspace-updater-status.json   # updated/pending_reload sane
 #    wsl -d golden-test-vN -- /usr/lib/code-server/bin/code-server --list-extensions | grep openai.chatgpt  # Codex INSTALLED BY THE DAEMON
-# 5. Browser: start code-server in the distro, pup to http://localhost:<port> on the laptop.
+# 5. Browser/pup view: start code-server IN THE DISTRO (on the laptop) and pup
+#    to http://localhost:<port> on the laptop — NOT in the cloud container.
+#    Use a transient systemd unit or a detached wsl process to keep it alive;
+#    if localhost doesn't forward (NAT-mode WSL), pup the distro's WSL IP.
 # 6. CLEANUP (always): wsl --unregister golden-test-vN ; remove C:\golden-test-vN
 ```
 
-This is what validates the things proot can't: systemd PID 1, the timer
-firing, the daemon's first-boot convergence (installing Codex + writing
-`~/.adom/workspace-updater-status.json`), and `wsl --import` default-user
-behavior. **Do NOT report the daemon/timer as "working" from Method B —
-only Method A or the VM proves that.**
+This validates everything that matters — including what only real WSL gives:
+systemd PID 1, the timer firing, the daemon's first-boot convergence
+(installing Codex + writing `~/.adom/workspace-updater-status.json`),
+`wsl --import` default-user behavior — AND it gives a real code-server to
+show the user in pup. The code-server runs on the LAPTOP, not this container.
 
-## METHOD B (QUICK) — proot + code-server in this container
-
-Fast browser-surface check; **cannot boot systemd**. Good for catching
-theme/settings/extension/layout/ownership regressions in seconds.
-
-```bash
-cd /home/adom/project/hd-wsl2-image
-./scripts/run-rootfs.sh                  # serves the last local build on :38082
-./scripts/run-rootfs.sh --from v8        # or download + serve a released version
-```
-
-Then hand the user the **proxy URL** (never localhost — their browser is
-outside the container): `https://<slug>.adom.cloud/proxy/38082/`
-(slug from `$VSCODE_PROXY_URI`). Run it in the background; readiness =
-HTTP 200/302 on `127.0.0.1:38082`. Drive it with pup for screenshots.
-
-### Browser checklist (Method B, or Method A's code-server)
+### Browser checklist (against the laptop distro's code-server)
 
 - Theme is **Default Dark Modern**, no welcome tab, status bar hidden
 - Extensions panel: `anthropic.claude-code` + `adom.adom-vscode` present;
@@ -67,7 +69,7 @@ HTTP 200/302 on `127.0.0.1:38082`. Drive it with pup for screenshots.
   NO check-updates.sh hook
 - No GitHub sign-in prompts anywhere
 
-## What Method B (proot) CANNOT test — use Method A or the VM
+## Notes on the laptop distro test
 
 - systemd boot / PID 1, the workspace-updater timer + daemon convergence,
   `/etc/wsl.conf` (default user, interop), `wsl --import` default-user behavior

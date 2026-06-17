@@ -1,25 +1,31 @@
 #!/usr/bin/env bash
-# run-rootfs.sh — boot the golden rootfs's code-server under proot for
-# browser-based testing, no WSL or docker needed.
+# run-rootfs.sh — boot the golden rootfs's code-server under proot for a quick
+# browser preview. FOR A REAL LINUX HOST ONLY (your own box / a throwaway VM).
 #
-# This is the TEST harness, not the production runtime: proot approximates
-# the distro (no systemd boot, /etc/wsl.conf not exercised, no
-# host.docker.internal, syscalls slower). What it DOES faithfully exercise:
-# code-server itself, settings.json (theme/layout prefs), installed
-# extensions (incl. auto-update against Open VSX), the trusted-domains
-# patch, claude CLI on PATH, gallia skills, all baked CLIs — i.e. what a
-# user sees when their browser hits code-server.
-#
-# Usage:
-#   scripts/run-rootfs.sh                   # serve the last local build
-#   ROOT=/path/to/rootfs scripts/run-rootfs.sh
-#   PORT=38082 scripts/run-rootfs.sh
-#   scripts/run-rootfs.sh --from v2         # download release v2, unpack, serve
-#
-# In an Adom container, reach it at https://<slug>.adom.cloud/proxy/<PORT>/
-# (NEVER localhost — the browser is outside the container).
+# ⛔ NEVER RUN THIS IN AN ADOM CLOUD CONTAINER. See cloud-container-safety:
+# the cloud container's boot code-server is the unsupervised foreground child
+# of PID 1 with no supervisor; a nested proot code-server competes for the same
+# memory and HAS BRICKED THE CONTAINER (corrupted boot launcher → admin
+# rebuild). To preview a golden image, import it into a disposable WSL2 distro
+# on the laptop and run code-server THERE (golden-image-test skill). This guard
+# below hard-refuses to start in the cloud container.
 
 set -euo pipefail
+
+# ── cloud-container guard ──────────────────────────────────────────────────
+# Refuse to run where a boot code-server is PID 1's child (the Adom cloud
+# container). Override only on a genuine throwaway host with ALLOW_PROOT_HERE=1.
+if [[ "${ALLOW_PROOT_HERE:-}" != "1" ]]; then
+    if pgrep -f code-server-entrypoint >/dev/null 2>&1 \
+       || [[ -e /usr/local/bin/code-server-entrypoint.sh ]] \
+       || [[ -n "${VSCODE_PROXY_URI:-}" ]]; then
+        echo "REFUSING: this looks like an Adom cloud container (boot code-server detected)." >&2
+        echo "Running a nested proot code-server here can brick it — see cloud-container-safety." >&2
+        echo "Preview the image in a disposable laptop WSL2 distro instead (golden-image-test)." >&2
+        echo "If this is genuinely a throwaway Linux host, re-run with ALLOW_PROOT_HERE=1." >&2
+        exit 1
+    fi
+fi
 
 PORT="${PORT:-38082}"
 ROOT="${ROOT:-/tmp/hd-golden-build/rootfs}"
