@@ -263,6 +263,35 @@ systemctl enable cron.service 2>/dev/null || {
               /etc/systemd/system/multi-user.target.wants/cron.service 2>/dev/null || true
 }
 
+# ── adompkg — the Adom package manager (PREREQUISITE for the whole adompkg model) ──
+# Staged at /tmp/adompkg by the builder (a 193 B bash wrapper + ~208 KB adompkg.mjs
+# ESM impl that runs on the baked node). adompkg is NOT a registry package and has
+# no self-update (its only update path is the gallia check-updates hook, which the
+# public image scrubs) — so it ships frozen here, refreshed by the monthly rebake
+# (or, ideally, added to the workspace-updater manifest later). The workspace-updater
+# daemon's CLI-pull mode + any `adompkg install` in this image depend on this being
+# present.
+#
+# ⚠ adompkg's compiled-in DEFAULT registry points at the STALE legacy host. Pin the
+# canonical registry image-wide via /etc/environment (login shells) + a profile.d
+# script, so every shell AND the daemon resolve installs from wiki.adom.inc.
+if [ -f /tmp/adompkg/adompkg.mjs ]; then
+    log "adompkg (package manager) + ADOMPKG_REGISTRY pin"
+    install -d -o adom -g adom -m 0755 /home/adom/.local/bin
+    install -o adom -g adom -m 0755 /tmp/adompkg/adompkg     /home/adom/.local/bin/adompkg
+    install -o adom -g adom -m 0644 /tmp/adompkg/adompkg.mjs /home/adom/.local/bin/adompkg.mjs
+    chmod 0755 /home/adom/.local/bin/adompkg
+    rm -rf /tmp/adompkg
+    # Registry pin — canonical wiki.adom.inc, never the stale legacy host.
+    grep -q '^ADOMPKG_REGISTRY=' /etc/environment 2>/dev/null \
+        || echo 'ADOMPKG_REGISTRY=https://wiki.adom.inc' >> /etc/environment
+    printf 'export ADOMPKG_REGISTRY=https://wiki.adom.inc\n' > /etc/profile.d/adompkg.sh
+    chmod 0644 /etc/profile.d/adompkg.sh
+    log "  adompkg $(runuser -u adom -- bash -lc 'adompkg --version' 2>/dev/null) installed; registry pinned to wiki.adom.inc"
+else
+    log "adompkg not staged — skipping (image/adompkg missing from build context)"
+fi
+
 # ── tidy ───────────────────────────────────────────────────────────────────
 # install.mjs leaves an empty {"mcpServers":{}} at ~/project/.mcp.json —
 # visible bake debris in a fresh user's explorer (pup visual test

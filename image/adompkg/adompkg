@@ -1,0 +1,4 @@
+#!/bin/bash
+# adompkg wrapper — execs the ESM JS implementation.
+# Installed at ~/.local/bin/adompkg by the bootstrap installer.
+exec node "$(dirname "$(readlink -f "$0")")/adompkg.mjs" "$@"

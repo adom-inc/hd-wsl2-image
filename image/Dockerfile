@@ -122,6 +122,8 @@ COPY hd-skills /tmp/hd-skills
 # it's populated only once feature/hd-auto-update is on main. bake-hd-setup.sh
 # guards on the .sh file, so an empty dir (pre-merge) cleanly skips the daemon.
 COPY workspace-updater /tmp/workspace-updater
+# adompkg (the Adom package manager) — prerequisite for the adompkg-managed model.
+COPY adompkg /tmp/adompkg
 
 # bake-hd-setup.sh pre-runs HD's setup cascade (gallia npm + install.mjs,
 # claude CLI, Claude Code + adom-vscode extensions, VS Code settings +

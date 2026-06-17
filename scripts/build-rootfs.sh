@@ -157,6 +157,13 @@ else
     log "workspace-updater source absent (pre-merge) — daemon bake will skip"
 fi
 
+# adompkg (the Adom package manager) — staged for the adompkg step in
+# bake-hd-setup.sh. Snapshot lives in the repo at image/adompkg/.
+log "staging adompkg"
+sudo rm -rf "${ROOT}/tmp/adompkg"
+sudo mkdir -p "${ROOT}/tmp/adompkg"
+sudo cp image/adompkg/adompkg image/adompkg/adompkg.mjs "${ROOT}/tmp/adompkg/"
+
 # bake-hd-setup.sh pre-runs the HD setup cascade (gallia install.mjs,
 # claude CLI, Claude Code + adom-vscode extensions, VS Code settings,
 # trusted domains, HD skills, adom-desktop CLI) — shared with Dockerfile.
@@ -249,6 +256,10 @@ in_root "set -e; code-server --version; node --version; git --version; \
       test -f /home/adom/.claude/skills/\$s/SKILL.md || { echo \"MISSING required HD skill: \$s\"; exit 1; }; \
   done; \
   test -x /usr/local/bin/adom-desktop || { echo 'MISSING adom-desktop CLI'; exit 1; }; \
+  test -x /home/adom/.local/bin/adompkg && test -f /home/adom/.local/bin/adompkg.mjs \
+      || { echo 'MISSING adompkg (package manager)'; exit 1; }; \
+  runuser -u adom -- bash -lc 'adompkg --version' >/dev/null 2>&1 || { echo 'adompkg --version failed'; exit 1; }; \
+  grep -q 'ADOMPKG_REGISTRY=https://wiki.adom.inc' /etc/environment || { echo 'MISSING ADOMPKG_REGISTRY pin'; exit 1; }; \
   jq -e 'has(\"model\") | not' /home/adom/.claude/settings.json >/dev/null \
       || { echo 'LEAK: settings.json pins a model'; exit 1; }; \
   jq -e '[(.hooks.UserPromptSubmit // [])[] | (.hooks // [])[] | .command // \"\"] \
