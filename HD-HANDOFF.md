@@ -1,17 +1,17 @@
-# Handoff: golden WSL2 image v12 — the setup cascade is now pre-baked
+# Handoff: golden WSL2 image v13 — the setup cascade is now pre-baked
 
 Paste this into the main Hydrogen Desktop thread.
 
 ---
 
-Golden image **v12** pre-runs HD's WSL2 setup cascade at image-build time.
+Golden image **v13** pre-runs HD's WSL2 setup cascade at image-build time.
 Built from `adom-inc/hd-wsl2-image` (public repo), hosted as a GitHub
 Release asset:
 
-- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v12/adom-golden-v12.tar.gz
-- **SHA256:** `9f69b5d4cefede45356f6343862e64eb8f7e435984a75d527e2f7e6628b978c7`
+- **URL:** https://github.com/adom-inc/hd-wsl2-image/releases/download/v13/adom-golden-v13.tar.gz
+- **SHA256:** `9ff20de92ac18a57af05f3fcae738f812be2a1b9fc97f5fc2b6ccff5a54fe1c6`
 - **Size:** 552 MB
-- **Version:** `v12` (for `TARBALL_VERSION`)
+- **Version:** `v13` (for `TARBALL_VERSION`)
 
 Pin all three in `hd-app/src/runtime/wsl.rs` (`TARBALL_URL_PLACEHOLDER`,
 `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`). Existing installs
@@ -107,7 +107,7 @@ verify-workspace, welcome, open-welcome. Plus per-boot
 
 ## wsl.rs cleanups this enables
 
-1. Consts → v12 values above; download message "~30 MB" → "~550 MB".
+1. Consts → v13 values above; download message "~30 MB" → "~550 MB".
 2. `run_bootstrap_synchronously`: nothing left to install — drop from the
    hot path (in-image bootstrap.sh is a non-fatal updater, always exit 0).
 3. The networking/DNS gate before the first apt call is dead code.
