@@ -292,6 +292,19 @@ else
     log "adompkg not staged — skipping (image/adompkg missing from build context)"
 fi
 
+# ── adompkg-managed CLIs (real adompkg apps on wiki.adom.inc/adom) ──────────
+# adom-tts + adom-google are REAL adompkg `app` packages (verified: adom/adom-tts
+# + adom/adom-google install real binaries). Install them via adompkg — the FIRST
+# adompkg-managed installs baked into the image, and the pilot for migrating the
+# rest off bare-binary curls as their packages get real publishes (the 7 above are
+# still stubs on adompkg, so they stay curl-based for now). This also POPULATES
+# ~/project/adom_modules/.installed.json so the workspace-updater daemon's
+# `adompkg install/update` works on a fresh image with zero adoption.
+if [ -x /home/adom/.local/bin/adompkg ]; then
+    log "adompkg-managed CLIs: adom-tts, adom-google"
+    as_adom 'export ADOMPKG_REGISTRY=https://wiki.adom.inc; adompkg install adom-tts adom-google 2>&1 | tail -4'
+fi
+
 # ── tidy ───────────────────────────────────────────────────────────────────
 # install.mjs leaves an empty {"mcpServers":{}} at ~/project/.mcp.json —
 # visible bake debris in a fresh user's explorer (pup visual test

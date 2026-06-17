@@ -260,6 +260,10 @@ in_root "set -e; code-server --version; node --version; git --version; \
       || { echo 'MISSING adompkg (package manager)'; exit 1; }; \
   runuser -u adom -- bash -lc 'adompkg --version' >/dev/null 2>&1 || { echo 'adompkg --version failed'; exit 1; }; \
   grep -q 'ADOMPKG_REGISTRY=https://wiki.adom.inc' /etc/environment || { echo 'MISSING ADOMPKG_REGISTRY pin'; exit 1; }; \
+  for c in adom-tts adom-google; do \
+      test -e /home/adom/.local/bin/\$c || { echo \"MISSING adompkg-managed CLI: \$c\"; exit 1; }; \
+  done; \
+  test -f /home/adom/project/adom_modules/.installed.json || { echo 'MISSING adom_modules/.installed.json'; exit 1; }; \
   jq -e 'has(\"model\") | not' /home/adom/.claude/settings.json >/dev/null \
       || { echo 'LEAK: settings.json pins a model'; exit 1; }; \
   jq -e '[(.hooks.UserPromptSubmit // [])[] | (.hooks // [])[] | .command // \"\"] \
