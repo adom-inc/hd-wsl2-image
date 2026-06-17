@@ -110,7 +110,7 @@ in_root "for f in /etc/pam.d/login /etc/pam.d/common-session /etc/pam.d/common-s
 # ── 5. Adom CLIs from the public wiki static path ──────────────────────────
 log "adom CLIs"
 in_root "set -e; curl -fsSL '${WIKI_BASE}/static/skills/adom-cli/adom-cli' -o /usr/local/bin/adom-cli; \
-  for b in adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
+  for b in adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search; do \
       curl -fsSL \"${WIKI_BASE}/static/apps/\${b}/\${b}\" -o \"/usr/local/bin/\${b}\"; \
   done; chmod 0755 /usr/local/bin/adom-*"
 
@@ -205,7 +205,7 @@ log "smoke test"
 in_root "set -e; code-server --version; node --version; git --version; \
   test -f /etc/wsl.conf; test -x /etc/init-host-internal.sh; test -x /opt/adom/bootstrap.sh; \
   test -f /var/lib/adom-bootstrap/phase-a-done; cat /etc/adom-golden-version; \
-  for b in adom-cli adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
+  for b in adom-cli adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search; do \
       test -x /usr/local/bin/\$b || { echo \"MISSING \$b\"; exit 1; }; done; \
   id adom | grep -q uid=1001; \
   test -f /home/adom/.claude/skills/adom/SKILL.md || { echo 'MISSING gallia skills'; exit 1; }; \
@@ -260,7 +260,7 @@ in_root "set -e; code-server --version; node --version; git --version; \
       || { echo 'MISSING adompkg (package manager)'; exit 1; }; \
   runuser -u adom -- bash -lc 'adompkg --version' >/dev/null 2>&1 || { echo 'adompkg --version failed'; exit 1; }; \
   grep -q 'ADOMPKG_REGISTRY=https://wiki.adom.inc' /etc/environment || { echo 'MISSING ADOMPKG_REGISTRY pin'; exit 1; }; \
-  for c in adom-google; do \
+  for c in adom-google adom-tts adom-gchat; do \
       test -e /home/adom/.local/bin/\$c || { echo \"MISSING adompkg-managed CLI: \$c\"; exit 1; }; \
   done; \
   test -f /home/adom/project/adom_modules/.installed.json || { echo 'MISSING adom_modules/.installed.json'; exit 1; }; \

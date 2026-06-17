@@ -309,7 +309,7 @@ fi
 # Use the full adompkg path (not PATH-dependent) and let failures FAIL the build
 # (no `| tail` mask) — then hard-gate that the bins actually landed.
 if [ -x /home/adom/.local/bin/adompkg ]; then
-    ADOMPKG_MANAGED="adom-google"
+    ADOMPKG_MANAGED="adom-google adom-tts adom-gchat"
     log "adompkg-managed CLIs: ${ADOMPKG_MANAGED}"
     as_adom "export ADOMPKG_REGISTRY=https://wiki.adom.inc; /home/adom/.local/bin/adompkg install ${ADOMPKG_MANAGED}"
     for c in ${ADOMPKG_MANAGED}; do
