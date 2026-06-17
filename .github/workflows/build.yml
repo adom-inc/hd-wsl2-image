@@ -72,7 +72,7 @@ jobs:
             test -x /opt/adom/bootstrap.sh
             test -f /var/lib/adom-bootstrap/phase-a-done
             cat /etc/adom-golden-version
-            for b in adom-cli adom-wiki adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do
+            for b in adom-cli adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do
               test -x /usr/local/bin/$b || { echo "MISSING $b"; exit 1; }
             done
             id adom | grep -q "uid=1001"

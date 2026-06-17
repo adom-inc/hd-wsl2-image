@@ -110,7 +110,7 @@ in_root "for f in /etc/pam.d/login /etc/pam.d/common-session /etc/pam.d/common-s
 # ── 5. Adom CLIs from the public wiki static path ──────────────────────────
 log "adom CLIs"
 in_root "set -e; curl -fsSL '${WIKI_BASE}/static/skills/adom-cli/adom-cli' -o /usr/local/bin/adom-cli; \
-  for b in adom-wiki adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
+  for b in adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
       curl -fsSL \"${WIKI_BASE}/static/apps/\${b}/\${b}\" -o \"/usr/local/bin/\${b}\"; \
   done; chmod 0755 /usr/local/bin/adom-*"
 
@@ -198,7 +198,7 @@ log "smoke test"
 in_root "set -e; code-server --version; node --version; git --version; \
   test -f /etc/wsl.conf; test -x /etc/init-host-internal.sh; test -x /opt/adom/bootstrap.sh; \
   test -f /var/lib/adom-bootstrap/phase-a-done; cat /etc/adom-golden-version; \
-  for b in adom-cli adom-wiki adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
+  for b in adom-cli adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
       test -x /usr/local/bin/\$b || { echo \"MISSING \$b\"; exit 1; }; done; \
   id adom | grep -q uid=1001; \
   test -f /home/adom/.claude/skills/adom/SKILL.md || { echo 'MISSING gallia skills'; exit 1; }; \

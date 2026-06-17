@@ -97,10 +97,10 @@ RUN for f in /etc/pam.d/login /etc/pam.d/common-session /etc/pam.d/common-sessio
 # from first run; the bootstrap updater reconciles to latest afterwards.
 RUN set -eux; \
     curl -fsSL "${WIKI_BASE}/static/skills/adom-cli/adom-cli" -o /usr/local/bin/adom-cli; \
-    for b in adom-wiki adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
+    for b in adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search adom-gchat; do \
         curl -fsSL "${WIKI_BASE}/static/apps/${b}/${b}" -o "/usr/local/bin/${b}"; \
     done; \
-    chmod 0755 /usr/local/bin/adom-cli /usr/local/bin/adom-wiki /usr/local/bin/adom-vscode \
+    chmod 0755 /usr/local/bin/adom-cli /usr/local/bin/adom-vscode \
         /usr/local/bin/adom-mouser /usr/local/bin/adom-digikey /usr/local/bin/adom-jlcpcb \
         /usr/local/bin/adom-parts-search /usr/local/bin/adom-gchat
 
