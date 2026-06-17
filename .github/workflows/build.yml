@@ -79,7 +79,7 @@ jobs:
             test -x /home/adom/.local/bin/adompkg && test -f /home/adom/.local/bin/adompkg.mjs || { echo "MISSING adompkg"; exit 1; }
             /home/adom/.local/bin/adompkg --version >/dev/null || { echo "adompkg --version failed"; exit 1; }
             grep -q "ADOMPKG_REGISTRY=https://wiki.adom.inc" /etc/environment || { echo "MISSING ADOMPKG_REGISTRY pin"; exit 1; }
-            for c in adom-tts adom-google; do test -e /home/adom/.local/bin/$c || { echo "MISSING adompkg-managed CLI: $c"; exit 1; }; done
+            for c in adom-google; do test -e /home/adom/.local/bin/$c || { echo "MISSING adompkg-managed CLI: $c"; exit 1; }; done
             test -f /home/adom/project/adom_modules/.installed.json || { echo "MISSING adom_modules/.installed.json"; exit 1; }
             test -f /home/adom/.claude/skills/adom/SKILL.md
             for s in hd-instapcb hd-eda-discovery; do test -f /home/adom/.claude/skills/$s/SKILL.md || { echo "MISSING required HD skill: $s"; exit 1; }; done

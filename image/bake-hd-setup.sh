@@ -300,9 +300,22 @@ fi
 # still stubs on adompkg, so they stay curl-based for now). This also POPULATES
 # ~/project/adom_modules/.installed.json so the workspace-updater daemon's
 # `adompkg install/update` works on a fresh image with zero adoption.
+# NOTE: the bake runs TOKEN-LESS in CI (no /var/run/adom/api-key) — so each
+# package MUST be ANONYMOUSLY resolvable on wiki.adom.inc. Verified 2026-06-17:
+#   adom-google → resolves anonymously ✅ (clean public adom/adom-google)
+#   adom-tts    → NOT anonymous ❌ ("package not found") — its ownership was
+#                 transferred to john/ and adom/adom-tts only resolves WITH auth.
+#                 DROPPED until republished as a clean PUBLIC adom/adom-tts.
+# Use the full adompkg path (not PATH-dependent) and let failures FAIL the build
+# (no `| tail` mask) — then hard-gate that the bins actually landed.
 if [ -x /home/adom/.local/bin/adompkg ]; then
-    log "adompkg-managed CLIs: adom-tts, adom-google"
-    as_adom 'export ADOMPKG_REGISTRY=https://wiki.adom.inc; adompkg install adom-tts adom-google 2>&1 | tail -4'
+    ADOMPKG_MANAGED="adom-google"
+    log "adompkg-managed CLIs: ${ADOMPKG_MANAGED}"
+    as_adom "export ADOMPKG_REGISTRY=https://wiki.adom.inc; /home/adom/.local/bin/adompkg install ${ADOMPKG_MANAGED}"
+    for c in ${ADOMPKG_MANAGED}; do
+        test -e "/home/adom/.local/bin/${c}" \
+            || { echo "bake: adompkg install did not produce ~/.local/bin/${c} (anonymous resolve failed?)" >&2; exit 1; }
+    done
 fi
 
 # ── tidy ───────────────────────────────────────────────────────────────────
