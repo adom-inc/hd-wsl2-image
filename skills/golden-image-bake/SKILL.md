@@ -47,6 +47,15 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
 6. **Workspace opens at `/home/adom`** (the home folder), not `/home/adom/project`
    — though the opened folder is ultimately an HD launch-time arg.
 
+7. **Bootstrap script contract (learned the hard way, 2026-07-16):** the registry
+   REQUIRES meta/bootstrap packages to use `scripts.postinstall` — publish validation
+   rejects `scripts.install/uninstall` on them ("meta packages must not have
+   scripts.install/uninstall"). The HD bootstraps' postinstall convention is CORRECT;
+   do NOT try to "fix" them to install.sh. Known CLI gap: adom-wiki ≤1.0.41 never
+   EXECUTES scripts.postinstall (adom/adom-wiki-cli issue #9) — the bake carries a
+   guarded, self-disabling workaround that runs the two bootstrap postinstalls
+   explicitly when the CLI didn't. Remove it only when issue #9 is fixed.
+
 When in doubt about ANY of the above, VERIFY empirically against a re-imported image
 (boot code-server, test the actual behaviour) before changing the bake — do not guess.
 
