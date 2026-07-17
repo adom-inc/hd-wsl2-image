@@ -1,9 +1,54 @@
 ---
 name: golden-image-bake
-description: Rebuild + release the Hydrogen Desktop golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says "bake the golden image", "rebuild the wsl2 image", "new golden image", "monthly image bake", "cut a new hd-wsl2-image version", or when gallia/CLI/extension drift makes the shipped image stale (target cadence: monthly). EMPLOYEE-ONLY — needs an Adom cloud container with the private gallia + hydrogen-desktop checkouts; never publish this skill to gallia or the public image.
+description: "Rebuild + release the Hydrogen Desktop golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says \"bake the golden image\", \"rebuild the wsl2 image\", \"new golden image\", \"monthly image bake\", \"cut a new hd-wsl2-image version\", or when gallia/CLI/extension drift makes the shipped image stale (target cadence: monthly). EMPLOYEE-ONLY — needs an Adom cloud container with the private gallia + hydrogen-desktop checkouts; never publish this skill to gallia or the public image."
 ---
 
 # Golden image bake — adom-inc/hd-wsl2-image
+
+## 🔒 DESIGN GOALS — NON-NEGOTIABLE INVARIANTS (read before changing ANYTHING)
+
+**THE overarching goal: Hydrogen Desktop must behave as close to Web Hydrogen
+(the cloud Docker container) as possible.** Every golden-image decision is judged
+against "does this match how Web Hydrogen works?" If a change would diverge HD's
+behaviour from Web Hydrogen, it is almost certainly wrong.
+
+1. **PORT ACCESS VIA `<host>/proxy/<port>/` MUST WORK — this is how Web Hydrogen
+   exposes ports and HD MUST replicate it.** In Web Hydrogen, every forwarded port
+   is reached through the cloud container's DNS address + `/proxy/<port>/`
+   (e.g. `https://<slug>.adom.cloud/proxy/<port>/`). HD must serve the identical
+   code-server path-proxy route so the same URLs work. **NEVER disable port
+   forwarding or do anything that breaks the `/proxy/<port>/` route** (do not set
+   `remote.autoForwardPorts:false` or otherwise kill it without proving the proxy
+   route still works). This is in ADDITION to WSL2 **mirrored networking**, which
+   also exposes WSL2 ports on the host's `localhost` — **BOTH must work.** (John has
+   stated this requirement more than once — it is a core design goal, never forget it.)
+   - PROVEN 2026-06-22: code-server's `/proxy/<port>/` route is a static HTTP route,
+     **independent of `remote.autoForwardPorts`** — a port that was never auto-forwarded
+     still serves via `/proxy/<port>/` on demand. So you may tune the auto-forward
+     *settings* without breaking the proxy, but ALWAYS re-verify against a re-imported
+     image (boot code-server, `python3 -m http.server N`, curl `…/proxy/N/`).
+   - PARITY SETTING: the Web Hydrogen cloud container sets
+     `"remote.autoForwardPortsSource": "hybrid"` (verified by reading the live container's
+     code-server settings; its `VSCODE_PROXY_URI=…/proxy/{{port}}/`). The golden image
+     MUST set the same — pinning the source to `hybrid` from the start means there is no
+     `process→hybrid` switch, so the "Over 20 ports… switched to hybrid" popup never fires.
+     Do NOT "fix" that popup by disabling auto-forward or with `autoForwardPortsFallback` —
+     match Web Hydrogen with `autoForwardPortsSource: hybrid`.
+2. **Clean first-load editor:** opens to an empty workbench — no Explorer sidebar,
+   no bottom panel, no tabs, no welcome page (just the 48px activity-bar rail).
+   Seeded per-workspace in hd-windows-bootstrap's workbench.html + `startupEditor:none`.
+3. **No C/C++ build toolchain** — runtime image runs PRE-BUILT binaries (adompkg),
+   nothing compiles at runtime; the toolchain is dead weight (Rust CLIs are built in
+   the cloud/CI, not here). Keep code-server, node (adompkg needs it), gh, git, python3.
+4. **Built from signed wiki.adom.inc adompkg bootstraps, NOT gallia.** One install:
+   `adompkg install adom/hd-windows-bootstrap` → core + hd-bootstrap + WSL2 layer +
+   updater + adom-desktop. No gallia clone / install.mjs / GALLIA_TOKEN in the image.
+5. **WSL2-native bake, NEVER docker** (see [[feedback_golden_image_wsl2_never_docker]]).
+6. **Workspace opens at `/home/adom`** (the home folder), not `/home/adom/project`
+   — though the opened folder is ultimately an HD launch-time arg.
+
+When in doubt about ANY of the above, VERIFY empirically against a re-imported image
+(boot code-server, test the actual behaviour) before changing the bake — do not guess.
 
 Rebuilds the flat WSL2 rootfs that Hydrogen Desktop `wsl --import`s, with
 everything pre-baked (apt baseline, code-server, gallia, claude CLI,

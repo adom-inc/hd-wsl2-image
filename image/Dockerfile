@@ -110,34 +110,30 @@ COPY bootstrap.sh /opt/adom/bootstrap.sh
 RUN chmod +x /etc/init-host-internal.sh /opt/adom/bootstrap.sh \
     && chown -R adom:adom /opt/adom
 
-# gallia + HD skills, staged into the build context by CI:
-#   gallia/    — adom-inc/gallia working tree, .git ALREADY STRIPPED (the
-#                public image must not carry the private remote or require
-#                GitHub auth; scripts/build-rootfs.sh tars the local clone
-#                with --exclude=.git instead)
-#   hd-skills/ — hydrogen-desktop/skills/public-facing/{shared,wsl2}
-COPY --chown=adom:adom gallia /home/adom/gallia
-COPY hd-skills /tmp/hd-skills
-# workspace-updater daemon (HD auto-update Part B). CI always creates this dir;
-# it's populated only once feature/hd-auto-update is on main. bake-hd-setup.sh
-# guards on the .sh file, so an empty dir (pre-merge) cleanly skips the daemon.
-COPY workspace-updater /tmp/workspace-updater
-# adompkg (the Adom package manager) — prerequisite for the adompkg-managed model.
-COPY adompkg /tmp/adompkg
+# v18: REGISTRY-NATIVE. No gallia staging (never invoked — adom/core is the new
+# gallia), no hd-skills copy (skills ship bundled inside the bootstraps), no
+# workspace-updater daemon (RETIRED; auto-update is adom/hook → `adom-wiki pkg
+# update` against the PUBLIC wiki.adom.inc registry — that hook is CORRECT for
+# public machines and must stay). No public-scrub gallia-hook strip needed:
+# the gallia check-updates.sh hook is never created in this path.
+#
+# adom-wiki (the registry CLI, a single static binary) — staged into the build
+# context by CI (fetch the latest published linux binary; `adom-wiki self-update`
+# keeps it current post-install, and adom/core also lands its canonical copy via
+# the adom/adom-wiki-cli dependency).
+COPY adom-wiki /home/adom/.local/bin/adom-wiki
+RUN chmod 0755 /home/adom/.local/bin/adom-wiki \
+    && chown adom:adom /home/adom/.local/bin/adom-wiki
 
-# bake-hd-setup.sh pre-runs HD's setup cascade (gallia npm + install.mjs,
-# claude CLI, Claude Code + adom-vscode extensions, VS Code settings +
-# trusted domains, HD skills, adom-desktop CLI) — shared verbatim with
-# scripts/build-rootfs.sh. public-scrub.sh then removes the gallia
-# stale-detector hook (30-min git fetch against the private repo) and
-# other GitHub-auth assumptions; updates arrive as new image versions,
-# not git pulls.
+# ONE declarative install of the layered bootstrap (core ← hd-bootstrap ←
+# hd-windows-bootstrap + adom-desktop), sudo-free, anonymous. Runs each
+# package's install/postinstall: deploys the bundled hd-* skills, writes VS Code
+# settings/trusted domains, installs Claude Code + adom-vscode extensions,
+# seeds workbench.html. (The claude CLI itself is NOT baked — HD's runtime
+# install-claude-cli + claude-auth setup steps handle it per-machine.)
 USER root
-COPY bake-hd-setup.sh /tmp/bake-hd-setup.sh
-RUN bash /tmp/bake-hd-setup.sh && rm -f /tmp/bake-hd-setup.sh
-
-COPY public-scrub.sh /tmp/public-scrub.sh
-RUN bash /tmp/public-scrub.sh && rm -f /tmp/public-scrub.sh
+COPY bake-via-bootstrap.sh /tmp/bake-via-bootstrap.sh
+RUN bash /tmp/bake-via-bootstrap.sh && rm -f /tmp/bake-via-bootstrap.sh
 
 # Phase A of the legacy bootstrap (apt baseline + code-server) is fully baked
 # above — write its sentinel so any older bootstrap.sh that still checks it

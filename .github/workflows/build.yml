@@ -26,34 +26,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Private repos — needs a token with read access to adom-inc/gallia
-      # and adom-inc/hydrogen-desktop stored as the GALLIA_TOKEN repo
-      # secret. .git is stripped: the public image must not carry the
-      # private remotes or require auth.
-      - name: Snapshot gallia + HD skills into build context
-        env:
-          GALLIA_TOKEN: ${{ secrets.GALLIA_TOKEN }}
+      # v18: REGISTRY-NATIVE — no private clones at all. No gallia (never invoked;
+      # adom/core is the new gallia), no hd-skills snapshot (skills ship bundled
+      # inside the bootstraps), no workspace-updater (RETIRED). The only staged
+      # artifact is the adom-wiki CLI binary, fetched anonymously from the PUBLIC
+      # registry's release assets (same mechanism the package's install.sh uses).
+      - name: Stage the adom-wiki CLI into the build context
         run: |
-          git clone --depth 1 "https://x-access-token:${GALLIA_TOKEN}@github.com/adom-inc/gallia.git" image/gallia
-          rm -rf image/gallia/.git image/gallia/node_modules
-          git clone --depth 1 --filter=blob:none --sparse \
-            "https://x-access-token:${GALLIA_TOKEN}@github.com/adom-inc/hydrogen-desktop.git" /tmp/hd-checkout
-          git -C /tmp/hd-checkout sparse-checkout set skills/public-facing src-tauri/crates/hd-app/resources/workspace-updater
-          mkdir -p image/hd-skills
-          cp -r /tmp/hd-checkout/skills/public-facing/shared /tmp/hd-checkout/skills/public-facing/wsl2 image/hd-skills/
-          # workspace-updater daemon (HD auto-update Part B) — present only once
-          # feature/hd-auto-update is merged to main; guarded so pre-merge builds work.
-          # Dir ALWAYS exists (Dockerfile COPY needs a source); populated only
-          # if the daemon is on main. bake-hd-setup.sh guards on the .sh file.
-          mkdir -p image/workspace-updater
-          UPD=/tmp/hd-checkout/src-tauri/crates/hd-app/resources/workspace-updater
-          if [ -f "$UPD/adom-workspace-updater.sh" ]; then
-            cp "$UPD/adom-workspace-updater.sh" "$UPD/adom-workspace-updater.service" "$UPD/adom-workspace-updater.timer" image/workspace-updater/
-            echo "workspace-updater staged"
-          else
-            echo "workspace-updater absent on main (pre-merge) — daemon bake will skip"
-          fi
-          rm -rf /tmp/hd-checkout
+          V=$(curl -fsSL https://wiki.adom.inc/api/v1/packages/adom-wiki-cli/manifest | jq -r .version)
+          URL=$(curl -fsSL "https://wiki.adom.inc/api/packages/adom-wiki-cli/$V/assets" \
+            | jq -r '[.assets[] | select(.platform=="linux" and (.arch=="x64" or .arch=="x86_64" or .arch=="amd64"))][0].download_url')
+          test -n "$URL" && test "$URL" != "null" || { echo "no linux/x64 adom-wiki asset for $V"; exit 1; }
+          case "$URL" in http*) ;; *) URL="https://wiki.adom.inc$URL";; esac
+          curl -fsSL "$URL" -o image/adom-wiki
+          chmod +x image/adom-wiki
+          ./image/adom-wiki --version
 
       - name: Build image
         run: |
@@ -73,18 +60,23 @@ jobs:
             test -f /var/lib/adom-bootstrap/phase-a-done
             cat /etc/adom-golden-version
             for b in adom-cli adom-vscode adom-mouser adom-digikey adom-jlcpcb adom-parts-search; do
-              test -x /usr/local/bin/$b || { echo "MISSING $b"; exit 1; }
+              test -x /home/adom/.local/bin/$b || test -x /usr/local/bin/$b || { echo "MISSING $b"; exit 1; }
             done
             id adom | grep -q "uid=1001"
-            test -x /home/adom/.local/bin/adompkg && test -f /home/adom/.local/bin/adompkg.mjs || { echo "MISSING adompkg"; exit 1; }
-            /home/adom/.local/bin/adompkg --version >/dev/null || { echo "adompkg --version failed"; exit 1; }
-            grep -q "ADOMPKG_REGISTRY=https://wiki.adom.inc" /etc/environment || { echo "MISSING ADOMPKG_REGISTRY pin"; exit 1; }
-            for c in adom-google adom-tts adom-gchat; do test -e /home/adom/.local/bin/$c || { echo "MISSING adompkg-managed CLI: $c"; exit 1; }; done
+            # v18: registry-native — adom-wiki CLI replaces the deprecated adompkg
+            test -x /home/adom/.local/bin/adom-wiki || { echo "MISSING adom-wiki CLI"; exit 1; }
+            runuser -u adom -- /home/adom/.local/bin/adom-wiki --version >/dev/null || { echo "adom-wiki --version failed"; exit 1; }
+            test ! -e /home/adom/.local/bin/adompkg || { echo "STALE adompkg present"; exit 1; }
             test -f /home/adom/project/adom_modules/.installed.json || { echo "MISSING adom_modules/.installed.json"; exit 1; }
             test -f /home/adom/.claude/skills/adom/SKILL.md
-            for s in hd-instapcb hd-eda-discovery; do test -f /home/adom/.claude/skills/$s/SKILL.md || { echo "MISSING required HD skill: $s"; exit 1; }; done
-            test -d /home/adom/gallia
-            test ! -e /home/adom/gallia/.git
+            # bundled-in-bootstrap skills (incl. hd-workspace-updater -> hd-staying-current rename)
+            for s in hd-webview hd-pup hd-golden-image hd-staying-current hd-eda-discovery; do test -f /home/adom/.claude/skills/$s/SKILL.md || { echo "MISSING required HD skill: $s"; exit 1; }; done
+            test ! -d /home/adom/.claude/skills/hd-workspace-updater || { echo "STALE hd-workspace-updater skill"; exit 1; }
+            # v18: NO gallia at all (registry-native; adom/core is the new gallia)
+            test ! -e /home/adom/gallia || { echo "gallia checkout present in registry-native image"; exit 1; }
+            # retired packages must not be in the tree; tree must be sudo-free
+            for p in adom-workspace-updater hd-skillpack; do test ! -d /home/adom/project/adom_modules/adom/$p || { echo "RETIRED package adom/$p present"; exit 1; }; done
+            ! grep -rl "\"needs_sudo\": *true" /home/adom/project/adom_modules/*/*/package.json 2>/dev/null | grep -q . || { echo "needs_sudo package in tree"; exit 1; }
             jq -e "has(\"model\") | not" /home/adom/.claude/settings.json
             jq -e "[(.hooks.UserPromptSubmit // [])[] | (.hooks // [])[] | .command // \"\"] | any(contains(\"check-updates\")) | not" /home/adom/.claude/settings.json
             jq -e ".\"chat.agent.enabled\" == false" /home/adom/.local/share/code-server/User/settings.json
@@ -94,13 +86,10 @@ jobs:
             test -x /usr/lib/systemd/systemd && test -e /sbin/init || { echo "MISSING systemd binary (PID 1 would fall back to /init, timer never fires)"; exit 1; }
             test ! -e /home/adom/project/.mcp.json
             test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak under /home/adom:"; find /home/adom ! -user adom; exit 1; }
-            if [ -e /usr/local/bin/adom-workspace-updater ]; then
-              test -x /usr/local/bin/adom-workspace-updater
-              /usr/local/bin/adom-workspace-updater --version | grep -qE "^adom-workspace-updater [0-9]+\.[0-9]+" || { echo "updater --version malformed"; exit 1; }
-              test -L /etc/systemd/system/timers.target.wants/adom-workspace-updater.timer || { echo "updater timer not enabled"; exit 1; }
-              ! grep -qi "^Persistent" /etc/systemd/system/adom-workspace-updater.timer || { echo "updater timer has Persistent= → fires at boot on fresh import"; exit 1; }
-              echo "workspace-updater: baked + timer enabled (no Persistent)"
-            else echo "workspace-updater: not baked (pre-merge)"; fi
+            # v18: workspace-updater RETIRED — must NOT exist (auto-update = adom/hook -> adom-wiki pkg update)
+            test ! -e /usr/local/bin/adom-workspace-updater || { echo "RETIRED updater daemon present"; exit 1; }
+            test ! -e /etc/systemd/system/adom-workspace-updater.timer || { echo "RETIRED updater timer present"; exit 1; }
+            test -d /home/adom/project/adom_modules/adom/hook || { echo "MISSING adom/hook (the public auto-updater)"; exit 1; }
             # v10: adom user-session linger (else WSL CreateLoginSession times out → degraded)
             test -e /var/lib/systemd/linger/adom || { echo "MISSING adom linger"; exit 1; }
             # v10: pam_lastlog removed (slim base lacks the module → faulty-module log every login)
