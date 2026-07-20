@@ -22,7 +22,7 @@
 # Then the host runs `wsl --export golden-build adom-golden-vN.tar`.
 set -euo pipefail
 trap 'echo "[bake-in-distro] FAILED at line ${LINENO} (exit $?)" >&2' ERR
-VER="${GOLDEN_VERSION:-v18}"
+VER="${GOLDEN_VERSION:-v19}"
 CSV="${CODE_SERVER_VERSION:-4.124.2}"
 CTX="${CTX:-/tmp/ctx}"
 export DEBIAN_FRONTEND=noninteractive
@@ -77,13 +77,24 @@ chown -R adom:adom /opt/adom
 # omits it and HD provides it on first launch.
 
 # ── 5. adom-wiki CLI (the registry-native installer the bake calls) ───────────
-# v18: adompkg is DEPRECATED. The bake stages a bootstrap copy of the single-binary
+# v18: adompkg is DEPRECATED. The bake needs a bootstrap copy of the single-binary
 # `adom-wiki` CLI just to run the one install; adom/core then lands its own canonical
 # copy via the adom/adom-wiki-cli dependency. Default registry is wiki.adom.inc
-# (no env needed; verified anonymous/token-less install works for the whole tree).
-log "adom-wiki CLI"
+# (no env needed; anonymous/token-less install works for the whole tree).
+#
+# ⚠ ALWAYS FETCH IT FRESH — never reuse a staged/pinned copy. Burned 2026-07-19:
+# a stale 1.0.41 binary sat in ctx from the v18 bake, so v19 was built by an old CLI
+# and hit an ALREADY-FIXED bug (postinstall execution), which got mis-reported as a
+# live ecosystem problem. A pinned CLI silently ages out; the registry is the truth.
+log "adom-wiki CLI (fetching current release)"
 install -d -o adom -g adom -m 0755 /home/adom/.local /home/adom/.local/bin
-install -o adom -g adom -m 0755 "${CTX}/adom-wiki" /home/adom/.local/bin/adom-wiki
+AWV="$(curl -fsSL https://wiki.adom.inc/api/v1/packages/adom-wiki-cli/manifest | jq -r .version)"
+AWURL="$(curl -fsSL "https://wiki.adom.inc/api/packages/adom-wiki-cli/${AWV}/assets" \
+    | jq -r '[.assets[] | select(.platform=="linux" and (.arch=="x64" or .arch=="x86_64" or .arch=="amd64"))][0].download_url')"
+case "$AWURL" in http*) ;; *) AWURL="https://wiki.adom.inc${AWURL}";; esac
+curl -fsSL "$AWURL" -o /home/adom/.local/bin/adom-wiki
+chmod 0755 /home/adom/.local/bin/adom-wiki && chown adom:adom /home/adom/.local/bin/adom-wiki
+log "adom-wiki CLI = $(runuser -u adom -- /home/adom/.local/bin/adom-wiki --version) (fetched ${AWV})"
 
 # ── 6. THE BOOTSTRAP INSTALL — pulls core + hd-bootstrap + WSL2 layer ─────────
 # Real distro → /proc exists → postinstalls (settings, extensions, seeds) run fine.
@@ -96,22 +107,29 @@ chown -R adom:adom /home/adom
 runuser -u adom -- bash -lc \
     "/home/adom/.local/bin/adom-wiki pkg install adom/hd-windows-bootstrap"
 
-# ── 6b. TEMPORARY WORKAROUND (remove when adom-wiki runs scripts.postinstall) ──
-# adom-wiki@1.0.41 BUG (issue filed on adom/adom-wiki-cli): `pkg install` runs
-# packages' install.sh but never executes `scripts.postinstall` — verified in
-# isolation 2026-07-16 (root install of adom/hd-bootstrap → module dir has
-# postinstall.sh, 0 hd-* skills deployed, no settings.json). Both HD bootstraps
-# deliver ALL their payload via postinstall. Until the CLI is fixed, run the two
-# postinstalls explicitly, in dependency order, AS ADOM, from each module dir —
-# guarded so this becomes a no-op the moment the CLI starts doing it itself.
-if ! ls -d /home/adom/.claude/skills/hd-* >/dev/null 2>&1; then
-    log "WORKAROUND: adom-wiki skipped scripts.postinstall — running bootstrap postinstalls explicitly"
-    for b in hd-bootstrap hd-windows-bootstrap; do
-        runuser -u adom -- bash -lc \
-            "cd /home/adom/project/adom_modules/adom/${b} && bash ./postinstall.sh"
-    done
+# ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
+# declare scripts.install (hd-bootstrap@0.2.23, hd-windows-bootstrap@0.2.8) and
+# adom-wiki executes install.sh in dependency order — verified end-to-end on a
+# clean HOME: 51 hd-* skills + settings.json with no intervention.
+
+# ── 6c. v19: adom-cli 0.5.12+ overlay (TEMPORARY — until the registry ships it) ─
+# WHY: 0.5.12 adds the ~/.adom/hd-proxy-url base-url fallback (adom-inc/adom-cli
+# PR #9) so adom-cli works in env-less non-login shells inside HD local workspaces.
+# v18 shipped 0.5.11, which falls back to the real carbon.adom.inc and 404s.
+# The registry's adom/adom-cli package (4.0.4) still ships 0.5.11, so the bake
+# overlays a binary built from branch fix/hd-local-proxy-discovery (cargo build
+# --release, Ubuntu 24.04 / glibc 2.39 — same as this image).
+# ⚠ REMOVE THIS BLOCK once Colby publishes an adom/adom-cli package shipping
+# 0.5.12+; then the registry-native install provides it and this is dead weight.
+# NOTE: the overlay is NOT registry-tracked (.installed.json still records the
+# package version), so a later `adom-wiki pkg update` that bumps adom-cli WILL
+# replace this binary with the registry's — which is correct/desired once the
+# published package carries 0.5.12+.
+if [ -f "${CTX}/adom-cli" ]; then
+    log "overlaying adom-cli 0.5.12+ (built from source; registry still ships 0.5.11)"
+    install -m 0755 -o root -g root "${CTX}/adom-cli" /usr/local/bin/adom-cli
 else
-    log "adom-wiki ran bootstrap postinstalls itself — workaround skipped (CLI fixed; remove 6b)"
+    echo "MISSING ${CTX}/adom-cli — v19 requires the 0.5.12+ binary staged in ctx"; exit 1
 fi
 
 # ── 7. sentinel + version stamp ───────────────────────────────────────────────
@@ -172,6 +190,18 @@ runuser -u adom -- /usr/lib/code-server/bin/code-server --list-extensions 2>/dev
 ! test -e /usr/local/bin/adom-workspace-updater || { echo "RETIRED updater daemon present"; exit 1; }
 ! systemctl list-unit-files 2>/dev/null | grep -q adom-workspace-updater || { echo "RETIRED updater systemd units present"; exit 1; }
 test -x /home/adom/.local/bin/adom-desktop || { echo "MISSING adom-desktop CLI"; exit 1; }
+# ── v19 LITMUS: adom-cli must carry the HD-local proxy fallback ───────────────
+# (1) version >= 0.5.12, (2) the fallback is really compiled into the binary.
+test -x /usr/local/bin/adom-cli || { echo "MISSING /usr/local/bin/adom-cli"; exit 1; }
+ACLI_V="$(/usr/local/bin/adom-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+echo "adom-cli version: ${ACLI_V:-unknown}"
+[ -n "$ACLI_V" ] || { echo "ADOM-CLI: could not parse --version"; exit 1; }
+printf '%s\n%s\n' "0.5.12" "$ACLI_V" | sort -V -C || { echo "ADOM-CLI: ${ACLI_V} < 0.5.12 (needs the hd-proxy-url fallback)"; exit 1; }
+# NOTE: use `grep -a` (+ C locale). Plain `grep -q` FALSE-NEGATIVES on this binary —
+# it bails on invalid multibyte sequences in a UTF-8 locale and reports no match even
+# though the literal is present (verified 2026-07-19: grep -a / strings both match).
+LC_ALL=C grep -qa 'hd-proxy-url' /usr/local/bin/adom-cli || { echo "ADOM-CLI: 'hd-proxy-url' string ABSENT from the binary — the base-url fallback is not compiled in"; exit 1; }
+echo "adom-cli: >=0.5.12 + hd-proxy-url fallback present ✓"
 test -x /usr/lib/systemd/systemd && test -e /sbin/init || { echo "MISSING systemd"; exit 1; }
 test -e /var/lib/systemd/linger/adom || { echo "MISSING adom linger"; exit 1; }
 test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak: $(find /home/adom ! -user adom -print -quit)"; exit 1; }

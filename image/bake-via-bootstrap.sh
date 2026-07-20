@@ -46,17 +46,9 @@ chown -R adom:adom /home/adom
 log "installing adom/hd-windows-bootstrap (resolves the full layered tree, sudo-free)"
 as_adom "/home/adom/.local/bin/adom-wiki pkg install adom/hd-windows-bootstrap"
 
-# TEMPORARY WORKAROUND (remove when adom-wiki runs scripts.postinstall):
-# adom-wiki@1.0.41 runs install.sh but never executes scripts.postinstall (bug
-# filed on adom/adom-wiki-cli). Both HD bootstraps deliver their payload via
-# postinstall — run them explicitly, in dependency order, guarded so this is a
-# no-op once the CLI is fixed.
-if ! as_adom 'ls -d ~/.claude/skills/hd-* >/dev/null 2>&1'; then
-  log "WORKAROUND: adom-wiki skipped scripts.postinstall — running bootstrap postinstalls explicitly"
-  for b in hd-bootstrap hd-windows-bootstrap; do
-    as_adom "cd ~/project/adom_modules/adom/${b} && bash ./postinstall.sh"
-  done
-fi
+# (2026-07-20) postinstall shim removed: the bootstraps now declare scripts.install
+# (hd-bootstrap@0.2.23 / hd-windows-bootstrap@0.2.8) and adom-wiki runs install.sh
+# in dependency order. Verified on a clean HOME: 51 skills + settings.json, no shim.
 
 # ── hard gates — the bake must FAIL loudly if the tree didn't fully land ─────
 log "verifying the bootstrap tree installed"
