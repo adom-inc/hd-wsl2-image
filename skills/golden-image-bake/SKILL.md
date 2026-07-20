@@ -60,6 +60,18 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    the bake's guarded postinstall shim. Until then the shim stays (it runs the bootstrap
    payload scripts the CLI skips).
 
+8. **ALWAYS RESOLVE LATEST — NEVER PIN PACKAGE VERSIONS (John's call, 2026-07-20).**
+   The bake installs unpinned (`adom-wiki pkg install adom/hd-windows-bootstrap`, no
+   `@version`) ON PURPOSE: John wants "give me whatever is newest right now." Do NOT
+   add version pins to make images reproducible, and do not propose it again — the
+   tradeoff is understood and accepted: two bakes of the same script on different days
+   WILL produce different images (v18 got hd-bootstrap 0.2.10; v19, four days later,
+   got 0.2.23 plus 2 extra skills). When reporting a new image, still SAY what drifted
+   so it's a known quantity, but ship latest.
+   Corollary — the same rule applies to the toolchain: fetch the `adom-wiki` CLI fresh
+   at bake time, never reuse a staged/pinned binary (see the v19 stale-1.0.41 incident
+   in section 5).
+
 When in doubt about ANY of the above, VERIFY empirically against a re-imported image
 (boot code-server, test the actual behaviour) before changing the bake — do not guess.
 
