@@ -1,6 +1,6 @@
 ---
 name: golden-image-bake
-description: "Rebuild + release the Hydrogen Desktop golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says \"bake the golden image\", \"rebuild the wsl2 image\", \"new golden image\", \"monthly image bake\", \"cut a new hd-wsl2-image version\", or when gallia/CLI/extension drift makes the shipped image stale (target cadence: monthly). EMPLOYEE-ONLY — needs an Adom cloud container with the private gallia + hydrogen-desktop checkouts; never publish this skill to gallia or the public image."
+description: "Rebuild + release the Hydrogen Desktop golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says \"bake the golden image\", \"rebuild the wsl2 image\", \"new golden image\", \"cut a new hd-wsl2-image version\", or when registry drift (bootstraps / CLIs / extensions) makes the shipped image stale. Registry-native: the whole image is ONE `adom-wiki pkg install adom/hd-windows-bootstrap`. Built WSL2-NATIVE on John's laptop via adom-desktop — never docker, never in the cloud container. EMPLOYEE-ONLY — never publish this skill to the wiki or into the public image."
 ---
 
 # Golden image bake — adom-inc/hd-wsl2-image
@@ -13,228 +13,194 @@ against "does this match how Web Hydrogen works?" If a change would diverge HD's
 behaviour from Web Hydrogen, it is almost certainly wrong.
 
 1. **PORT ACCESS VIA `<host>/proxy/<port>/` MUST WORK — this is how Web Hydrogen
-   exposes ports and HD MUST replicate it.** In Web Hydrogen, every forwarded port
-   is reached through the cloud container's DNS address + `/proxy/<port>/`
+   exposes ports and HD MUST replicate it.** In Web Hydrogen every forwarded port is
+   reached through the container's DNS address + `/proxy/<port>/`
    (e.g. `https://<slug>.adom.cloud/proxy/<port>/`). HD must serve the identical
-   code-server path-proxy route so the same URLs work. **NEVER disable port
-   forwarding or do anything that breaks the `/proxy/<port>/` route** (do not set
-   `remote.autoForwardPorts:false` or otherwise kill it without proving the proxy
-   route still works). This is in ADDITION to WSL2 **mirrored networking**, which
-   also exposes WSL2 ports on the host's `localhost` — **BOTH must work.** (John has
-   stated this requirement more than once — it is a core design goal, never forget it.)
-   - PROVEN 2026-06-22: code-server's `/proxy/<port>/` route is a static HTTP route,
-     **independent of `remote.autoForwardPorts`** — a port that was never auto-forwarded
-     still serves via `/proxy/<port>/` on demand. So you may tune the auto-forward
-     *settings* without breaking the proxy, but ALWAYS re-verify against a re-imported
-     image (boot code-server, `python3 -m http.server N`, curl `…/proxy/N/`).
-   - PARITY SETTING: the Web Hydrogen cloud container sets
-     `"remote.autoForwardPortsSource": "hybrid"` (verified by reading the live container's
-     code-server settings; its `VSCODE_PROXY_URI=…/proxy/{{port}}/`). The golden image
-     MUST set the same — pinning the source to `hybrid` from the start means there is no
-     `process→hybrid` switch, so the "Over 20 ports… switched to hybrid" popup never fires.
-     Do NOT "fix" that popup by disabling auto-forward or with `autoForwardPortsFallback` —
-     match Web Hydrogen with `autoForwardPortsSource: hybrid`.
-2. **Clean first-load editor:** opens to an empty workbench — no Explorer sidebar,
-   no bottom panel, no tabs, no welcome page (just the 48px activity-bar rail).
-   Seeded per-workspace in hd-windows-bootstrap's workbench.html + `startupEditor:none`.
-3. **No C/C++ build toolchain** — runtime image runs PRE-BUILT binaries (adompkg),
-   nothing compiles at runtime; the toolchain is dead weight (Rust CLIs are built in
-   the cloud/CI, not here). Keep code-server, node (adompkg needs it), gh, git, python3.
-4. **Built from signed wiki.adom.inc adompkg bootstraps, NOT gallia.** One install:
-   `adompkg install adom/hd-windows-bootstrap` → core + hd-bootstrap + WSL2 layer +
-   updater + adom-desktop. No gallia clone / install.mjs / GALLIA_TOKEN in the image.
+   code-server path-proxy route so the same URLs work. **NEVER disable port forwarding
+   or break the `/proxy/<port>/` route.** This is in ADDITION to WSL2 **mirrored
+   networking**, which also exposes WSL2 ports on the host's `localhost` — **BOTH must
+   work.** (John has stated this requirement more than once — core design goal.)
+   - PROVEN 2026-06-22: the `/proxy/<port>/` route is a static HTTP route, **independent
+     of `remote.autoForwardPorts`** — a never-forwarded port still serves through it. You
+     may tune auto-forward settings, but ALWAYS re-verify against a re-imported image
+     (boot code-server, `python3 -m http.server N`, curl `…/proxy/N/`).
+   - PARITY SETTING: the Web Hydrogen container sets
+     `"remote.autoForwardPortsSource": "hybrid"` (verified by reading the live
+     container's code-server settings; its `VSCODE_PROXY_URI=…/proxy/{{port}}/`). The
+     golden image MUST match — pinning the source to `hybrid` means there is no
+     `process→hybrid` switch, so the "Over 20 ports…" popup never fires. Do NOT "fix"
+     that popup by disabling auto-forward or via `autoForwardPortsFallback`.
+2. **Clean first-load editor:** opens to an empty workbench — no Explorer sidebar, no
+   bottom panel, no tabs, no welcome page (just the 48px activity-bar rail). Seeded
+   per-workspace in hd-windows-bootstrap's workbench.html + `startupEditor:none`.
+3. **No C/C++ build toolchain** — the runtime image runs PRE-BUILT binaries; nothing
+   compiles at runtime (there is no rustc). The toolchain was ~246 MB of dead weight in
+   v1–v14. Keep code-server, node, gh, git, python3.
+4. **Built from signed wiki.adom.inc packages via the `adom-wiki` CLI, NOT gallia and
+   NOT adompkg (both retired here).** ONE declarative install:
+   `adom-wiki pkg install adom/hd-windows-bootstrap` → core + hd-bootstrap + WSL2 layer
+   + adom-desktop. No gallia clone / install.mjs / GALLIA_TOKEN anywhere in the image.
 5. **WSL2-native bake, NEVER docker** (see [[feedback_golden_image_wsl2_never_docker]]).
-6. **Workspace opens at `/home/adom`** (the home folder), not `/home/adom/project`
-   — though the opened folder is ultimately an HD launch-time arg.
-
-7. **Bootstrap script contract (2026-07-16, JOHN'S DIRECTION — unify on install.sh):**
-   history: adompkg required bootstraps to use `scripts.postinstall`; the new registry
-   kept that publish validation ("meta packages must not have scripts.install/uninstall")
-   but adom-wiki ≤1.0.41 never EXECUTES postinstall → bootstraps couldn't have a working
-   script at all (adom/adom-wiki-cli issue #9). John's ruling: the postinstall/install
-   split is pointless — dependency-ordered install already runs a dependent's install.sh
-   after its deps, which is all postinstall ever guaranteed. TARGET STATE: one contract,
-   `install.sh` on every package incl. bootstraps; server drops the meta-package
-   validation; postinstall deprecated. hd-bootstrap@0.2.11 + hd-windows-bootstrap@0.2.7
-   are prepared with install.sh — publish them once the validation is lifted, then drop
-   the bake's guarded postinstall shim. Until then the shim stays (it runs the bootstrap
-   payload scripts the CLI skips).
-
+6. **Workspace opens at `/home/adom`** (the home folder), not `/home/adom/project` —
+   though the opened folder is ultimately an HD launch-time arg.
+7. **Bootstrap script contract: `install.sh` (DONE 2026-07-20).** History: adompkg
+   required `scripts.postinstall` on bootstraps; the new registry initially kept that
+   validation while the CLI didn't execute postinstall — bootstraps couldn't have a
+   working script at all. John's ruling: the postinstall/install split is pointless
+   because dependency-ordered install already runs a dependent's `install.sh` after its
+   deps. **Colby lifted the server validation; we migrated
+   `adom/hd-bootstrap@0.2.23` + `adom/hd-windows-bootstrap@0.2.8` to
+   `scripts.install`** — verified clean-HOME: 51 skills + settings.json, dependency
+   ordered, no shim. `scripts.postinstall` is deprecated (publish warns
+   `POSTINSTALL_DEPRECATED`; hard-reject is staged, gated on all three HD bootstraps
+   migrating — `adom/hd-mac-bootstrap` (Kyle) was the last straggler).
 8. **ALWAYS RESOLVE LATEST — NEVER PIN PACKAGE VERSIONS (John's call, 2026-07-20).**
-   The bake installs unpinned (`adom-wiki pkg install adom/hd-windows-bootstrap`, no
-   `@version`) ON PURPOSE: John wants "give me whatever is newest right now." Do NOT
-   add version pins to make images reproducible, and do not propose it again — the
-   tradeoff is understood and accepted: two bakes of the same script on different days
-   WILL produce different images (v18 got hd-bootstrap 0.2.10; v19, four days later,
-   got 0.2.23 plus 2 extra skills). When reporting a new image, still SAY what drifted
-   so it's a known quantity, but ship latest.
-   Corollary — the same rule applies to the toolchain: fetch the `adom-wiki` CLI fresh
-   at bake time, never reuse a staged/pinned binary (see the v19 stale-1.0.41 incident
-   in section 5).
+   The bake installs unpinned ON PURPOSE: John wants "give me whatever is newest right
+   now." Do NOT add version pins for reproducibility, and do not propose it again. The
+   tradeoff is understood and accepted: the same script on different days produces
+   different images (v18 got hd-bootstrap 0.2.10; v19, four days later, got 0.2.23 + 2
+   extra skills). REPORT what drifted in the release notes; ship latest regardless.
+   Corollary — same rule for the toolchain: **fetch the `adom-wiki` CLI fresh at bake
+   time, never reuse a staged/pinned binary** (see the v19 stale-1.0.41 incident below).
 
 When in doubt about ANY of the above, VERIFY empirically against a re-imported image
 (boot code-server, test the actual behaviour) before changing the bake — do not guess.
 
-Rebuilds the flat WSL2 rootfs that Hydrogen Desktop `wsl --import`s, with
-everything pre-baked (apt baseline, code-server, gallia, claude CLI,
-Claude Code + adom-vscode extensions, VS Code settings, HD skills, Adom
-CLIs, adom-desktop CLI), then publishes it as a GitHub Release asset.
+## What this builds
+
+A flat WSL2 rootfs that HD `wsl --import`s. The OS "hardware" (apt baseline,
+code-server, systemd, user/linger/pam) is baked by the script; ALL Adom content
+(skills, CLIs, extensions, editor config) arrives through the single registry install.
 
 Repo: `/home/adom/project/hd-wsl2-image` (github.com/adom-inc/hd-wsl2-image, public).
-Canonical recipe: `image/Dockerfile`; the chroot builder
-`scripts/build-rootfs.sh` is its docker-less translation (this container
-has no docker) — **keep them in lockstep** when editing either.
+**Canonical recipe: `image/bake-in-distro.sh`** (WSL2-native, runs as root inside a
+throwaway `wsl --import`ed ubuntu-base distro on the laptop).
+`image/bake-via-bootstrap.sh` is the docker/CI translation — keep them in lockstep.
+`image/Dockerfile` + `.github/workflows/build.yml` are the CI path (also registry-native
+now; CI stages only the `adom-wiki` binary, no private clones).
+Legacy/retired: `bake-hd-setup.sh`, `scripts/build-rootfs.sh` (gallia+chroot era),
+`image/public-scrub.sh` (existed only to strip gallia's check-updates hook — the
+registry-native bake never creates it), `image/adompkg/` (adompkg is deprecated).
 
-## ✅ DONE (v8) — in-distro workspace-updater daemon baked
+## Procedure — WSL2-native on the laptop via adom-desktop
 
-(Shipped in v8: systemd + systemd-sysv installed so PID 1 is systemd and the
-timer fires; daemon at /usr/local/bin/adom-workspace-updater 0.1.2 + enabled
-timer; Codex NOT baked — daemon installs it on first boot. The section below is
-the reference for how it's wired.)
-
-## (reference) workspace-updater daemon bake
-
-**Gate: ONLY after `feature/hd-auto-update` is merged into hydrogen-desktop
-`main`.** Check first: `git ls-tree -r --name-only origin/main -- \
-src-tauri/crates/hd-app/resources/workspace-updater/` — if it returns the
-files, the gate is open; if empty, SKIP this section (not merged yet).
-
-HD now ships an in-distro auto-updater. HD bootstraps it into the distro on
-every launch (`ensure_workspace_updater`), so existing AND new users get it
-without an image change — baking it just means a fresh image has the daemon
-present before HD's first launch. **Part C invariant (HOLD IT):** the golden
-image is FIRST-INSTALL ONLY — never add anything that re-images or migrates
-an existing user's distro. All ongoing updates flow through the daemon in
-place; the image only benefits brand-new installs.
-
-**KEEP everything currently baked** (code-server, claude-code extension,
-adom-vscode, gallia, CLIs — all of it stays). The daemon does NOT replace
-the bake. Its **first** update installs the **Codex VS Code extension**
-(which we do NOT bake) and thereafter converges the container to the live
-manifest (SHA-verified, never-downgrade, surgical):
-`https://wiki.adom.inc/api/v1/pages/hd-workspace-tooling/files/manifest.json`
-
-Source (hydrogen-desktop main, post-merge):
-`src-tauri/crates/hd-app/resources/workspace-updater/`
-  - `adom-workspace-updater.sh`      → `/usr/local/bin/adom-workspace-updater` (chmod +x)
-  - `adom-workspace-updater.service` → `/etc/systemd/system/`
-  - `adom-workspace-updater.timer`   → `/etc/systemd/system/` (then `systemctl enable`)
-  - `README.md` — reference only, do NOT ship into the image
-
-Implementation (apply when the gate opens), in lockstep across all three:
-1. **CI** `.github/workflows/build.yml` — extend the HD sparse-checkout to
-   also stage the updater dir alongside `skills/public-facing`, copy it to
-   `image/workspace-updater/`.
-2. **chroot** `scripts/build-rootfs.sh` — stage from the local checkout:
-   `sudo cp -r ~/project/hydrogen-desktop/src-tauri/crates/hd-app/resources/workspace-updater "${ROOT}/tmp/"`
-3. **`image/bake-hd-setup.sh`** — new step (runs as root):
-   ```bash
-   install -m 0755 /tmp/workspace-updater/adom-workspace-updater.sh /usr/local/bin/adom-workspace-updater
-   install -m 0644 /tmp/workspace-updater/adom-workspace-updater.service /etc/systemd/system/
-   install -m 0644 /tmp/workspace-updater/adom-workspace-updater.timer   /etc/systemd/system/
-   systemctl enable adom-workspace-updater.timer    # writes the multi-user.target.wants symlink; works offline in chroot/docker
-   rm -rf /tmp/workspace-updater
-   ```
-   (`systemctl enable` on a .timer works without a running systemd — it just
-   creates the wants-symlink. If the chroot lacks `systemctl`, fall back to
-   `ln -s ../adom-workspace-updater.timer /etc/systemd/system/timers.target.wants/`.)
-4. **Smoke** (build-rootfs.sh + CI): assert
-   `test -x /usr/local/bin/adom-workspace-updater`,
-   `test -f /etc/systemd/system/adom-workspace-updater.timer`, and the enable
-   symlink exists. Do NOT assert Codex is present — the daemon installs it at
-   runtime, not at bake.
-
-## Preconditions
-
-- `~/gallia` exists and is freshly pulled (`cd ~/gallia && git pull --ff-only`)
-- `~/project/hydrogen-desktop` exists (HD skills source; pull main for releases)
-- ~8 GB free under `/tmp` (`df -h /tmp`)
-- No other bake running (`pgrep -f build-rootfs.sh` — shared `/tmp/hd-golden-build` workdir)
-
-## Procedure
-
-**Preferred path — CI (real docker, full smoke incl. native claude verify):**
+Everything runs through the AD relay against `AdomLapper`. **If two ADs are connected
+(winvm + AdomLapper) every call needs `--target AdomLapper`** or you get
+`ambiguous_target`.
 
 ```bash
-cd /home/adom/project/hd-wsl2-image && git pull --ff-only
-gh release list --repo adom-inc/hd-wsl2-image     # pick next vN
-gh workflow run build-golden-image -f version=vN
-gh run watch $(gh run list --workflow build-golden-image --limit 1 --json databaseId -q '.[0].databaseId') --exit-status
-# CI does build + smoke + release + ghcr push. Then SKIP to step 5 (verify).
-# Needs the GALLIA_TOKEN repo secret (read access to gallia + hydrogen-desktop).
+# 0. stage the build context on the laptop: C:\tmp\ctx\
+#    wsl.conf, init-host-internal.sh, bootstrap.sh, bake-in-distro.sh (+ any overlay binary)
+#    NOTE: send_files ALWAYS lands in C:\Users\john\Downloads and IGNORES destDir —
+#    move files into ctx with a follow-up PowerShell run_script.
+#    DO NOT stage adom-wiki: the bake fetches it fresh (invariant 8 corollary).
+
+# 1. fresh throwaway distro (never reuse — a used distro carries prior state)
+adom-desktop --target AdomLapper wsl_unregister '{"distro":"golden-build"}'
+adom-desktop --target AdomLapper wsl_import '{"distro":"golden-build","installDir":"C:\\tmp\\golden-build-vN","tarball":"C:\\tmp\\ubuntu-base.tar.gz"}'
+
+# 2. copy ctx in, then bake (async — held session keeps /tmp alive, no mid-bake shutdown)
+#    wsl_exec / run_script take a base64 `scriptB64`, NOT a raw command string.
+adom-desktop --target AdomLapper wsl_exec_async '{"distro":"golden-build","user":"root","scriptB64":"<b64 of: export GOLDEN_VERSION=vN; bash /tmp/ctx/bake-in-distro.sh>"}'
+adom-desktop --target AdomLapper wsl_job_status '{"jobId":"wsljob-…"}'   # poll until running:false
+
+# 3. gate on SMOKE-OK in the output. The bake has an ERR trap that prints the failing
+#    line number — a bare `exit 2` with no message means you are on an old copy.
+
+# 4. export + compress + hash (gzip -9 takes ~4 min for ~450 MB)
+adom-desktop --target AdomLapper wsl_export '{"distro":"golden-build","tarball":"C:\\tmp\\adom-golden-vN.tar"}'
+#    then in the Ubuntu distro: gzip -9 -c … > …tar.gz && sha256sum … | tee ….tar.gz.sha256
+
+# 5. release BOTH assets (tar.gz + .sha256 sidecar)
+gh release create vN --repo adom-inc/hd-wsl2-image --title "…" --notes-file …
+gh release upload vN …tar.gz …tar.gz.sha256 --repo adom-inc/hd-wsl2-image --clobber
+#    big uploads must be DETACHED (Start-Process) + polled; they exceed the relay timeout.
+
+# 6. VERIFY THE PUBLIC DOWNLOAD (never skip — released ≠ verified)
+curl -sIL <url> | grep -iE '^HTTP|^content-length'    # 200 + exact byte match
+curl -sL <url>.sha256                                  # matches what you baked
+curl -sL --range 0-3 <url> | xxd -l2 -p                # 1f8b (gzip magic)
 ```
 
-**Fallback path — local chroot build** (CI down, or iterating on the recipe):
+## Verification gates (make every requirement a build-FAILING litmus)
 
-```bash
-cd /home/adom/project/hd-wsl2-image
-git pull --ff-only
-
-# 1. Next version: current releases, then increment
-gh release list --repo adom-inc/hd-wsl2-image
-
-# 2. Build (~20 min). ALWAYS in background with a log; gate on SMOKE-OK.
-GOLDEN_VERSION=vN ./scripts/build-rootfs.sh > /tmp/hd-golden-build.log 2>&1 &
-```
-
-Monitor `/tmp/hd-golden-build.log` for `[build-rootfs ...]` / `[bake-hd-setup ...]`
-phase lines. Known-benign noise: `E: Can not write log (Is /dev/pts mounted?)`
-(apt in a mount-less chroot). Hard failures print `MISSING ...` / `LEAK ...`
-from the smoke test — the build exits non-zero; do NOT release.
-
-```bash
-# 3. Verify the build said SMOKE-OK and produced artifacts
-grep SMOKE-OK /tmp/hd-golden-build.log
-ls -lh /tmp/hd-golden-build/adom-golden-vN.tar.gz*
-
-# 4. Release (fix the sha256 file to a bare filename first)
-cd /tmp/hd-golden-build
-sed -i 's|/tmp/hd-golden-build/||' adom-golden-vN.tar.gz.sha256
-gh release create vN adom-golden-vN.tar.gz adom-golden-vN.tar.gz.sha256 \
-  --repo adom-inc/hd-wsl2-image --title "Golden WSL2 rootfs vN" \
-  --notes "<what changed since the last bake>"
-
-# 5. Verify the public download + hash (NEVER skip — release ≠ verified)
-curl -fsSL -o /tmp/verify.tar.gz \
-  "https://github.com/adom-inc/hd-wsl2-image/releases/download/vN/adom-golden-vN.tar.gz"
-sha256sum /tmp/verify.tar.gz   # must equal the .sha256 asset
-rm -f /tmp/verify.tar.gz
-```
-
-## 6. ALWAYS show John the latest in pup (John's standing preference)
-
-After every successful release, show John the NEW version in pup — don't wait
-to be asked.
-
-⛔ **NEVER do this with proot/code-server in the cloud container** (see
-`cloud-container-safety`: a nested code-server here has bricked the container).
-Show it from a **disposable WSL2 distro on the laptop** instead, via the
-`golden-image-test` skill: import the released tarball as `golden-test-vN`
-(never touch `Adom-Workspace`), start code-server INSIDE that distro on the
-laptop, pup to it (localhost or the WSL IP on the laptop), then
-`wsl --unregister golden-test-vN` after. Confirm it's the right build with
-`cat /etc/adom-golden-version` → vN (a stale pup window on an old rootfs shows
-the old marker — how John caught a v8 window after v9). This is the SAME run
-that validates systemd/timer/daemon, so it doubles as the visual.
-
-If the laptop/AD is unreachable, say so and defer the visual — do NOT fall
-back to proot in the container.
+Put each requirement in the bake's smoke test so a bad image cannot be produced, and
+then re-verify independently in the finished image. Current gates: version stamp,
+adom-wiki present/runnable, no stale adompkg, required modules present, RETIRED packages
+absent (`adom-workspace-updater`, `hd-skillpack`), sudo-free tree, no gallia checkout, no
+private `check-updates.sh` hook, ≥45 hd-* skills + spot-checks, settings.json keys
+(`chat.agent.enabled:false`, `startupEditor:none`, `autoForwardPortsSource:hybrid`),
+workbench seeds (`__hdAbSeed`, `adom.sidebarSeeded`), claude-code extension, systemd +
+linger, ownership, no build toolchain.
 
 ## Hand-off to HD
 
 HD consumes the image via three consts in
 `hydrogen-desktop/src-tauri/crates/hd-app/src/runtime/wsl.rs`:
-`TARBALL_URL_PLACEHOLDER`, `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION`.
-After releasing, give the HD thread the new URL + sha256 + version so it
-bumps the pins (existing installs migrate via `migrate_to_new_tarball`).
+`TARBALL_URL_PLACEHOLDER`, `TARBALL_SHA256_PLACEHOLDER`, `TARBALL_VERSION` (+ a
+byte-count comment). **The tarball FILENAME is pinned in code**, so a new version needs
+an edit + rebuild — it is not picked up automatically. Give the HD thread URL + sha256 +
+byte size + version, and say what drifted.
 
-## Invariants (smoke-tested; never regress)
+⚠️ **Pin/code pairing:** if the image drops something HD still re-installs at launch,
+the pin must ride the branch that removes that code (v18's updater retirement rode
+`feature/retire-workspace-updater`, NOT main — main's `ensure_workspace_updater()` would
+have re-installed the retired daemon into a clean image).
 
-- **Public build**: nothing in the image requires GitHub auth. No
-  `gallia/.git`, no gallia stale-detector hook (`check-updates.sh`) in
-  `~/.claude/settings.json` — `image/public-scrub.sh` enforces this.
-- **No model pins**: neither `~/.claude/settings.json` (`model`) nor
-  code-server `settings.json` (`claudeCode.selectedModel`) names a model —
-  Claude Code picks the default for the user.
-- install.mjs success = its `Installation complete` marker, NOT exit code.
-- wsl.conf: `default=adom`, `systemd=true`.
+## HARD-WON TRAPS (each cost real time — read before debugging)
+
+- **A pinned CLI silently ages out.** v19 was baked with an `adom-wiki` 1.0.41 binary
+  staged during v18; it hit an ALREADY-FIXED bug, and I reported that stale-binary
+  artifact as a live ecosystem problem (and escalated it to two people). **Fetch tools
+  fresh; compare against the registry before asserting any tooling bug.**
+- **`grep -q` false-negatives on binaries.** Checking a string in a Rust binary
+  (`hd-proxy-url` in adom-cli) failed with plain `grep -q` under a UTF-8 locale
+  (invalid multibyte sequences) even though the literal was present. **Use
+  `LC_ALL=C grep -qa`.** And `strings` DOES NOT EXIST in the image (binutils stripped in
+  v15) — a `strings | grep -c` check returns a misleading `0`.
+- **Version compares:** use `printf '%s\n%s\n' "$MIN" "$V" | sort -V -C`, and TEST it
+  across the boundary (0.5.11 fail / 0.5.12 pass) so the gate is a real discriminator.
+- **Platform-specific packages need `?platform=` on the tarball API.**
+  `/api/v1/packages/hd-windows-bootstrap/0.2.7/tarball` 404s;
+  `…/tarball?platform=linux` works. A 404 reads like "version missing" — it isn't.
+- **Never rebuild a publish dir by extracting the published tarball.** The hero is
+  deliberately excluded from tarballs via `files[]` (it is a PAGE asset), so the publish
+  then fails the hero lint. Publish from source with `docs/hero.png` present; `files[]`
+  keeps it out of the tarball. (Heroes in tarballs = bloat: adom/core shipped 1.6 MB for
+  ~2.3 KB of payload — filed as adom/core issue #3.)
+- **VirtualBox cannot test WSL2.** No nested virt on a Hyper-V host, so the VBox harness
+  only exercises installer/cascade UX — it CANNOT prove the image imports. Import proof =
+  a real WSL2 box (laptop throwaway import, or the Azure winvm for a full virgin E2E).
+- **The vm-test harness needs `export ADOM_TARGET=AdomLapper`** when two ADs are
+  connected, or its helpers die with `ambiguous_target` right after "STAGE 1".
+- **The laptop HD checkout `C:\Github\hydrogen-desktop` is SHARED across threads.**
+  Check `git branch --show-current` + stash state before switching; restore it after.
+- **Mutating commands are NOT idempotent — never blind-retry.** Re-running
+  `adom-wiki issue create` because the output PARSE failed created a duplicate issue.
+  Verify state, then retry.
+- **`git commit -m "…" | tail` can hang** in this container (shell alias); use
+  `git commit -F <file>` and check `git log -1` to confirm it landed.
+
+## Version history (what changed, so future bakes have context)
+
+| ver | change |
+|---|---|
+| v15 | dropped the ~246 MB C/C++ toolchain + stripped docs/man/locales (626→400 MB) |
+| v16 | clean first-load editor (per-workspace sidebar-collapse seed, no welcome/tabs/panel) |
+| v17 | Web Hydrogen port parity: `autoForwardPortsSource: hybrid` (kills the >20-ports popup) |
+| v18 | REGISTRY-NATIVE: `adom-wiki pkg install` replaces adompkg/gallia; workspace-updater + hd-skillpack RETIRED; tree sudo-free |
+| v19 | adom-cli 0.5.12 overlay (`~/.adom/hd-proxy-url` fallback for env-less shells); bake fetches adom-wiki fresh; postinstall shim removed (bootstraps now `scripts.install`) |
+
+## Retired (do not resurrect)
+
+- **adom-workspace-updater daemon** — retired in v18; in-distro auto-update is now
+  `adom/hook` → `adom-wiki pkg update`. The bake ASSERTS it is absent.
+- **hd-skillpack** — skills ship bundled inside the bootstraps. Asserted absent.
+- **gallia** — never invoked; `adom/core` is the new gallia. No clone, no token.
+- **adompkg** — deprecated in favour of the `adom-wiki` CLI.
+
+## Standing cleanup
+
+- The v19 **adom-cli 0.5.12 overlay** in `bake-in-distro.sh` is TEMPORARY. When Colby
+  publishes an `adom/adom-cli` package shipping 0.5.12+, DELETE that block so adom-cli
+  is registry-managed again (it is marked `⚠ REMOVE THIS BLOCK` with that condition).
