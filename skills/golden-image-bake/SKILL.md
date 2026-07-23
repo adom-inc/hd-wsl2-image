@@ -189,6 +189,7 @@ have re-installed the retired daemon into a clean image).
 | v16 | clean first-load editor (per-workspace sidebar-collapse seed, no welcome/tabs/panel) |
 | v17 | Web Hydrogen port parity: `autoForwardPortsSource: hybrid` (kills the >20-ports popup) |
 | v18 | REGISTRY-NATIVE: `adom-wiki pkg install` replaces adompkg/gallia; workspace-updater + hd-skillpack RETIRED; tree sudo-free |
+| v20 | python parity libs baked (`python3-{requests,yaml,bs4,lxml,pil}` via apt — Web Hydrogen parity; NO numpy); `definitions` skill litmus (core@4.13.4 depends on adom/definitions — guard it); adom-cli source-overlay REMOVED (registry adom/adom-cli@4.0.5 now ships 0.5.12); PEP-668 install guidance added to the hd-container skill |
 | v19 | adom-cli 0.5.12 overlay (`~/.adom/hd-proxy-url` fallback for env-less shells); bake fetches adom-wiki fresh; postinstall shim removed (bootstraps now `scripts.install`). **Shipped in HD 0.1.170** (pin 4c3f159b); virgin fresh-install PASSED 20/20 cascade, and the fix was proven in the ACTUAL failure condition — `env -u ADOM_CARBON_URL -u ADOM_HYDROGEN_URL adom-cli hydrogen webview open-or-refresh` returned `created` instead of 404ing against carbon. HD also hardened its `test-adom-cli` setup gate to cover the AI-shell (code-server systemd env) channel, so this class of regression now HALTS setup. |
 
 **Verification lesson (v19):** a version string is not proof a bug is fixed. Reproduce the
@@ -206,6 +207,7 @@ a bake-only assertion when the failure is runtime-shaped (env, sessions, network
 
 ## Standing cleanup
 
-- The v19 **adom-cli 0.5.12 overlay** in `bake-in-distro.sh` is TEMPORARY. When Colby
-  publishes an `adom/adom-cli` package shipping 0.5.12+, DELETE that block so adom-cli
-  is registry-managed again (it is marked `⚠ REMOVE THIS BLOCK` with that condition).
+- (RESOLVED 2026-07-20) The v19 adom-cli source-overlay is GONE. Colby published
+  `adom/adom-cli@4.0.5` shipping the 0.5.12 binary, so v20 removed the overlay — adom-cli
+  is registry-managed again. The litmus stayed and now validates the registry binary.
+- Nothing else pending.

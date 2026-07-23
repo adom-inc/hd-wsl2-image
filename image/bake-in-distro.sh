@@ -121,25 +121,17 @@ runuser -u adom -- bash -lc \
 # adom-wiki executes install.sh in dependency order — verified end-to-end on a
 # clean HOME: 51 hd-* skills + settings.json with no intervention.
 
-# ── 6c. v19: adom-cli 0.5.12+ overlay (TEMPORARY — until the registry ships it) ─
-# WHY: 0.5.12 adds the ~/.adom/hd-proxy-url base-url fallback (adom-inc/adom-cli
-# PR #9) so adom-cli works in env-less non-login shells inside HD local workspaces.
-# v18 shipped 0.5.11, which falls back to the real carbon.adom.inc and 404s.
-# The registry's adom/adom-cli package (4.0.4) still ships 0.5.11, so the bake
-# overlays a binary built from branch fix/hd-local-proxy-discovery (cargo build
-# --release, Ubuntu 24.04 / glibc 2.39 — same as this image).
-# ⚠ REMOVE THIS BLOCK once Colby publishes an adom/adom-cli package shipping
-# 0.5.12+; then the registry-native install provides it and this is dead weight.
-# NOTE: the overlay is NOT registry-tracked (.installed.json still records the
-# package version), so a later `adom-wiki pkg update` that bumps adom-cli WILL
-# replace this binary with the registry's — which is correct/desired once the
-# published package carries 0.5.12+.
-if [ -f "${CTX}/adom-cli" ]; then
-    log "overlaying adom-cli 0.5.12+ (built from source; registry still ships 0.5.11)"
-    install -m 0755 -o root -g root "${CTX}/adom-cli" /usr/local/bin/adom-cli
-else
-    echo "MISSING ${CTX}/adom-cli — v19 requires the 0.5.12+ binary staged in ctx"; exit 1
-fi
+# ── 6c. (v20, overlay REMOVED) adom-cli 0.5.12 now comes FROM THE REGISTRY ─────
+# v19 built adom-cli 0.5.12 from source and overlaid it because the registry
+# package (4.0.4) still shipped 0.5.11 (which 404s against real carbon from
+# env-less non-login shells — adom-inc/adom-cli PR #9, the `~/.adom/hd-proxy-url`
+# base-url fallback). Colby published **adom/adom-cli@4.0.5 shipping the 0.5.12
+# binary** (verified 2026-07-20: fresh `adom-wiki pkg install adom/adom-cli` →
+# adom 0.5.12, hd-proxy-url PRESENT), so the registry-native install above now
+# provides it at /usr/local/bin/adom-cli and no overlay is needed. The adom-cli
+# litmus in the smoke section still asserts version ≥ 0.5.12 + the hd-proxy-url
+# fallback — now validating the REGISTRY binary, so a registry regression to
+# 0.5.11 FAILS the bake.
 
 # ── 7. sentinel + version stamp ───────────────────────────────────────────────
 mkdir -p /var/lib/adom-bootstrap
@@ -208,8 +200,10 @@ runuser -u adom -- /usr/lib/code-server/bin/code-server --list-extensions 2>/dev
 ! test -e /usr/local/bin/adom-workspace-updater || { echo "RETIRED updater daemon present"; exit 1; }
 ! systemctl list-unit-files 2>/dev/null | grep -q adom-workspace-updater || { echo "RETIRED updater systemd units present"; exit 1; }
 test -x /home/adom/.local/bin/adom-desktop || { echo "MISSING adom-desktop CLI"; exit 1; }
-# ── v19 LITMUS: adom-cli must carry the HD-local proxy fallback ───────────────
+# ── adom-cli LITMUS: must carry the HD-local proxy fallback (≥0.5.12) ──────────
 # (1) version >= 0.5.12, (2) the fallback is really compiled into the binary.
+# As of v20 this validates the REGISTRY binary (adom/adom-cli@4.0.5 ships 0.5.12);
+# no more source overlay. A registry regression to 0.5.11 FAILS the bake here.
 test -x /usr/local/bin/adom-cli || { echo "MISSING /usr/local/bin/adom-cli"; exit 1; }
 ACLI_V="$(/usr/local/bin/adom-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
 echo "adom-cli version: ${ACLI_V:-unknown}"
