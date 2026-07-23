@@ -197,6 +197,50 @@ ORIGINAL failure condition — for env/base-url bugs that means `env -u <VAR>` t
 vars that were masking it in a login shell. Prefer a runtime gate in HD's setup cascade over
 a bake-only assertion when the failure is runtime-shaped (env, sessions, networking).
 
+## Size anatomy + what's installed (measured v20, 2026-07-20)
+
+- **Served COMPRESSED.** HD downloads the `.tar.gz` (v20 = 456.5 MB); it expands to
+  ~1.4 GB (tar) / ~1.5 GB on disk after `wsl --import`. Quote the compressed number for
+  "how big is the download," the extracted for "how much disk it costs the user."
+- **The claude-code VS Code extension is the single biggest thing: ~271 MB** extracted
+  (`anthropic.claude-code-*`), i.e. > half of `/home`. It grows with each extension
+  version. It is NOT ours to trim; if image size ever becomes a real problem, the
+  conversation is whether HD injects it at runtime instead of baking it. code-server
+  itself is ~531 MB — the irreducible floor.
+- **`adom_modules/.cache` (~28 MB) is adom-wiki's download cache** — pure waste, cleaned
+  in the slim pass as of v20 (adompkg never left one, so the pass used to miss it).
+- The v17→v18 +53 MB was NOT "core got fatter" (it got LEANER) — it's the adom-wiki
+  binary (+13 MB vs the tiny adompkg.mjs), the .cache (+28 MB, now cleaned), and
+  claude-code-extension version growth.
+
+**DEPENDENCY DIRECTION (get this right):** the bake installs the LEAF
+`adom-wiki pkg install adom/hd-windows-bootstrap`, which pulls hd-bootstrap → core down
+as DEPS. Installing `adom/core` alone gets you NONE of the HD layers (core is the base;
+it doesn't know they exist). "Removed from core's deps" ≠ "removed from the image."
+
+**⚠️ CORE RESTRUCTURING CAN SILENTLY DROP PACKAGES.** `core@4.9` (v17) depended on
+`pup`, `screenshot-paste`, `fusion-export-for-hydrogen`, `fusion-update-libraries`;
+`core@4.13` (v20) DROPPED all four, so the image silently lost them. digikey/jlcpcb/
+mouser survived but were RENAMED (`digikey`→`adom-digikey`) + reparented under
+`adom-parts-search`. LESSON: anything HD genuinely needs should be an EXPLICIT dep of
+`adom/hd-bootstrap` (which we own), not left to `core`'s churn — and the smoke test
+should carry an "expected apps present" litmus so a dropped package FAILS the bake.
+v20 registry set (24 pkgs): apps = adom-cli, adom-desktop, adom-digikey, adom-jlcpcb,
+adom-mouser, adom-parts-search, adom-vscode, adom-wiki-cli, hook, prose-lint, step2glb;
+skills = adom, adom-cli-design, adom-ui-design, adom-workspace-control, app-creator,
+building-adom-apps, definitions, prose-style, ralph-loop-test, wiki; + 51 bundled hd-*.
+
+## Python libraries (v20)
+
+Baked via apt (NOT pip — PEP-668): `python3-{requests,yaml,bs4,lxml,pil}` for Web
+Hydrogen parity. Added ~0 compressed size (they compress well + the image is dominated
+by the claude-code extension). **numpy is the one remaining parity gap and the ONLY
+expensive one** (~150 MB extracted / ~40 MB compressed with BLAS/LAPACK — those binary
+libs don't compress like text) — keep it OUT unless there's real demand. Do not
+speculatively pile on "popular" libs; the parity set + the PEP-668 escape-hatch in the
+hd-container skill (apt python3-<lib> / pip --break-system-packages / venv) covers the
+long tail without image growth.
+
 ## Retired (do not resurrect)
 
 - **adom-workspace-updater daemon** — retired in v18; in-distro auto-update is now

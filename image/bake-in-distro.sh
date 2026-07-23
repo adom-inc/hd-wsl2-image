@@ -233,5 +233,9 @@ rm -rf /usr/share/doc/* /usr/share/doc-base/* /usr/share/man/* /usr/share/info/*
        /usr/share/groff/* /usr/share/lintian/* 2>/dev/null || true
 # keep only English locale message catalogs
 find /usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'en*' -exec rm -rf {} + 2>/dev/null || true
+# adom-wiki leaves a package download/extract cache in adom_modules/.cache (~28 MB,
+# ~10 MB compressed) — it is NOT needed at runtime (installed modules are separate).
+# adompkg never left one, so the slim pass didn't clean it; drop it (measured v20).
+rm -rf /home/adom/project/adom_modules/.cache 2>/dev/null || true
 rm -rf /var/cache/apt/* /var/log/* /tmp/* 2>/dev/null || true
 log "bake done (${VER})"
