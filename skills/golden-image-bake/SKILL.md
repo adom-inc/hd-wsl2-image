@@ -241,6 +241,35 @@ speculatively pile on "popular" libs; the parity set + the PEP-668 escape-hatch 
 hd-container skill (apt python3-<lib> / pip --break-system-packages / venv) covers the
 long tail without image growth.
 
+## Leanness policy: bake the parity core, serve the long tail ON-DEMAND
+
+The image is deliberately lean. Do NOT bake capabilities that can be pulled/discovered at
+runtime. Three worked examples (all John's calls):
+
+- **Claude CLI — NOT baked (John, 2026-07-23; "too big").** Measured: the native installer
+  (`curl -fsSL https://claude.ai/install.sh | bash`) DOES work non-interactively in a bake
+  env now, but it's **261 MB (82 MB compressed)** and a near-DUPLICATE of the already-baked
+  271 MB `anthropic.claude-code` VS Code extension (same app, same version) — baking it =
+  ~530 MB of Claude Code twice. It **auto-updates itself** (installs to
+  `~/.local/share/claude/versions/<ver>` + repoints a `claude` symlink), so the "it updates
+  daily" worry is moot — a baked copy would self-update. Decision: keep HD's runtime
+  `install-claude-cli` (+ `claude-auth`); users get it at setup, it stays fresh on its own.
+- **Fusion skills — NOT baked.** `adom-wiki discover` works well: the umbrella
+  `adom/fusion` skill ("Adom for Fusion 360") carries discovery_triggers + a discovery_pitch,
+  so a fusion query surfaces it and the AI installs the right fusion skills on demand.
+  Do NOT bake `fusion-export-for-hydrogen` / `fusion-update-libraries`. (`hd-eda-discovery`
+  is baked and points the AI at EDA discovery.)
+- **Python libs — parity set baked, rest on-demand** via the PEP-668 escape-hatch
+  (apt python3-<lib> / pip --break-system-packages), see the Python section.
+
+**USING adom-wiki discover CORRECTLY (I got this wrong once — don't repeat):** it takes
+SUBCOMMANDS, not a bare query. `discover search --query <q>` (full-text: name/description/
+content), `discover find <q>` (matches discovery_triggers), `discover preview "<q>"` (what
+surfaces + why — the right test for "will the AI find X?"), `discover triggers <owner/slug>`.
+To judge whether a capability is discoverable, run `discover preview`, NOT a manifest grep of
+a leaf package — the UMBRELLA skill (e.g. `adom/fusion`) is the entry point and carries the
+triggers, not the leaf export skills.
+
 ## Retired (do not resurrect)
 
 - **adom-workspace-updater daemon** — retired in v18; in-distro auto-update is now
