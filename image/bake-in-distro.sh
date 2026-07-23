@@ -22,7 +22,7 @@
 # Then the host runs `wsl --export golden-build adom-golden-vN.tar`.
 set -euo pipefail
 trap 'echo "[bake-in-distro] FAILED at line ${LINENO} (exit $?)" >&2' ERR
-VER="${GOLDEN_VERSION:-v19}"
+VER="${GOLDEN_VERSION:-v20}"
 CSV="${CODE_SERVER_VERSION:-4.124.2}"
 CTX="${CTX:-/tmp/ctx}"
 export DEBIAN_FRONTEND=noninteractive
@@ -35,11 +35,20 @@ log() { echo "[bake-in-distro $(date +%H:%M:%S)] $*"; }
 # at runtime — so the ~246 MB C/C++ toolchain is dropped here. (See size analysis:
 # every release v1..v14 carried it unused; v15 is the first to shed it.)
 log "apt baseline (runtime, no build toolchain)"
+# v20: python parity libs. Web Hydrogen (the cloud container) ships requests/yaml/
+# bs4/lxml/pil out of the box, so an AI writing Python behaves the same in HD as in
+# the cloud (invariant 1). Installed via APT (python3-<lib>), NOT pip, so PEP-668
+# (Ubuntu 24.04 externally-managed) never bites and no build toolchain is needed —
+# apt ships pre-compiled C-extension builds. Deliberately EXCLUDES numpy (~150 MB
+# with BLAS/LAPACK) — no evidence our AIs reach for it; revisit with evidence.
+# The long tail is handled by the PEP-668 escape-hatch hint in a skill, not by
+# growing this list forever.
 apt-get update
 apt-get install -y --no-install-recommends \
     ca-certificates curl wget git jq unzip zip tar gnupg openssh-client \
     sudo locales \
     nodejs npm python3 python3-pip \
+    python3-requests python3-yaml python3-bs4 python3-lxml python3-pil \
     systemd systemd-sysv cron
 log "github cli"
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -166,6 +175,15 @@ done
 ! test -e /home/adom/gallia || { echo "GALLIA checkout present"; exit 1; }
 ! find /home/adom/.claude -name "check-updates.sh" 2>/dev/null | grep -q . || { echo "PRIVATE check-updates.sh hook present"; exit 1; }
 test -f /home/adom/.claude/skills/adom/SKILL.md || { echo "MISSING adom skills hub"; exit 1; }
+# v20: the `definitions` skill must ship — adom/core used to NOT depend on it (fixed:
+# core@4.13.4 declares adom/definitions), but assert it so a future core that drops
+# the dep FAILS the bake instead of silently shipping an image without definitions.
+test -f /home/adom/.claude/skills/definitions/SKILL.md || { echo "MISSING definitions skill (adom/core must depend on adom/definitions)"; exit 1; }
+# v20: python parity libs must import (installed via apt, not pip — no PEP-668 dance)
+for m in requests yaml bs4 lxml PIL; do
+    python3 -c "import ${m}" 2>/dev/null || { echo "PYTHON: 'import ${m}' failed — parity lib missing from the apt baseline"; exit 1; }
+done
+echo "python parity libs: requests+yaml+bs4+lxml+PIL all import ✓"
 N=$(ls -d /home/adom/.claude/skills/hd-* 2>/dev/null | wc -l); echo "hd-* skills deployed: ${N}"
 [ "${N}" -ge 45 ] || { echo "too few hd-* skills (${N}; expect 38 generic + 11 wsl2)"; exit 1; }
 # spot-check bundled skills incl. the hd-workspace-updater→hd-staying-current rename

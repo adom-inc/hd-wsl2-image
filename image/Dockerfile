@@ -46,6 +46,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     python3 \
     python3-pip \
+    python3-requests \
+    python3-yaml \
+    python3-bs4 \
+    python3-lxml \
+    python3-pil \
     systemd \
     systemd-sysv \
     cron \
