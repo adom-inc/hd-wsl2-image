@@ -33,7 +33,7 @@ import crypto from "node:crypto";
 import readline from "node:readline";
 import { execFileSync, spawnSync } from "node:child_process";
 
-const VERSION = "2.18.0";
+const VERSION = "2.42.0";
 const REGISTRY = (process.env.ADOMPKG_REGISTRY || "https://wiki.adom.inc").replace(/\/$/, "");
 const HOME = os.homedir();
 const PREFIX = process.env.ADOMPKG_PREFIX || path.join(HOME, "project", "adom_modules");
@@ -130,6 +130,17 @@ function getToken() {
 function registryHost() {
   try { return new URL(REGISTRY).hostname.toLowerCase(); } catch { return ""; }
 }
+// Dead/decommissioned registry mirrors. They still answer (and a publish there
+// "succeeds" onto a stale registry — how people got silently downgraded), so we
+// hard-refuse rather than trust *.adom.cloud blindly. The CLI is the only place
+// we can guard from — the dead host serves its own old bootstrap we can't change.
+const DEAD_REGISTRY_HOSTS = new Set(["git-wiki-ktqxite5iglh.adom.cloud"]);
+function assertLiveRegistry() {
+  const host = registryHost();
+  if (DEAD_REGISTRY_HOSTS.has(host)) {
+    die(`'${host}' is a DEAD registry mirror: it serves a stale copy, so reads are out of date and a publish there goes nowhere (this is how installs got silently downgraded). Use the live registry: unset ADOMPKG_REGISTRY (defaults to https://wiki.adom.inc) or set ADOMPKG_REGISTRY=https://wiki.adom.inc. If you bootstrapped from the old host, re-bootstrap: bash <(curl -fsSL https://wiki.adom.inc/static/bootstrap.sh)`);
+  }
+}
 function isTrustedRegistry() {
   const host = registryHost();
   if (!host) return false;
@@ -141,14 +152,17 @@ function isTrustedRegistry() {
 
 let _warnedUntrusted = false;
 function authHeaders(extra = {}) {
-  const h = { ...extra };
+  // Always send a real User-Agent. Cloudflare's WAF 1010-blocks blank/unknown
+  // UAs, so a client that sends none (some HTTP libs) gets a 403 before
+  // reaching the app. Setting it explicitly keeps non-browser clients working.
+  const h = { "User-Agent": `adompkg/${VERSION}`, ...extra };
   if (isTrustedRegistry()) {
     const t = getToken();
     if (t) h["Authorization"] = `Bearer ${t}`;
     if (process.env.ADOMPKG_COOKIE) h["Cookie"] = process.env.ADOMPKG_COOKIE;
   } else if (!_warnedUntrusted) {
     _warnedUntrusted = true;
-    process.stderr.write(`${yel("warning:")} registry host '${registryHost()}' is not a trusted Adom host — withholding your auth token. Set ADOMPKG_TRUSTED_REGISTRY_HOSTS=${registryHost()} to allow it.\n`);
+    process.stderr.write(`${yel("warning:")} registry host '${registryHost()}' is not a trusted Adom host: withholding your auth token. Set ADOMPKG_TRUSTED_REGISTRY_HOSTS=${registryHost()} to allow it.\n`);
   }
   return h;
 }
@@ -317,12 +331,54 @@ function assertSafeArchive(tgzPath) {
 // Script runner
 // ------------------------------------------------------------
 
-// A package can request its install/postinstall script run as root via
-// needs_sudo. That's publisher-controlled, so don't run it under sudo silently:
-// require explicit opt-in (--allow-sudo or ADOMPKG_ALLOW_SUDO=1). Otherwise a
-// package could get unprompted root on any host with passwordless sudo.
+// Persisted CLI config (~/.adom/config.json). Today just `allow_sudo`, the
+// "let install scripts run as root without asking me each time" preference.
+const CONFIG_FILE = path.join(AUTH_DIR, "config.json");
+function loadConfig() { try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) || {}; } catch { return {}; } }
+function saveConfig(cfg) {
+  try { fs.mkdirSync(AUTH_DIR, { recursive: true }); fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2) + "\n"); return true; }
+  catch { return false; }
+}
+
+// A package can request its install/postinstall script run as root via needs_sudo.
+// That's publisher-controlled, so never run it under sudo silently: it must be
+// allowed via --allow-sudo, ADOMPKG_ALLOW_SUDO=1, or the persisted `allow_sudo`
+// config ("let it fly"). Otherwise a package could get unprompted root on any
+// host with passwordless sudo.
 function sudoAllowed() {
-  return process.argv.includes("--allow-sudo") || process.env.ADOMPKG_ALLOW_SUDO === "1";
+  return process.argv.includes("--allow-sudo")
+    || process.env.ADOMPKG_ALLOW_SUDO === "1"
+    || loadConfig().allow_sudo === true;
+}
+
+// Per-run state for the interactive sudo decision: packages whose install we
+// skipped for lack of sudo (summarized at the end), and whether the user chose
+// "always" during this run.
+let SUDO_SKIPPED = [];
+let SUDO_ALWAYS_THIS_RUN = false;
+
+// Decide whether a needs_sudo package's scripts may run. True when already
+// allowed up front; otherwise prompt ([y]es once / [a]lways / [N]o) when stdin is
+// a TTY, or skip (record + warn) when non-interactive (e.g. the piped bootstrap).
+// One decision per package covers install + postinstall. NEVER aborts the wider
+// install: a "no" just skips this package's script and lets the rest proceed.
+async function decideSudoForPackage(pkgId) {
+  if (sudoAllowed() || SUDO_ALWAYS_THIS_RUN) return true;
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    let ans = "";
+    try { ans = (await promptLine(`  ${yel(pkgId)} wants to run its install script as root. Allow? [y]es once / [a]lways / [N]o: `)).trim().toLowerCase(); }
+    catch { ans = ""; }
+    if (ans === "a" || ans === "always") {
+      const cfg = loadConfig(); cfg.allow_sudo = true; saveConfig(cfg);
+      SUDO_ALWAYS_THIS_RUN = true;
+      process.stdout.write(`  ${grn("ok")}: saved allow-sudo to ~/.adom/config.json (turn it off later with 'adompkg config set allow-sudo false')\n`);
+      return true;
+    }
+    if (ans === "y" || ans === "yes") return true;
+  }
+  SUDO_SKIPPED.push(pkgId);
+  process.stdout.write(`  ${yel("skipped")} ${pkgId}: its install script needs root. Finish it with 'adompkg install ${pkgId} --allow-sudo', or allow all with 'adompkg config set allow-sudo true'.\n`);
+  return false;
 }
 
 // npm-style: skip running package lifecycle scripts (install / postinstall)
@@ -331,14 +387,16 @@ function ignoreScripts() {
   return process.argv.includes("--ignore-scripts") || process.env.ADOMPKG_IGNORE_SCRIPTS === "1";
 }
 
-function runScript(scriptPath, cwd, needsSudo) {
+function runScript(scriptPath, cwd, needsSudo, sudoApproved = false) {
   if (!fs.existsSync(scriptPath)) {
     throw new Error(`Script not found: ${scriptPath}`);
   }
-  if (needsSudo && !sudoAllowed()) {
+  // Backstop: callers gate needs_sudo via decideSudoForPackage and pass the
+  // result as sudoApproved. If neither that nor a standing allow is set, refuse.
+  if (needsSudo && !sudoApproved && !sudoAllowed()) {
     throw new Error(
       `package wants to run its install script as root (needs_sudo). Re-run with --allow-sudo ` +
-      `(or set ADOMPKG_ALLOW_SUDO=1) to permit this.`,
+      `(set ADOMPKG_ALLOW_SUDO=1, or 'adompkg config set allow-sudo true') to permit this.`,
     );
   }
   fs.chmodSync(scriptPath, 0o755);
@@ -468,7 +526,7 @@ async function verifyTarball({ name, owner, slug, version, cacheTar, integrity, 
       rmCache();
       throw new Error(`download corrupt for ${name}@${version}: server hash ${hint}, got ${localHash}`);
     }
-    process.stderr.write(`  ${yel("warning:")} no trusted integrity hash for ${name}@${version} — installing unverified (--allow-unsigned)\n`);
+    process.stderr.write(`  ${yel("warning:")} no trusted integrity hash for ${name}@${version}: installing unverified (--allow-unsigned)\n`);
     return localHash;
   }
   if (expected !== localHash) {
@@ -482,7 +540,7 @@ async function verifyTarball({ name, owner, slug, version, cacheTar, integrity, 
       rmCache();
       throw new Error(`cannot verify ${name}@${version}: package has no owner to bind a signature to (pass --allow-unsigned to override)`);
     }
-    process.stderr.write(`  ${yel("warning:")} ${name}@${version} has no owner — signature not verifiable (--allow-unsigned)\n`);
+    process.stderr.write(`  ${yel("warning:")} ${name}@${version} has no owner: signature not verifiable (--allow-unsigned)\n`);
     return localHash;
   }
 
@@ -500,7 +558,7 @@ async function verifyTarball({ name, owner, slug, version, cacheTar, integrity, 
       }
       if (!verifySignature({ owner, slug, version, integrity: expected, signature: sig, publicKeyB64: regKey.public_key })) {
         rmCache();
-        throw new Error(`signature verification FAILED for ${name}@${version} — refusing to install`);
+        throw new Error(`signature verification FAILED for ${name}@${version}: refusing to install`);
       }
       process.stdout.write(`  ${grn("verified")} signature (key ${regKey.key_id})\n`);
     }
@@ -508,7 +566,7 @@ async function verifyTarball({ name, owner, slug, version, cacheTar, integrity, 
     rmCache();
     throw new Error(`refusing to install ${name}@${version}: release is not signed (pass --allow-unsigned to override)`);
   } else {
-    process.stderr.write(`  ${yel("warning:")} ${name}@${version} is not signed — installing unverified (--allow-unsigned)\n`);
+    process.stderr.write(`  ${yel("warning:")} ${name}@${version} is not signed: installing unverified (--allow-unsigned)\n`);
   }
   return localHash;
 }
@@ -562,9 +620,21 @@ async function installOne(pkg, installed, lockEntries) {
     throw new Error(`Failed to extract tarball: ${err.message}`);
   }
 
+  // One sudo decision per package (covers install + postinstall). For a
+  // needs_sudo package that isn't already allowed, this prompts (TTY) or skips
+  // and records (non-interactive, e.g. the piped bootstrap) instead of aborting
+  // the whole install.
+  let sudoOk = true;
+  if (needs_sudo && !ignoreScripts() && type !== "bootstrap" && (scripts?.install || scripts?.postinstall)) {
+    sudoOk = await decideSudoForPackage(name);
+  }
+
   const installScript = scripts && scripts.install;
   if (installScript && type !== "bootstrap" && ignoreScripts()) {
-    process.stdout.write(`  ${yel("skipping")} install script (${installScript}) — --ignore-scripts\n`);
+    process.stdout.write(`  ${yel("skipping")} install script (${installScript}): --ignore-scripts\n`);
+  } else if (installScript && type !== "bootstrap" && needs_sudo && !sudoOk) {
+    // sudo not granted: skip the script but KEEP the extracted files, so a later
+    // 'adompkg install <pkg> --allow-sudo' can finish without re-downloading.
   } else if (installScript && type !== "bootstrap") {
     // SECURITY (#23): contain the (server-controlled) install script path to the
     // module dir — a value like ../../../etc/cron.daily/x must not be chmod+exec'd.
@@ -574,7 +644,7 @@ async function installOne(pkg, installed, lockEntries) {
     }
     process.stdout.write(`  running install script (${installScript}${needs_sudo ? ", sudo" : ""})...\n`);
     try {
-      runScript(scriptPath, moduleDir, needs_sudo);
+      runScript(scriptPath, moduleDir, needs_sudo, sudoOk);
     } catch (err) {
       // edge case 5/15: install.sh failed — clean up the half-extracted module
       // directory so the system isn't left in a partial state and so future
@@ -591,7 +661,9 @@ async function installOne(pkg, installed, lockEntries) {
   // an external service).
   const postinstallScript = scripts && scripts.postinstall;
   if (postinstallScript && ignoreScripts()) {
-    process.stdout.write(`  ${yel("skipping")} postinstall (${postinstallScript}) — --ignore-scripts\n`);
+    process.stdout.write(`  ${yel("skipping")} postinstall (${postinstallScript}): --ignore-scripts\n`);
+  } else if (postinstallScript && needs_sudo && !sudoOk) {
+    // sudo not granted (same decision as the install script): skip, keep files.
   } else if (postinstallScript) {
     const hookPath = path.resolve(moduleDir, postinstallScript.replace(/^\.\//, ""));
     if (!hookPath.startsWith(path.resolve(moduleDir) + path.sep)) {
@@ -600,7 +672,7 @@ async function installOne(pkg, installed, lockEntries) {
     if (fs.existsSync(hookPath)) {
       process.stdout.write(`  running postinstall (${postinstallScript})...\n`);
       try {
-        runScript(hookPath, moduleDir, !!needs_sudo);
+        runScript(hookPath, moduleDir, !!needs_sudo, sudoOk);
       } catch (err) {
         try { fs.rmSync(moduleDir, { recursive: true, force: true }); } catch {}
         throw new Error(`postinstall failed: ${err.message}`);
@@ -715,6 +787,7 @@ function normalizeEqualsFlags(argv) {
 
 async function cmdInstall(args, opts = {}) {
   ensurePrefix();
+  SUDO_SKIPPED = [];   // reset the per-run "skipped, needs sudo" collector
   const installed = loadInstalled();
   // Refs the caller (e.g. `add -D`) knows are devDependencies — used to mark the
   // resolved entries dev, since the resolver only flags root devDependencies.
@@ -746,7 +819,16 @@ async function cmdInstall(args, opts = {}) {
   }
 
   process.stdout.write(`Resolving dependencies via ${REGISTRY}${org ? ` (org=${org})` : ""}${includeDev ? " (include dev)" : ""}...\n`);
-  const { resolved, order, peer_warnings, optional_warnings } = await resolveTree(packages, org, { includeDev });
+  const { resolved, order, peer_warnings, optional_warnings, aliased } = await resolveTree(packages, org, { includeDev });
+
+  // A dependency resolved under a different owner because the package was
+  // transferred (the resolver followed the transfer alias). Surface it so the
+  // dep key gets updated to the new owner instead of silently relying on the alias.
+  if (Array.isArray(aliased) && aliased.length > 0) {
+    process.stdout.write(`\n${yel("note:")} resolved via transfer alias (package moved owners):\n`);
+    for (const a of aliased) process.stdout.write(`  ${a.from} -> ${grn(a.to)}; update your dependency to '${a.to}'.\n`);
+    process.stdout.write("\n");
+  }
 
   // Honor an explicit dev set from the caller (`add -D`): a directly-requested
   // package isn't a root devDependency, so the resolver leaves it dev=false.
@@ -762,7 +844,7 @@ async function cmdInstall(args, opts = {}) {
   if (Array.isArray(optional_warnings) && optional_warnings.length > 0) {
     process.stdout.write(`\n${yel("Optional dependencies skipped:")}\n`);
     for (const w of optional_warnings) {
-      process.stdout.write(`  ${w.slug}@${w.spec} — ${w.reason}${w.org_name ? ` (org: ${w.org_name})` : ""}\n`);
+      process.stdout.write(`  ${w.slug}@${w.spec}: ${w.reason}${w.org_name ? ` (org: ${w.org_name})` : ""}\n`);
     }
     process.stdout.write("\n");
   }
@@ -802,7 +884,7 @@ async function cmdInstall(args, opts = {}) {
     }
   }
   if (engineErrors.length > 0) {
-    process.stderr.write(`\n${red("Engine mismatch — install blocked:")}\n`);
+    process.stderr.write(`\n${red("Engine mismatch, install blocked:")}\n`);
     for (const e of engineErrors) {
       process.stderr.write(`  ${e.slug}@${e.version} requires adompkg ${e.req}, you have ${VERSION}.\n`);
     }
@@ -861,6 +943,10 @@ async function cmdInstall(args, opts = {}) {
   process.stdout.write(`\nInstalled: ${parts.join(", ") || "0"}${annotSuffix}\n`);
   if (optionalFailures.length > 0) {
     process.stdout.write(`(${optionalFailures.length} optional dep${optionalFailures.length === 1 ? "" : "s"} skipped due to install failures)\n`);
+  }
+  if (SUDO_SKIPPED.length > 0) {
+    process.stdout.write(`\n${yel("note:")} ${SUDO_SKIPPED.length} package${SUDO_SKIPPED.length === 1 ? "" : "s"} needed root and ${SUDO_SKIPPED.length === 1 ? "its" : "their"} install script was skipped: ${SUDO_SKIPPED.join(", ")}.\n`);
+    process.stdout.write(`      Finish now: 'adompkg install ${SUDO_SKIPPED[0]} --allow-sudo'. Or stop being asked: 'adompkg config set allow-sudo true' (then re-run install).\n`);
   }
 }
 
@@ -1274,7 +1360,7 @@ function cmdLink(args) {
   // The ref identifies the package; its slug portion must match the manifest.
   const { owner: refOwner, slug } = splitRef(ref);
   if (manifest.slug && manifest.slug !== slug) {
-    die(`package.json declares slug='${manifest.slug}' but you asked to link as '${slug}'. Refuse — this would mis-route every downstream install target.`, EXIT_USAGE);
+    die(`package.json declares slug='${manifest.slug}' but you asked to link as '${slug}'. Refuse: this would mis-route every downstream install target.`, EXIT_USAGE);
   }
   // Owner comes from the ref if qualified, else the manifest's owner field,
   // else stays null (flat back-compat layout).
@@ -1328,7 +1414,7 @@ function cmdLink(args) {
   saveInstalled(installed);
 
   process.stdout.write(`Linked ${bold(name)} -> ${linkTarget}\n`);
-  process.stdout.write(`(downstream symlinks — binaries on PATH, ~/.claude/skills/${slug}/, etc. — follow automatically because they were created as symlinks INTO ${moduleDir}/)\n`);
+  process.stdout.write(`(downstream symlinks, binaries on PATH, ~/.claude/skills/${slug}/, etc., follow automatically because they were created as symlinks INTO ${moduleDir}/)\n`);
 }
 
 function cmdUnlink(args) {
@@ -1364,7 +1450,7 @@ function cmdUnlink(args) {
       fs.writeFileSync(stashIndex, JSON.stringify(idx, null, 2));
       process.stdout.write(`Unlinked ${bold(name)} and restored the previous extracted tree from stash.\n`);
     } else {
-      process.stdout.write(`Unlinked ${bold(name)}. No stash to restore — run 'adompkg install ${name}' to reinstall.\n`);
+      process.stdout.write(`Unlinked ${bold(name)}. No stash to restore: run 'adompkg install ${name}' to reinstall.\n`);
     }
   } else {
     process.stdout.write(`Unlinked ${bold(name)}. Run 'adompkg install ${name}' to reinstall.\n`);
@@ -1400,7 +1486,7 @@ function cmdWhy(args) {
 
   const directParents = parents[target] ? [...parents[target]] : [];
   if (directParents.length === 0) {
-    process.stdout.write(`${dim("(installed directly — no other package depends on this)")}\n`);
+    process.stdout.write(`${dim("(installed directly, no other package depends on this)")}\n`);
     return;
   }
 
@@ -1488,12 +1574,120 @@ async function cmdOutdated(args) {
   }
   if (quietFlag) {
     if (rows.length === 0) return;
-    process.stdout.write(`${rows.length} package${rows.length === 1 ? "" : "s"} ha${rows.length === 1 ? "s" : "ve"} updates available — run \`adompkg update\`\n`);
+    process.stdout.write(`${rows.length} package${rows.length === 1 ? "" : "s"} ha${rows.length === 1 ? "s" : "ve"} updates available: run \`adompkg update\`\n`);
     process.exit(1);
   }
   if (rows.length === 0) { process.stdout.write("All packages up to date.\n"); return; }
   process.stdout.write(`${bold(pad("PACKAGE", 36))}  ${bold(pad("INSTALLED", 12))}  ${bold("LATEST")}\n`);
   for (const r of rows) process.stdout.write(`${pad(r.slug, 36)}  ${pad(r.installed, 12)}  ${r.latest}\n`);
+}
+
+// Update the adompkg CLI ITSELF (distinct from `update`, which updates installed
+// packages). Fetches the served CLI from the trusted registry and rewrites the
+// installed adompkg.mjs (+ launcher) in place — the documented self-maintenance
+// path so the manager doesn't rot (e.g. periodic `adompkg self-update` in the
+// HD WSL2 container).
+// Core CLI self-install: fetch the served adompkg.mjs from the trusted registry,
+// sanity-check it, and rewrite the installed file (+ launcher) in place. Shared
+// by the explicit `self-update` command and the per-run auto-update. Returns
+// { updated, from, to, selfPath } and throws on a hard failure, so each caller
+// decides whether to surface it (loud for the command, silent for auto-update).
+async function installLatestCli() {
+  let selfPath;
+  try { selfPath = new URL(import.meta.url).pathname; } catch { selfPath = null; }
+  if (!selfPath || !fs.existsSync(selfPath)) {
+    throw new Error("can't locate the installed adompkg.mjs to update. Re-run the installer: bash <(curl -fsSL " + REGISTRY + "/static/bootstrap.sh)");
+  }
+  const url = `${REGISTRY}/static/adompkg.mjs`;
+  let res;
+  try { res = await fetch(url, { headers: authHeaders() }); }
+  catch (err) { throw new Error(describeFetchError(err, url)); }
+  if (!res.ok) throw new Error(`failed to fetch the latest adompkg (HTTP ${res.status} from ${url}).`);
+  const code = await res.text();
+  // Sanity-check before overwriting our own binary.
+  const m = code.match(/const VERSION = "([^"]+)"/);
+  if (!m || !code.includes("adompkg")) {
+    throw new Error("downloaded file doesn't look like adompkg, refusing to overwrite. Re-run the bootstrap installer instead.");
+  }
+  const newVer = m[1];
+  if (newVer === VERSION) return { updated: false, from: VERSION, to: newVer, selfPath };
+  const tmp = `${selfPath}.new-${process.pid}`;
+  fs.writeFileSync(tmp, code, { mode: 0o755 });
+  fs.renameSync(tmp, selfPath);
+  // Refresh the shell launcher too (best-effort, it rarely changes).
+  try {
+    const lres = await fetch(`${REGISTRY}/static/adompkg`, { headers: authHeaders() });
+    if (lres.ok) {
+      const launcher = path.join(path.dirname(selfPath), "adompkg");
+      const ltmp = `${launcher}.new-${process.pid}`;
+      fs.writeFileSync(ltmp, await lres.text(), { mode: 0o755 });
+      fs.renameSync(ltmp, launcher);
+    }
+  } catch { /* launcher refresh is best-effort */ }
+  return { updated: true, from: VERSION, to: newVer, selfPath };
+}
+
+async function cmdSelfUpdate() {
+  if (!isTrustedRegistry()) {
+    die(`refusing to self-update from untrusted registry host '${registryHost()}': the CLI is the root of trust. Use a *.adom.inc host, or set ADOMPKG_TRUSTED_REGISTRY_HOSTS.`);
+  }
+  let r;
+  try { r = await installLatestCli(); }
+  catch (err) { die(err.message); }
+  if (!r.updated) { process.stdout.write(`Already up to date (adompkg ${VERSION}).\n`); return; }
+  process.stdout.write(`Updated adompkg ${r.from} -> ${r.to} (${r.selfPath}).\n`);
+}
+
+// Per-run auto-update (AI-first): keeps the CLI current without anyone having to
+// remember `self-update` (and without relying on a login-shell hook agents never
+// trigger). Throttled to once per interval via a stamp file, with a hard network
+// timeout, so the hot path stays cheap and a slow/offline registry never blocks a
+// command. Opt out with ADOMPKG_NO_AUTOUPDATE=1.
+const AUTOUPDATE_STAMP = path.join(AUTH_DIR, ".adompkg-update-check");
+// Check every couple of hours, not once a day: the probe is a tiny bounded GET,
+// and the point is that a shipped fix reaches agents fast (so they stop re-hitting
+// already-fixed bugs). The interval only gates the cheap check; an actual upgrade
+// happens on the first check after a release.
+const AUTOUPDATE_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const AUTOUPDATE_TIMEOUT_MS = 1500;
+
+async function maybeAutoUpdate(cmd) {
+  if (process.env.ADOMPKG_NO_AUTOUPDATE === "1") return;
+  if (cmd === "self-update") return;            // the explicit command handles itself
+  if (!isTrustedRegistry()) return;             // only ever self-update from the root of trust
+  // Throttle on the stamp's mtime. Stamp the ATTEMPT (not the success) up front,
+  // so an offline/slow run doesn't re-poll (and re-eat the timeout) every time.
+  try {
+    const st = fs.statSync(AUTOUPDATE_STAMP);
+    if (Date.now() - st.mtimeMs < AUTOUPDATE_INTERVAL_MS) return;
+  } catch { /* no stamp yet: check now */ }
+  try { fs.mkdirSync(AUTH_DIR, { recursive: true }); fs.writeFileSync(AUTOUPDATE_STAMP, ""); } catch { /* non-fatal */ }
+  // Cheap, bounded version probe. Any failure (offline, slow, non-200) is silent:
+  // run the command with the CLI we already have.
+  let latest;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), AUTOUPDATE_TIMEOUT_MS);
+    let res;
+    try { res = await fetch(`${REGISTRY}/api/v1/cli/version`, { headers: authHeaders(), signal: ctrl.signal }); }
+    finally { clearTimeout(timer); }
+    if (!res.ok) return;
+    latest = (await res.json()).version;
+  } catch { return; }
+  if (!latest || cmpSemver(latest, VERSION) <= 0) return;   // already current (or ahead)
+  // Behind: upgrade in place, then re-exec THIS command on the new CLI so the
+  // invocation benefits immediately. The child carries the opt-out so it can't
+  // loop. Any failure falls through to running on the current CLI.
+  try {
+    const r = await installLatestCli();
+    if (!r.updated) return;
+    process.stderr.write(`adompkg: auto-updated ${r.from} -> ${r.to} (set ADOMPKG_NO_AUTOUPDATE=1 to pin)\n`);
+    const sp = spawnSync(process.execPath, [r.selfPath, ...process.argv.slice(2)], {
+      stdio: "inherit",
+      env: { ...process.env, ADOMPKG_NO_AUTOUPDATE: "1" },
+    });
+    process.exit(sp.status == null ? EXIT_ERR : sp.status);
+  } catch { /* fall through: keep going on the current CLI */ }
 }
 
 async function cmdUpdate(args) {
@@ -1563,13 +1757,71 @@ function readManifestFromCwd(cwd) {
   die(`no package.json or page.json in ${cwd}. Run 'adompkg init <slug>' to scaffold a new package.`, EXIT_USAGE);
 }
 
+// Compile .gitignore + .adomignore into matcher rules. Pragmatic gitignore
+// semantics: # comments, blank lines, ! negation, trailing / = dir-only,
+// leading / = root-anchored, * within a segment, ** across segments, ? one
+// non-slash char. A pattern with no slash matches its basename at any depth.
+function loadIgnoreRules(cwd) {
+  const rules = [];
+  for (const fname of [".gitignore", ".adomignore"]) {
+    let text;
+    try { text = fs.readFileSync(path.join(cwd, fname), "utf8"); } catch { continue; }
+    for (const raw of text.split("\n")) {
+      let line = raw.replace(/\r$/, "").replace(/\s+$/, "");
+      if (!line || line.startsWith("#")) continue;
+      let negate = false, dirOnly = false, anchored = false;
+      if (line.startsWith("!")) { negate = true; line = line.slice(1); }
+      if (line.endsWith("/")) { dirOnly = true; line = line.slice(0, -1); }
+      if (line.startsWith("/")) { anchored = true; line = line.slice(1); }
+      if (!line) continue;
+      const hasSlash = line.includes("/");
+      let body = "";
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === "*") {
+          if (line[i + 1] === "*") { body += ".*"; i++; if (line[i + 1] === "/") i++; }
+          else body += "[^/]*";
+        } else if (c === "?") body += "[^/]";
+        else if ("\\^$.|+()[]{}".includes(c)) body += "\\" + c;
+        else body += c;
+      }
+      const prefix = (anchored || hasSlash) ? "^" : "(^|/)";
+      rules.push({ negate, dirOnly, re: new RegExp(`${prefix}${body}($|/)`) });
+    }
+  }
+  return rules;
+}
+
 // Build the set of files the publish/pack should include.
 // Honors `files` whitelist if present. Always includes package.json/README/LICENSE.
-// Always excludes node_modules/, .git/, .adompkg/, *.tgz, .adomignore.
+// Always excludes node_modules/, .git/, .adompkg/, *.tgz, .adomignore, and any
+// path matched by .gitignore/.adomignore.
 function collectFiles(cwd, manifest) {
   const ALWAYS_EXCLUDE_DIRS = new Set(["node_modules", ".git", ".adompkg", ".adompkg-build"]);
   const ALWAYS_EXCLUDE_NAMES = new Set([".adomignore"]);
   const ALWAYS_INCLUDE_NAMES = new Set(["package.json", "README.md", "LICENSE"]);
+  // Rich readme variants (readme.html, readme.public.md, readme.private.html, ...)
+  // are documentation like README.md: always shipped, even under a `files`
+  // whitelist or .gitignore. Matched case-insensitively at the repo root only.
+  const README_VARIANT_RE = /^readme(\.(public|private))?\.(md|html)$/i;
+
+  // Honor .adomignore AND .gitignore (gitignore-style) so a build tree
+  // (target/, dist/, *.log, ...) doesn't get swept into the tarball. Without
+  // this, pack produced 49-188MB tarballs full of target/ even when the project
+  // scaffolded a .adomignore. .gitignore first, .adomignore second (so the
+  // adompkg-specific file can override). package.json/README/LICENSE at the
+  // root are always kept regardless.
+  const ignoreRules = loadIgnoreRules(cwd);
+  const isIgnored = (rel, isDir) => {
+    if (!ignoreRules.length) return false;
+    if (!rel.includes("/") && (ALWAYS_INCLUDE_NAMES.has(rel) || README_VARIANT_RE.test(rel))) return false;
+    let ignored = false;
+    for (const r of ignoreRules) {
+      if (r.dirOnly && !isDir) continue;
+      if (r.re.test(rel)) ignored = !r.negate; // last match wins (negation un-ignores)
+    }
+    return ignored;
+  };
 
   function walk(dir, relBase, out) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -1577,10 +1829,12 @@ function collectFiles(cwd, manifest) {
       const rel = relBase ? `${relBase}/${name}` : name;
       if (entry.isDirectory()) {
         if (ALWAYS_EXCLUDE_DIRS.has(name)) continue;
+        if (isIgnored(rel, true)) continue;
         walk(path.join(dir, name), rel, out);
       } else if (entry.isFile()) {
         if (ALWAYS_EXCLUDE_NAMES.has(name)) continue;
         if (name.endsWith(".tgz")) continue;
+        if (isIgnored(rel, false)) continue;
         out.push(rel);
       }
     }
@@ -1619,7 +1873,7 @@ function collectFiles(cwd, manifest) {
 
   const patterns = files.map(globToRe);
   const filtered = all.filter(p => {
-    if (ALWAYS_INCLUDE_NAMES.has(path.basename(p)) && !p.includes("/")) return true;
+    if (!p.includes("/") && (ALWAYS_INCLUDE_NAMES.has(path.basename(p)) || README_VARIANT_RE.test(path.basename(p)))) return true;
     return patterns.some(re => re.test(p));
   });
 
@@ -1672,6 +1926,20 @@ function validateLocal(manifest, cwd) {
   }
   if (!manifest.dependencies) errs.push("dependencies is required (use {} if none)");
 
+  // Every dependency ref must be OWNER-QUALIFIED (owner/slug). Slugs are
+  // per-owner, so a bare "foo" is ambiguous — which owner's foo? Mirror the
+  // server's hard error locally so a guaranteed-reject upload is caught first.
+  for (const section of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+    const map = manifest[section];
+    if (!map || typeof map !== "object" || Array.isArray(map)) continue;
+    for (const ref of Object.keys(map)) {
+      const i = String(ref).indexOf("/");
+      if (i <= 0 || i === ref.length - 1) {
+        errs.push(`${section} key '${ref}' must be owner-qualified as <owner>/${String(ref).replace(/^\/+|\/+$/g, "") || "<slug>"} (slugs are per-owner; a bare ref is ambiguous)`);
+      }
+    }
+  }
+
   if (manifest.type === "app" || manifest.type === "skill") {
     if (!manifest.scripts || manifest.scripts.install !== "./install.sh") {
       errs.push('scripts.install must be "./install.sh"');
@@ -1681,6 +1949,18 @@ function validateLocal(manifest, cwd) {
     }
     if (!fs.existsSync(path.join(cwd, "install.sh"))) errs.push("install.sh missing from project root");
     if (!fs.existsSync(path.join(cwd, "uninstall.sh"))) errs.push("uninstall.sh missing from project root");
+    // Stub detection: a declared, package-relative install.binary_path must
+    // actually ship — else `adompkg install` references a binary that isn't
+    // there (kyle's 2KB adom-footprint stub: install.sh used bin/adom-footprint
+    // but the tarball had no bin/). Skip absolute / ~ paths (an installed
+    // location, not a shipped file) and download/build-style apps (no binary_path).
+    const bp = manifest.install && manifest.install.binary_path;
+    if (bp && !path.isAbsolute(bp) && !String(bp).startsWith("~")) {
+      const rel = String(bp).replace(/^\.\/+/, "");
+      if (!fs.existsSync(path.join(cwd, rel))) {
+        errs.push(`install.binary_path "${bp}" is declared but not in the package: ship the binary (or fix the path); otherwise 'adompkg install' will fail`);
+      }
+    }
   } else if (manifest.type === "bootstrap") {
     if (manifest.scripts && (manifest.scripts.install || manifest.scripts.uninstall)) {
       errs.push("meta packages must not have scripts.install/uninstall");
@@ -1757,14 +2037,28 @@ function scanTextForSecrets(text, allow = []) {
 
 function lintReadme(cwd, manifest) {
   const results = [];
-  const readmePath = path.join(cwd, "README.md");
-  if (!fs.existsSync(readmePath)) {
-    results.push({ level: "error", message: "README.md is required to publish — add one describing the package (the registry rejects publishes without it)." });
+  // Rich readme variants (case-insensitive at the repo root). A package may ship
+  // an HTML readme rendered as a sandboxed iframe on the Overview tab, but a
+  // markdown README.md is REQUIRED even alongside it: the markdown renders UNDER
+  // the HTML and is what search indexing + non-HTML contexts read.
+  let rootNames = [];
+  try { rootNames = fs.readdirSync(cwd).filter(n => /^readme(\.(public|private))?\.(md|html)$/i.test(n)); } catch {}
+  const bareMdName = rootNames.find(n => /^readme\.md$/i.test(n));
+  const hasPrivate = rootNames.some(n => /\.private\./i.test(n));
+
+  if (!bareMdName) {
+    results.push({ level: "error", message: "README.md is required to publish: add one describing the package. It renders under any readme.html and is what search indexing + non-HTML contexts read (the registry rejects publishes without it)." });
     return results;
   }
-  const readme = fs.readFileSync(readmePath, "utf8");
+  // A private variant only renders for authorized viewers (owner/org members),
+  // the same gate as private source. Flag it so the hidden-from-public behavior
+  // is not a surprise.
+  if (hasPrivate) {
+    results.push({ level: "warning", message: "A readme.private.* will only render for authorized viewers (owner/org members), like private source. The public Overview shows the public/bare readme." });
+  }
+  const readme = fs.readFileSync(path.join(cwd, bareMdName), "utf8");
   if (readme.trim().length === 0) {
-    results.push({ level: "error", message: "README.md is empty — it must describe the package to publish." });
+    results.push({ level: "error", message: "README.md is empty: it must describe the package to publish." });
     return results;
   }
   if (readme.trim().length < 200) {
@@ -1807,7 +2101,7 @@ function lintSkillFrontmatter(cwd, manifest) {
   }
   const content = fs.readFileSync(skillPath, "utf8");
   if (!content.startsWith("---")) {
-    results.push({ level: "error", message: "SKILL.md must start with YAML frontmatter (---name:--description:---)." });
+    results.push({ level: "error", message: "SKILL.md must start with YAML frontmatter. Make the first lines exactly:\n    ---\n    name: <slug>\n    description: <one line on what this is / when to use it>\n    ---\n  then your markdown body. A SKILL.md that opens with '# Title' is rejected." });
     return results;
   }
   const fmEnd = content.indexOf("\n---", 4);
@@ -1898,6 +2192,12 @@ const SYMLINK_TARGET_FRAGMENTS = [
 
 function lintSymlinkConvention(cwd, manifest) {
   if (manifest.type === "bootstrap") return [];
+  // Sanctioned no-source-module patterns: an app that ships a prebuilt binary, OR
+  // one that only wires hooks/config and copies a doc (e.g. a hook installer like
+  // adom/hook), has no source module to symlink back into adom_modules, so the
+  // symlink convention doesn't apply. Declare `"bundled": true`
+  // (or "install_style": "bundled") in package.json to opt out.
+  if (manifest.bundled === true || manifest.install_style === "bundled") return [];
   const installPath = path.join(cwd, "install.sh");
   if (!fs.existsSync(installPath)) return [];
   let body;
@@ -1920,9 +2220,79 @@ function lintSymlinkConvention(cwd, manifest) {
     level: "error",
     message:
       `install.sh copies files into a standard install target without a symlink. The Adom convention is to symlink (ln -sfn) install targets back into ~/project/adom_modules/<slug>/ so edits propagate and reinstalls don't clobber. Use the helper: ` +
-      `\`source "$(adompkg sh-helpers)" && adompkg-link-bin <name>\`. Offending line${hits.length === 1 ? "" : "s"}:\n` +
+      `\`source "$(adompkg sh-helpers)" && adompkg-link-bin <name>\`. ` +
+      `OR, if this app has NO source module to symlink -- it ships a prebuilt binary, or it only wires hooks/config and copies a doc (e.g. a hook installer like adom/hook) -- set "bundled": true in package.json to opt out of this convention. ` +
+      `Offending line${hits.length === 1 ? "" : "s"}:\n` +
       hits.map(h => `    install.sh:${h.lineNo}  ${h.line}`).join("\n"),
   }];
+}
+
+// The `files` allowlist is GLOB-based: globToRe("bin") => /^bin$/, which matches
+// a file literally named "bin" but NOT "bin/anything". So a bare directory name
+// in `files` silently ships ZERO of that directory's contents — how a publish
+// can produce a near-empty tarball with no error. Catch it before upload.
+function lintFilesGlobs(cwd, manifest) {
+  const files = Array.isArray(manifest.files) ? manifest.files : null;
+  if (!files) return [];
+  const out = [];
+  for (const entry of files) {
+    if (typeof entry !== "string" || entry.includes("*") || entry.includes("?")) continue;
+    let st = null;
+    try { st = fs.statSync(path.join(cwd, entry.replace(/\/+$/, ""))); } catch { /* missing */ }
+    if (st && st.isDirectory()) {
+      const fix = `${entry.replace(/\/+$/, "")}/**`;
+      out.push({ level: "error", message:
+        `files entry "${entry}" is a directory, but the 'files' allowlist is glob-based: a bare directory name matches NONE of its contents and would ship an empty/partial tarball. Use "${fix}" to include the whole directory.` });
+    } else if (!st) {
+      out.push({ level: "warning", message: `files entry "${entry}" matches nothing on disk, so it will be silently omitted from the tarball.` });
+    }
+  }
+  return out;
+}
+
+// Source-code file extensions — used to catch secret source about to ship in a
+// PUBLIC release tarball when the source is meant to be sealed. install.sh /
+// uninstall.sh (and declared script hooks) are SUPPOSED to ship, so they're excluded.
+const SOURCE_EXTS = new Set([
+  "js", "mjs", "cjs", "jsx", "ts", "tsx", "py", "go", "rs", "c", "cc", "cpp", "cxx",
+  "h", "hh", "hpp", "java", "rb", "php", "cs", "swift", "kt", "kts", "scala", "lua",
+  "pl", "pm", "r", "mm", "vue", "svelte", "dart", "ex", "exs", "clj", "hs", "ml", "sql",
+  "sh", "bash", "zsh",
+]);
+
+// CRITICAL publisher hint: when source is SEALED (source_visibility="private") the
+// release tarball is STILL public + downloadable, so any source shipped inside it
+// is public anyway. Warn loudly (and list the offenders) — but never block: what
+// goes in the tarball is the publisher's call.
+function lintSealedSourceInTarball(cwd, manifest) {
+  if (manifest.source_visibility !== "private") return [];
+  let files = [];
+  try { files = collectFiles(cwd, manifest); } catch { /* fall through to the reminder */ }
+  const expected = new Set(["install.sh", "uninstall.sh", "package.json", "README.md", "LICENSE", "SKILL.md"]);
+  for (const s of Object.values(manifest.scripts || {})) if (typeof s === "string") expected.add(s.replace(/^\.\//, ""));
+  const src = files.filter(f => {
+    if (expected.has(f)) return false;
+    const ext = (f.split(".").pop() || "").toLowerCase();
+    return SOURCE_EXTS.has(ext) || /^(src|lib|source|app|internal|pkg)\//.test(f);
+  });
+  const out = [{
+    level: "warning",
+    message:
+      `source_visibility is "private" but the RELEASE TARBALL IS PUBLIC and downloadable by anyone. ` +
+      `Sealing only hides the wiki's source browsing; it does NOT hide what you ship in the tarball. ` +
+      `Keeping the source secret is YOUR call: ship only the BUILT artifact (a 'files' allowlist like ["bin/**", ...] that excludes src/, plus "bundled": true), then 'adompkg push <owner>/<slug> --files src/...' so members can still browse it.`,
+  }];
+  if (src.length) {
+    out.push({
+      level: "warning",
+      message:
+        `${src.length} SOURCE file(s) are about to ship in the PUBLIC tarball despite the sealed source:\n` +
+        src.slice(0, 25).map(f => `      - ${f}`).join("\n") +
+        (src.length > 25 ? `\n      ...and ${src.length - 25} more` : "") +
+        `\n    Anyone who runs 'adompkg install' gets these. If they're secret, exclude them from 'files' and ship the built binary instead.`,
+    });
+  }
+  return out;
 }
 
 // Advisory scan for prompt-injection-style text in the docs (README/SKILL).
@@ -1975,12 +2345,20 @@ function findHeroImage(cwd) {
   return null;
 }
 
-function lintHero(cwd) {
+function lintHero(cwd, manifest = {}) {
+  // A declarative BILLBOARD satisfies the hero requirement: headline + sub-head
+  // + a screenshot present in the package. The wiki composes the 1200x630 promo.
+  const h = manifest.hero;
+  if (h && typeof h === "object" && h.headline && h.subhead && h.screenshot) {
+    if (fs.existsSync(path.join(cwd, h.screenshot))) return [];
+    return [{ level: "error", message: `hero.screenshot "${h.screenshot}" is declared but missing from the package. Add the screenshot file (a real shot of the tool running) so the billboard can be composed.` }];
+  }
   if (findHeroImage(cwd)) return [];
   return [{ level: "error", message:
-    "No hero image found. Save one to docs/hero.png (760px wide). It must show the tool ACTUALLY RUNNING — " +
-    "real UI/CLI output, the thing in action — not a card, not the README, not AI-generated art. " +
-    "Ask: 'if I use this, what will I SEE on screen?' Screenshot THAT (Hydrogen webview screenshot or adom-desktop)." }];
+    "No hero. The hero is a BILLBOARD (a promo unit reused on the page header, homepage, HD installer, and screensaver): a headline + sub-head that sell the value, over a real screenshot of the tool (NOT a bare screenshot, not AI art). " +
+    "Easiest (one step): declare `hero: { headline, subhead, screenshot }` in package.json and ship the screenshot (e.g. docs/shot.png) -- publish composes the 1200x630 billboard for you. " +
+    "No UI to screenshot? Render a terminal mock: write an SVG of the tool's output and `rsvg-convert -w 1000 -h 600 shot.svg -o docs/shot.png`. " +
+    "To set/replace a hero after publishing: `adompkg hero <slug> --headline \"...\" --subhead \"...\" --screenshot docs/shot.png`. Or drop a pre-made docs/hero.png (1200x630, 1.91:1)." }];
 }
 
 function lintReadmeImages(cwd) {
@@ -1990,7 +2368,7 @@ function lintReadmeImages(cwd) {
   const imgs = (readme.match(/!\[/g) || []).length + (readme.match(/<img/g) || []).length;
   if (imgs >= 2) return [];
   return [{ level: "warning", message:
-    `README has only ${imgs} inline image(s) — humans need visuals. Add 2+ screenshots of the tool in action ` +
+    `README has only ${imgs} inline image(s). Humans need visuals. Add 2+ screenshots of the tool in action ` +
     "(empty/loaded/error states), captured via pup or a Hydrogen webview screenshot, sized to 760px." }];
 }
 
@@ -2000,7 +2378,7 @@ function lintReadmeVideo(cwd) {
   const readme = fs.readFileSync(p, "utf8");
   if (/<video|\.webm|\.mp4|youtube|vimeo|<iframe/.test(readme)) return [];
   return [{ level: "warning", message:
-    "README has no video — a video is worth 100,000 words. Use the demo-recording skill to produce a " +
+    "README has no video. A video is worth 100,000 words. Use the demo-recording skill to produce a " +
     "walkthrough with voiceover + chapters, then embed it." }];
 }
 
@@ -2012,7 +2390,7 @@ function lintTags(manifest) {
   const tags = Array.isArray(manifest.tags) ? manifest.tags.filter(t => typeof t === "string" && t.trim()) : [];
   if (tags.length > 0) return [];
   return [{ level: "error", message:
-    "No tags set. Add a 'tags' array to package.json (e.g. [\"cli\", \"pcb\"]) — apps, skills, and components " +
+    "No tags set. Add a 'tags' array to package.json (e.g. [\"cli\", \"pcb\"]): apps, skills, and components" +
     "are unfindable in search without them." }];
 }
 
@@ -2053,10 +2431,10 @@ function lintComponentParts(cwd, manifest) {
   const have = (key, exts) =>
     (typeof parts[key] === "string" && parts[key]) || exts.some(anyFile);
   if (!have("symbol", [".kicad_sym"])) {
-    results.push({ level: "warning", message: "component has no schematic symbol (.kicad_sym) — the wiki page won't show the symbol viewer." });
+    results.push({ level: "warning", message: "component has no schematic symbol (.kicad_sym): the wiki page won't show the symbol viewer." });
   }
   if (!have("footprint", [".kicad_mod"])) {
-    results.push({ level: "warning", message: "component has no PCB footprint (.kicad_mod) — the wiki page won't show the footprint viewer." });
+    results.push({ level: "warning", message: "component has no PCB footprint (.kicad_mod): the wiki page won't show the footprint viewer." });
   }
   if (!have("model_3d", [".glb"])) {
     const hasStep = anyFile(".step") || anyFile(".stp");
@@ -2064,9 +2442,9 @@ function lintComponentParts(cwd, manifest) {
       // A STEP is a valid 3D source — publish auto-converts it to GLB before
       // lint runs, so reaching here means conversion failed or --no-glb was
       // passed. Warn, don't block: the page still ships a 3D source.
-      results.push({ level: "warning", message: "component has a STEP model but no .glb — the wiki 3D viewer needs GLB. Publish auto-converts via step2glb; this warning means conversion failed or --no-glb was passed." });
+      results.push({ level: "warning", message: "component has a STEP model but no .glb: the wiki 3D viewer needs GLB. Publish auto-converts via step2glb; this warning means conversion failed or --no-glb was passed." });
     } else {
-      results.push({ level: "error", message: "component has no 3D source (.glb or .step/.stp) — components must ship a 3D model. Add a STEP or GLB file (publish auto-converts STEP to GLB via step2glb)." });
+      results.push({ level: "error", message: "component has no 3D source (.glb or .step/.stp): components must ship a 3D model. Add a STEP or GLB file (publish auto-converts STEP to GLB via step2glb)." });
     }
   }
   return results;
@@ -2170,13 +2548,13 @@ async function ensureComponentGlb(cwd, manifest) {
     glb = await step2glbConvert(raw, `${manifest.slug}-glb`);
   } catch (err) {
     if (!err.isParseError) throw err;
-    process.stdout.write("  parse error from the CAD kernel — retrying with ISO comments stripped...\n");
+    process.stdout.write("  parse error from the CAD kernel: retrying with ISO comments stripped...\n");
     glb = await step2glbConvert(Buffer.from(stripStepComments(raw.toString("utf8")), "utf8"), `${manifest.slug}-glb-retry`);
   }
   fs.writeFileSync(path.join(cwd, outRel), glb);
   process.stdout.write(`  wrote ${outRel} (${(glb.length / 1024).toFixed(0)} KiB)\n`);
   if (glb.length > 50 * 1024 * 1024) {
-    process.stdout.write(`  WARNING: ${outRel} exceeds the 50 MiB page-repo push limit — the wiki won't receive it until that limit is raised.\n`);
+    process.stdout.write(`  WARNING: ${outRel} exceeds the 50 MiB page-repo push limit: the wiki won't receive it until that limit is raised.\n`);
   }
   return outRel;
 }
@@ -2184,16 +2562,20 @@ async function ensureComponentGlb(cwd, manifest) {
 function runPrePublishLint(cwd, manifest) {
   return [
     ...lintReadme(cwd, manifest),
+    ...lintFilesGlobs(cwd, manifest),
+    ...lintSealedSourceInTarball(cwd, manifest),
     ...lintSkillFrontmatter(cwd, manifest),
     ...lintVersionSync(cwd, manifest),
     ...lintSecrets(cwd, manifest),
     ...lintSymlinkConvention(cwd, manifest),
     ...lintInjection(cwd, manifest),
     ...lintTags(manifest),
-    // Components are exempt from hero/screenshot/video rules: the wiki
-    // renders their visuals (symbol/footprint/3D viewers) from part files.
-    ...(manifest.type === "component" ? [] : [
-      ...lintHero(cwd),
+    // Components are exempt from hero/screenshot/video rules (the wiki renders
+    // their visuals from part files), and so are bootstraps — a bootstrap is a
+    // pure dependency bundle installed by name, not a browsed/searched promo
+    // page (same rationale as the tags exemption above).
+    ...(manifest.type === "component" || manifest.type === "bootstrap" ? [] : [
+      ...lintHero(cwd, manifest),
       ...lintReadmeImages(cwd),
       ...lintReadmeVideo(cwd),
     ]),
@@ -2230,6 +2612,12 @@ async function cmdPublish(args) {
   const pushSource = sourceRes.value && !noSourceRes.value;
   // --no-glb skips the automatic STEP→GLB conversion for components.
   const noGlbRes = pickBoolFlag(rest, "--no-glb"); rest = noGlbRes.rest;
+  // --skip-lint downgrades the opinionated client lint (hero, frontmatter style,
+  // etc.) from blocking errors to warnings. The SERVER still enforces the hard
+  // requirements (type/slug/version/description/dependencies), so this can't push
+  // a structurally-invalid package -- it just unblocks e.g. republishing an older,
+  // grandfathered package that predates the mandatory-hero rule.
+  const skipLintRes = pickBoolFlag(rest, "--skip-lint"); rest = skipLintRes.rest;
   // --yes / -y suppresses the interactive prompts (CI-friendly).
   const yesLong = pickBoolFlag(rest, "--yes"); rest = yesLong.rest;
   const yesShort = pickBoolFlag(rest, "-y"); rest = yesShort.rest;
@@ -2277,7 +2665,7 @@ async function cmdPublish(args) {
 
   // Prompt 2 — visibility.
   if (canPrompt && !visFlagSupplied) {
-    const ans = (await promptLine("Visibility — (1) public  (2) private [1]: ")).trim();
+    const ans = (await promptLine("Visibility: (1) public  (2) private [1]: ")).trim();
     manifest.visibility = ans === "2" ? "private" : "public";
   }
 
@@ -2317,9 +2705,16 @@ async function cmdPublish(args) {
     process.stdout.write("\n");
   }
   if (lintErrors.length > 0) {
-    process.stderr.write(`${red("Lint failed (publish blocked):")}\n`);
-    for (const e of lintErrors) process.stderr.write(`  - ${e.message}\n`);
-    process.exit(EXIT_USAGE);
+    if (skipLintRes.value) {
+      process.stdout.write(`${yel("Lint errors bypassed (--skip-lint); the server still enforces type/slug/version/description/deps:")}\n`);
+      for (const e of lintErrors) process.stdout.write(`  - ${e.message}\n`);
+      process.stdout.write("\n");
+    } else {
+      process.stderr.write(`${red("Lint failed (publish blocked):")}\n`);
+      for (const e of lintErrors) process.stderr.write(`  - ${e.message}\n`);
+      process.stderr.write(`  (re-run with --skip-lint to bypass these client checks; the server still validates the hard requirements)\n`);
+      process.exit(EXIT_USAGE);
+    }
   }
 
   // prepublish lifecycle hook — runs in cwd as the first author-controlled
@@ -2423,6 +2818,17 @@ async function cmdPublish(args) {
     ? `${encodeURIComponent(knownOwner)}/${encodeURIComponent(manifest.slug)}`
     : encodeURIComponent(manifest.slug);
   process.stdout.write(`Published ${id}@${manifest.version}${tag ? ` (tag ${tag})` : ""}\n`);
+  // State visibility outright so a PRIVATE publish is never a silent surprise
+  // (a private org page 404s on web/API/search and others can't install it) —
+  // UNLESS release_visibility=public, in which case the release IS installable
+  // and the only "private" thing is the source/page.
+  if (body.visibility === "private" && body.release_visibility === "public") {
+    process.stdout.write(`Visibility:   source PRIVATE, release PUBLIC. Anyone can 'adompkg install ${id}'; the page/source is members-only.\n`);
+  } else if (body.visibility === "private") {
+    process.stdout.write(`${yel("Visibility:")}   PRIVATE. Logged-out users get a 404 and others can't install it. Make it public with:\n              curl -X POST ${REGISTRY}/api/v1/pages/${manifest.slug}/visibility -H "Authorization: Bearer <token>" -d '{"visibility":"public"}'\n              (or keep source private + release public: adompkg visibility ${id} private --public-releases)\n`);
+  } else if (body.visibility === "public") {
+    process.stdout.write(`Visibility:   public\n`);
+  }
   process.stdout.write(`Manifest URL: ${REGISTRY}/api/v1/packages/${seg}/${manifest.version}/manifest\n`);
   process.stdout.write(`Tarball URL:  ${REGISTRY}/api/v1/packages/${seg}/${manifest.version}/tarball\n`);
   process.stdout.write(`Wiki page:    ${REGISTRY}/${seg}\n`);
@@ -2573,7 +2979,7 @@ async function pushFilesToWikiRepo(cwd, manifest, files) {
 
   const { form, count, skipped } = buildWikiPushForm(cwd, manifest, files);
   for (const s of skipped) {
-    process.stdout.write(`  WARNING: skipped ${s.path} (${(s.size / (1024 * 1024)).toFixed(1)} MiB exceeds the ${PUSH_FILE_SIZE_LIMIT / (1024 * 1024)} MiB per-file push limit) — host it elsewhere.\n`);
+    process.stdout.write(`  WARNING: skipped ${s.path} (${(s.size / (1024 * 1024)).toFixed(1)} MiB exceeds the ${PUSH_FILE_SIZE_LIMIT / (1024 * 1024)} MiB per-file push limit): host it elsewhere.\n`);
   }
 
   if (count === 0) return;
@@ -3020,7 +3426,44 @@ async function cmdRelease(args) {
     for (const a of data.assets) process.stdout.write(`  ${a.filename}  ${a.platform}  ${(a.size / 1048576).toFixed(1)} MB  ${a.download_count} downloads  ${REGISTRY}${a.download_url}\n`);
     return;
   }
-  usage("usage: adompkg release <upload|list> <owner>/<slug>@<version> [...]");
+  if (sub === "notes") {
+    // GitHub-style release notes (markdown), editable any time after publish.
+    const { value: orgArg, rest: r1 } = pickFlag(rest, "--org");
+    const msg = pickFlag(r1, "--message"); const msgS = pickFlag(msg.rest, "-m");
+    const file = pickFlag(msgS.rest, "--file");
+    const ref = file.rest[0];
+    if (!ref) usage('usage: adompkg release notes <owner>/<slug>@<version> (--message "..." | --file notes.md)');
+    const sv = parseSlugSpec(ref);
+    const seg = pkgPathSegment(sv.ref);
+    let notes = msg.value || msgS.value || "";
+    if (file.value) notes = fs.readFileSync(path.resolve(process.cwd(), file.value), "utf8");
+    const qs = (orgArg || DEFAULT_ORG) ? `?org=${encodeURIComponent(orgArg || DEFAULT_ORG)}` : "";
+    await httpJson(`${REGISTRY}/api/v1/packages/${seg}/${encodeURIComponent(sv.spec)}/notes${qs}`, {
+      method: "PUT", body: JSON.stringify({ notes }), headers: { "Content-Type": "application/json" },
+    });
+    process.stdout.write(`Release notes ${notes.trim() ? "set" : "cleared"} for ${sv.ref}@${sv.spec}\n`);
+    return;
+  }
+  usage("usage: adompkg release <upload|list|notes> <owner>/<slug>@<version> [...]");
+}
+
+// Permanently remove ONE published release (version). Destructive, so it
+// requires --confirm. Distinct from 'deprecate' (which keeps the version) and
+// 'delete' (which removes the whole page).
+async function cmdUnpublish(args) {
+  const conf = pickBoolFlag(args, "--confirm");
+  const orgF = pickFlag(conf.rest, "--org");
+  const ref = orgF.rest[0];
+  if (!ref) usage("usage: adompkg unpublish <owner>/<slug>@<version> --confirm");
+  const sv = parseSlugSpec(ref);
+  if (!sv.spec) die("unpublish needs a specific version: adompkg unpublish <owner>/<slug>@<version> --confirm", EXIT_USAGE);
+  if (!conf.value) die(`unpublish permanently removes ${sv.ref}@${sv.spec} (its tarball, binaries, and notes). Re-run with --confirm.`, EXIT_USAGE);
+  const seg = pkgPathSegment(sv.ref);
+  const qs = (orgF.value || DEFAULT_ORG) ? `?org=${encodeURIComponent(orgF.value || DEFAULT_ORG)}` : "";
+  const r = await httpJson(`${REGISTRY}/api/v1/packages/${seg}/${encodeURIComponent(sv.spec)}${qs}`, { method: "DELETE", headers: authHeaders() });
+  const tail = r.latest ? ` (latest is now ${r.latest})` : (r.remaining_releases === 0 ? " (no releases remain)" : "");
+  process.stdout.write(`Unpublished ${sv.ref}@${sv.spec}${tail}\n`);
+  if (r.warning) process.stderr.write(`${yel("WARNING:")} ${r.warning}\n`);
 }
 
 // Vouch that you trust a package (a community-trust signal). Mirrors
@@ -3244,7 +3687,7 @@ async function cmdCi(args) {
 
     const scriptName = resolvedEntry.scripts?.install || "./install.sh";
     if (entry.type !== "bootstrap" && ignoreScripts()) {
-      process.stdout.write(`  ${yel("skipping")} install script (${scriptName}) — --ignore-scripts\n`);
+      process.stdout.write(`  ${yel("skipping")} install script (${scriptName}): --ignore-scripts\n`);
     } else if (entry.type !== "bootstrap") {
       // SECURITY (#23): keep the install script path inside the module dir.
       const scriptPath = path.resolve(moduleDir, scriptName.replace(/^\.\//, ""));
@@ -3262,7 +3705,7 @@ async function cmdCi(args) {
     // `ci` reinstall, defeating ci's reproducible-environment guarantee.
     const postinstallScript = resolvedEntry.scripts?.postinstall;
     if (postinstallScript && entry.type !== "bootstrap" && ignoreScripts()) {
-      process.stdout.write(`  ${yel("skipping")} postinstall (${postinstallScript}) — --ignore-scripts\n`);
+      process.stdout.write(`  ${yel("skipping")} postinstall (${postinstallScript}): --ignore-scripts\n`);
     } else if (postinstallScript && entry.type !== "bootstrap") {
       const hookPath = path.resolve(moduleDir, postinstallScript.replace(/^\.\//, ""));
       if (!hookPath.startsWith(path.resolve(moduleDir) + path.sep)) {
@@ -3413,7 +3856,7 @@ adompkg-link-bin() {
   if [ -e "\$target/\$name" ] || [ -L "\$target/\$name" ]; then
     local existing; existing="\$(readlink "\$target/\$name" 2>/dev/null || true)"
     if [ -n "\$existing" ] && [ "\$existing" != "\$src_dir/\$rel" ]; then
-      echo "WARNING: \$target/\$name already points to \$existing — overwriting with \$src_dir/\$rel (two packages claim the binary name '\$name')." >&2
+      echo "WARNING: \$target/\$name already points to \$existing: overwriting with \$src_dir/\$rel (two packages claim the binary name '\$name')." >&2
     fi
   fi
   ln -sfn "\$src_dir/\$rel" "\$target/\$name"
@@ -3430,7 +3873,7 @@ adompkg-link-skill() {
   # "\$target/" and the real-dir replace step (rm -rf "\$dest") would wipe the
   # entire ~/.claude/skills directory.
   if [ -z "\$slug" ]; then
-    echo "ERROR: adompkg-link-skill: empty slug — refusing (would target the whole skills dir)." >&2
+    echo "ERROR: adompkg-link-skill: empty slug: refusing (would target the whole skills dir)." >&2
     return 1
   fi
   local rel="\${2:-skills/\$slug}"
@@ -3442,7 +3885,7 @@ adompkg-link-skill() {
   # source that isn't there (e.g. flat package layout while rel defaulted to
   # skills/<slug>).
   if [ ! -e "\$src_dir/\$rel" ]; then
-    echo "ERROR: adompkg-link-skill: source '\$src_dir/\$rel' does not exist — refusing to link (dest untouched)." >&2
+    echo "ERROR: adompkg-link-skill: source '\$src_dir/\$rel' does not exist: refusing to link (dest untouched)." >&2
     return 1
   fi
   # Collision guard: ~/.claude/skills/<slug> is a flat namespace (Claude
@@ -3450,13 +3893,13 @@ adompkg-link-skill() {
   if [ -e "\$dest" ] || [ -L "\$dest" ]; then
     local existing; existing="\$(readlink "\$dest" 2>/dev/null || true)"
     if [ -n "\$existing" ] && [ "\$existing" != "\$src_dir/\$rel" ]; then
-      echo "WARNING: skill '\$slug' already installed from \$existing — overwriting with \$src_dir/\$rel (two packages claim the skill name '\$slug')." >&2
+      echo "WARNING: skill '\$slug' already installed from \$existing: overwriting with \$src_dir/\$rel (two packages claim the skill name '\$slug')." >&2
     fi
     # A NON-symlink (real dir from another installer, e.g. gallia install.mjs)
     # squatting the slug would make ln -sfn nest the link INSIDE it as
     # <slug>/<slug>, corrupting the skill. Replace it instead.
     if [ -e "\$dest" ] && [ ! -L "\$dest" ]; then
-      echo "WARNING: skill '\$slug' was a real directory (likely from another installer) — replacing with adompkg symlink." >&2
+      echo "WARNING: skill '\$slug' was a real directory (likely from another installer): replacing with adompkg symlink." >&2
       rm -rf "\$dest"
     fi
   fi
@@ -3532,7 +3975,7 @@ async function cmdDoctor() {
   // 4. modules dir + .installed.json sane.
   if (!fs.existsSync(PREFIX)) {
     checks.push({ name: "modules dir exists", status: "warn",
-      detail: `${PREFIX} missing — first install will create it`,
+      detail: `${PREFIX} missing: first install will create it`,
       hint: "Run 'adompkg install <slug>' or 'adompkg bootstrap'." });
   } else {
     checks.push({ name: "modules dir exists", status: "ok", detail: PREFIX });
@@ -3589,7 +4032,7 @@ async function cmdDoctor() {
   } else {
     checks.push({ name: "update-check hook wired", status: "warn",
       detail: "no ~/.claude/settings.json found",
-      hint: "Claude Code config missing — install adom-hook to add the update-check, or hand-edit settings.json." });
+      hint: "Claude Code config missing: install adom-hook to add the update-check, or hand-edit settings.json." });
   }
 
   // 7. adom-wiki-discover skill (the auto-discovery surface for new wiki content).
@@ -3619,7 +4062,7 @@ async function cmdDoctor() {
   let nFail = 0, nWarn = 0;
   for (const c of checks) {
     const tag = c.status === "ok" ? grn("OK") : c.status === "warn" ? yel("WARN") : red("FAIL");
-    process.stdout.write(`  ${pad(tag, 6)} ${c.name}${c.detail ? dim(" — " + c.detail) : ""}\n`);
+    process.stdout.write(`  ${pad(tag, 6)} ${c.name}${c.detail ? dim(": " + c.detail) : ""}\n`);
     if (c.hint && c.status !== "ok") {
       process.stdout.write(`         ${dim("hint: " + c.hint)}\n`);
     }
@@ -3668,7 +4111,7 @@ async function cmdInit(args) {
   }
   if (!description) description = `${slug}: TODO write a one-line description.`;
   if (description.length < 20) {
-    description = (description + " — TODO expand this description to at least 20 characters.").slice(0, 200);
+    description = (description + ". TODO expand this description to at least 20 characters.").slice(0, 200);
   }
   if (canPrompt && !needsSudo && type !== "bootstrap") {
     const ans = (await promptLine("Needs sudo? [y/n] (n): ")).trim().toLowerCase();
@@ -3739,7 +4182,7 @@ echo "Uninstalled skill ${slug}"
 
   if (type === "app") {
     const stub = `#!/bin/bash
-echo "${slug} v${pkg.version} — replace this stub with your binary or script."
+echo "${slug} v${pkg.version}: replace this stub with your binary or script."
 `;
     fs.writeFileSync(path.join(targetDir, "bin", slug), stub);
     fs.chmodSync(path.join(targetDir, "bin", slug), 0o755);
@@ -3749,7 +4192,7 @@ echo "${slug} v${pkg.version} — replace this stub with your binary or script."
   // scaffold one for both. For an app, the skill is how Claude drives the CLI.
   if (type === "skill" || type === "app") {
     const body = type === "app"
-      ? `TODO: describe how Claude should drive the ${slug} CLI — the commands, when to use them, and example invocations. This is what Claude reads when the skill triggers.`
+      ? `TODO: describe how Claude should drive the ${slug} CLI: the commands, when to use them, and example invocations. This is what Claude reads when the skill triggers.`
       : `TODO: write the skill body. This file is what Claude reads when the skill triggers.`;
     const skillMd = `---
 name: ${slug}
@@ -3816,7 +4259,7 @@ Add these to \`package.json\` when relevant:
 | \`peerDependencies\`   | Packages this one augments. Auto-installed if missing; shared with the rest of the tree. |
 | \`optionalDependencies\` | Nice-to-have integrations; install failures are non-fatal. |
 | \`engines.adompkg\`    | Minimum CLI version, e.g. \`">=2.8.0"\`. |
-| \`scope\`              | \`"runtime"\` / \`"dev"\` / \`"either"\` — hint to consumers about how this package is meant to be used. |
+| \`scope\`              | \`"runtime"\` / \`"dev"\` / \`"either"\`: hint to consumers about how this package is meant to be used. |
 | \`visibility\`         | \`"public"\` (default) or \`"private"\`. Set on first publish only. |
 | \`scripts.prepublish\` | Runs in the project dir before tarball build. Use for code-gen / asset builds. |
 | \`scripts.postinstall\`| Runs in the module dir after install.sh succeeds. Use for setup. |
@@ -3861,7 +4304,7 @@ adompkg publish
   process.stdout.write(`\nCreated ${slug}/. Next steps:\n`);
   process.stdout.write(`  cd ${slug}\n`);
   process.stdout.write(`  # edit package.json, install.sh, uninstall.sh\n`);
-  process.stdout.write(`  # ${yel("required:")} add docs/hero.png (760px, the tool actually running) — publish is blocked without it\n`);
+  process.stdout.write(`  # ${yel("required:")} a hero (publish is blocked without one). Easiest: declare hero{headline,subhead,screenshot} in package.json (wiki composes the 1200x630), or ship a 1200x630 docs/hero.png\n`);
   process.stdout.write(`  adompkg pack          # build tarball locally to inspect\n`);
   process.stdout.write(`  adompkg publish       # publish to the registry\n`);
 }
@@ -3970,7 +4413,7 @@ async function cmdView(args) {
 
   process.stdout.write(`\n${bold("Reverse dependencies")}\n`);
   if (reverseDeps.length === 0) {
-    process.stdout.write("  (none — no published package declares this as a dependency)\n");
+    process.stdout.write("  (none, no published package declares this as a dependency)\n");
   } else {
     for (const r of reverseDeps) process.stdout.write(`  ${r.slug}@${r.version}  requires ${ref}: ${r.requires}\n`);
   }
@@ -4023,7 +4466,7 @@ function cmdVersion(args) {
 const HELP_TEXT = {
   vouch: `adompkg vouch <owner>/<slug>
 
-Vouch that you trust a package — a community-trust signal shown on its page.
+Vouch that you trust a package: a community-trust signal shown on its page.
 Requires auth (ADOMPKG_TOKEN or a mounted container key). You cannot vouch for
 your own or your org's packages.
 
@@ -4043,6 +4486,23 @@ Install diagnostic. Checks the things a new user might worry about:
 
 Pass/warn/fail per check with a one-line fix hint when relevant. Exits
 non-zero if any check fails (warnings don't fail the exit code).`,
+
+  config: `adompkg config <get [key] | set <key> <value>>
+
+Get or set persisted CLI preferences in ~/.adom/config.json.
+
+Keys:
+  allow-sudo   true|false. When true, install scripts that declare needs_sudo
+               run as root without asking each time ("let it fly"). Same effect
+               as --allow-sudo / ADOMPKG_ALLOW_SUDO=1, but persisted.
+
+  adompkg config get                 print the whole config
+  adompkg config get allow-sudo      print one key
+  adompkg config set allow-sudo true   stop being asked to approve root installs
+  adompkg config set allow-sudo false  go back to per-install approval
+
+Without this set, a needs_sudo package prompts you ([y]es once / [a]lways /
+[N]o) when interactive, or is skipped with a note when not (e.g. the bootstrap).`,
 
   "sh-helpers": `adompkg sh-helpers
 
@@ -4072,7 +4532,7 @@ Point an installed package at a local dev checkout instead of the extracted
 tarball. Swaps the trunk symlink at ~/project/adom_modules/<slug>/ to
 point at <path> (defaults to cwd). Because every install target (binary
 on PATH, ~/.claude/skills/<slug>/, etc.) was created as a symlink INTO
-the modules dir, downstream targets follow automatically — no separate
+the modules dir, downstream targets follow automatically: no separate
 relinking needed.
 
 The previous extracted tree is moved to ~/project/adom_modules/.link-stash/
@@ -4182,7 +4642,7 @@ Thin alias for 'adompkg install <meta-slug>'. Defaults to adom-core when
 no slug is passed. Kept for back-compat with the original bootstrap
 flow; new code should just call 'adompkg install <meta-slug>' directly.
 
-A bootstrap package is any wiki package of type "bootstrap" — a curated
+A bootstrap package is any wiki package of type "bootstrap": a curated
 dep list that sets up a role's worth of tooling in one shot. Examples:
   adompkg bootstrap                 # adom/core (standard set)
   adompkg bootstrap acme/baseline   # a private org-owned baseline`,
@@ -4210,7 +4670,7 @@ Examples:
   adompkg update                 # update all installed packages
   adompkg update adom/mouser     # update one package`,
 
-  publish: `adompkg publish [--version <v>] [--org <slug>] [--tag <t>] [--private|--public] [--no-source] [--yes|-y]
+  publish: `adompkg publish [--version <v>] [--org <slug>] [--tag <t>] [--private|--public] [--no-source] [--skip-lint] [--yes|-y]
 
 Build a tarball from the current directory and POST it to the registry. The
 package is owned by <owner>/<slug>: the owner is your username, or the org
@@ -4221,27 +4681,27 @@ The current directory must contain a package.json with at minimum:
 
 For 'app' and 'skill' types, install.sh and uninstall.sh are also required.
 
-Multi-platform: set "platform" in package.json to ship a per-OS build —
+Multi-platform: set "platform" in package.json to ship a per-OS build:
 one of windows | macos | linux (omit, or "any", for a cross-platform build).
 The same page can host several platforms at the same version (windows + macos
 @1.4.0) and independent per-platform version streams (linux@1.4.0 while windows
 is still 1.3.0). 'adompkg install' auto-detects the host and fetches its build,
 falling back to an 'any' build, else erroring with the platforms that exist.
 
-Interactive prompts (TTY only — skipped with --yes, in non-TTY/CI, or when the
+Interactive prompts (TTY only, skipped with --yes, in non-TTY/CI, or when the
 corresponding flag was already supplied):
   "Publish as"  pick your account or one of your orgs as the owner (uses
                 GET /api/v1/me/orgs). Skipped when --org is passed.
   "Visibility"  public or private. Skipped when --public/--private is passed.
 
-Visibility (on first publish only — subsequent publishes inherit the
+Visibility (on first publish only, subsequent publishes inherit the
 page's existing setting):
   - public  (default): anyone can install and view the wiki page
   - private + --org X: only members of org X can install / view
   - private (no org): only the author can install / view
 
 Use --no-source if you don't want your project tree pushed to the wiki
-page's git repo (the tarball still uploads — installs still work — but
+page's git repo (the tarball still uploads, installs still work, but
 the Files tab stays minimal). Useful for proprietary apps whose code
 should not be browseable.
 
@@ -4286,7 +4746,7 @@ With --layout, instead reports whether install targets (binaries in
 ~/.local/bin or /usr/local/bin, skills in ~/.claude/skills/) are symlinks
 back into ~/project/adom_modules/<slug>/ (the Adom convention) or real
 copies (drift). Use this to spot packages whose install.sh used cp
-instead of ln -sfn — those edits-in-modules-dir won't take effect and
+instead of ln -sfn: those edits-in-modules-dir won't take effect and
 reinstalls will clobber any in-place fixes.
 
 Flags:
@@ -4323,16 +4783,29 @@ Mark a specific version as deprecated. The message is shown by 'install' and
 'audit'. Empty message clears the deprecation.
 
 Examples:
-  adompkg deprecate adom/my-tool@1.0.0 "Use 2.x — 1.x is end-of-life"
+  adompkg deprecate adom/my-tool@1.0.0 "Use 2.x; 1.x is end-of-life"
   adompkg deprecate adom/my-tool@1.0.0 ""    # un-deprecate`,
+
+  unpublish: `adompkg unpublish <owner>/<slug>@<version> --confirm
+
+Permanently remove ONE release (its tarball, manifest, downloadable binaries,
+notes, and dist-tags). If "latest" pointed at it, it advances to the highest
+remaining non-deprecated version. The page itself stays. Destructive and
+irreversible, so --confirm is required.
+
+Compare: 'deprecate' keeps the version but marks it; 'delete' removes the whole
+package. Use 'unpublish' to drop a single bad/stub release.
+
+Examples:
+  adompkg unpublish adom/portwatch@9.9.9 --confirm`,
 
   platform: `adompkg platform <owner>/<slug>@<version> <platform> [--from <p>]
 
 Retroactively re-tag a published release's platform (owner/admin). Use it to
-classify existing builds by OS without re-publishing — e.g. mark an 'any'
+classify existing builds by OS without re-publishing, e.g. mark an 'any'
 release as the windows build. platform: windows | macos | linux | any.
 --from (default 'any') picks which existing build to re-tag when a version has
-several. The tarball bytes, hash, and signature are unchanged — only the
+several. The tarball bytes, hash, and signature are unchanged: only the
 platform label + filename. You can't re-tag onto a platform that version
 already has a build for.
 
@@ -4340,22 +4813,27 @@ Examples:
   adompkg platform adom/adom-desktop@1.7.10 windows
   adompkg platform adom/adom-desktop@1.7.10 macos --from any`,
 
-  release: `adompkg release <upload|list> <owner>/<slug>@<version> [...]
+  release: `adompkg release <upload|list|notes> <owner>/<slug>@<version> [...]
 
-Manage downloadable RELEASE ASSETS — raw binaries (.exe/.dmg/.msi/...) a user
-downloads directly (no untar), kept OUT of git in a content-addressed blob
-store. Distinct from the package tarball ('adompkg install') and the source
-repo. You can also declare them in package.json ("assets": ["dist/app.exe"])
-and 'adompkg publish' uploads them for you.
+Manage a release's downloadable BINARIES and its NOTES. A release binary is a
+raw file (.exe/.dmg/.msi/...) a user downloads directly (no untar), kept OUT of
+git in a content-addressed blob store; it's distinct from the package tarball
+('adompkg install') and the source repo. You can also declare binaries in
+package.json ("assets": ["dist/app.exe"]) and 'adompkg publish' uploads them.
 
   upload  <owner>/<slug>@<version> <file...> [--platform windows|macos|linux]
-          attach binaries to a release (platform auto-detected from the name)
+          attach binaries to a release (platform auto-detected from the name);
+          they show as "Download for your machine" buttons on the page
   list    <owner>/<slug>@<version>
-          list a release's assets with size + download counts
+          list a release's binaries with size + download counts
+  notes   <owner>/<slug>@<version> (--message "..." | --file notes.md)
+          set/edit the release's notes (GitHub-style markdown description shown
+          on the Versions tab); editable any time after publish
 
 Examples:
   adompkg release upload adom/adom-desktop@1.7.10 dist/Adom-Desktop-Setup.exe
-  adompkg release list adom/adom-desktop@1.7.10`,
+  adompkg release list adom/adom-desktop@1.7.10
+  adompkg release notes adom/adom-desktop@1.7.10 --message "## What's new\\n- ..."`,
 
   whoami: `adompkg whoami
 
@@ -4372,6 +4850,36 @@ Examples:
   adompkg init my-skill --type skill --yes
   adompkg init my-bundle --type bootstrap --description "Curated bundle" --yes`,
 
+  push: `adompkg push <[owner/]slug> --files <f...> -m "<message>" [--owner <owner>] [--check] [--allow-secret <substr>...]
+
+Commit files into a page's git repo (the browsable source: README images, docs,
+component parts). Binaries upload binary-safe via multipart (up to 100MB); large
+installables belong in a release tarball ('adompkg publish') instead.
+
+- The repo-relative path you pass is PRESERVED: '--files docs/hero.png' stores it
+  at docs/hero.png (not flattened to the root). Absolute paths use the basename.
+- Accepts <owner>/<slug> or a bare <slug> with --owner (slugs are per-owner).
+- --check lints + reports without uploading. Text files are scanned for secrets;
+  suppress a false positive with --allow-secret <substr> or the inline pragma.
+
+  adompkg push adom/my-tool --files docs/shot.png README.md -m "add screenshot"
+  adompkg push my-tool --owner adom --files docs/shot.png -m "shot" --check`,
+
+  hero: `adompkg hero <[owner/]slug> --headline "..." --subhead "..." --screenshot <path>   (or --image <path> | --clear)
+
+Set the page HERO: the 1200x630 (1.91:1) billboard on the page header, homepage,
+installer, and screensaver. A local --screenshot/--image is AUTO-PUSHED to the
+repo first, so this is one step (no separate 'push').
+
+- Billboard (recommended): the wiki composes the 1200x630 from your copy + shot.
+    adompkg hero adom/my-tool --headline "Do X fast" \\
+      --subhead "One line on the value" --screenshot docs/shot.png [--accent "#00b8b0"]
+- Pre-made image you supply (1200x630):  adompkg hero adom/my-tool --image docs/hero.png
+- Clear it:                              adompkg hero adom/my-tool --clear
+
+Accepts <owner>/<slug> or a bare <slug> with --owner. Usually you don't need this
+command at all: declare hero{} in package.json and 'adompkg publish' composes it.`,
+
   images: `Adding images & video to your page (hero + screenshots)
 
 Every page is a git repo; images live as committed files in it. To show them:
@@ -4380,24 +4888,33 @@ Every page is a git repo; images live as committed files in it. To show them:
    - Easiest: keep images in your project dir and run 'adompkg publish'
      (the default --source push commits your tree, images and all).
    - Or 'git push' straight to the page repo (git stores binary natively).
-   - Or the upload API (multipart — binary-safe, up to 100MB):
+   - Or the upload API (multipart, binary-safe, up to 100MB):
        curl -F "file=@hero.png;filename=hero.png" \\
          <registry>/api/v1/pages/<slug>/files -H "Authorization: Bearer <tok>"
    BINARIES must go via multipart (above) or a release tarball ('adompkg
-     publish'). The base64-in-JSON form is for SMALL text/assets only — the
+     publish'). The base64-in-JSON form is for SMALL text/assets only: the
      JSON body is capped at 4MB, so a large binary base64'd into JSON is
      rejected (and may surface as a 502). Small-asset JSON form:
        {"files":[{"path":"hero.png","content":"<base64>","encoding":"base64"}]}
    WARNING: Never put raw binary bytes in a JSON string "content" without
-     encoding:"base64" — it gets utf8-mangled and the image renders broken.
+     encoding:"base64": it gets utf8-mangled and the image renders broken.
 
-2. SET THE HERO in page.json (shown big at the top of the Overview):
-       "hero": { "type": "image", "path": "hero.png" }
-   Use "type":"video" with an .mp4/.webm path for a video hero.
+2. SET THE HERO: the 1200x630 (1.91:1) billboard shown at the top of the page,
+   the homepage, the installer, and the screensaver. Declare ONE form in page.json:
+     - Billboard (recommended, the wiki COMPOSES the 1200x630 from your copy +
+       a screenshot; no image editing):
+         "hero": { "type": "billboard", "headline": "...", "subhead": "...", "screenshot": "docs/shot.png" }
+     - Pre-made image (you supply a 1200x630 file yourself):
+         "hero": { "type": "image", "path": "docs/hero.png" }
+     - Video: "hero": { "type": "video", "path": "docs/demo.webm" }
+   Or set it after publishing, in one step (auto-pushes the local file):
+       adompkg hero <[owner/]slug> --headline "..." --subhead "..." --screenshot docs/shot.png
+   (NB: 1200x630 is the HERO size. README inline screenshots below are a separate
+   thing: size those ~760px wide.)
 
-3. EMBED SCREENSHOTS in README.md with relative paths — they resolve to the
+3. EMBED SCREENSHOTS in README.md with relative paths: they resolve to the
    page's files automatically:
-       ![Main view](main-view.png)
+       ![Main view](docs/main-view.png)
 
 Supported: png, jpg, gif, webp, svg (images); mp4, webm (video hero).
 After uploading, the page reindexes automatically.`,
@@ -4479,6 +4996,8 @@ REGISTRY
   view        full package metadata (npm-style)
   outdated    show packages with available updates
   update      install latest versions
+  self-update update the adompkg CLI itself from the registry
+              (the CLI also auto-updates in the background; ADOMPKG_NO_AUTOUPDATE=1 pins it)
   vouch       vouch that you trust a package (--remove to retract)
 
 PUBLISHING
@@ -4487,6 +5006,8 @@ PUBLISHING
   version     bump version in package.json
   dist-tag    manage release tags (latest, beta, ...)
   deprecate   mark a version as deprecated
+  release     downloadable binaries + release notes (upload | list | notes)
+  unpublish   permanently remove ONE release (<owner/slug>@<ver> --confirm)
 
 ADMIN
   audit       check installed packages for deprecation
@@ -4494,6 +5015,7 @@ ADMIN
   bootstrap   install adom-core meta-package
   whoami      show current Carbon user
   doctor      install diagnostic (PATH, token, hooks, registry)
+  config      get/set CLI prefs (e.g. allow-sudo, to let install scripts run as root)
   sh-helpers  print path to bash helpers (source from install.sh)
 
 PAGE OPS
@@ -4501,7 +5023,14 @@ PAGE OPS
   push          commit files to a page's repo
   log           show a page's commit history
   status        page status (type, version, releases, visibility)
-  delete        delete a page you own (--confirm [--owner <owner>])
+  delete        delete a page you own (--confirm [--hard] [--owner <owner>])
+  undelete      restore a soft-deleted page you own ([--owner <owner>])
+  visibility    show or set visibility (<slug> [public|private] [--public-releases|--private-releases] [--hide-source|--show-source])
+                  --hide-source: keep the page + release public/installable, but seal the source files to org members
+  rm            delete a file from a page's repo (<slug> <path>)
+  hero          set a billboard hero (<slug> --headline --subhead --screenshot) | --image | --clear
+  transfer      move a page to an org/user (<slug> --to-org <o> | --to-user <h>)
+  reindex       rebuild a page's index from its repo (admin)
   verify        verify an installed package's integrity + signature
   health        registry health check
   secrets-list  list secret keys configured for a package
@@ -4565,9 +5094,15 @@ async function cmdPush(args) {
   let m = pickFlag(rest, "-m"); let message = m.value; rest = m.rest;
   if (!message) { const ml = pickFlag(rest, "--message"); message = ml.value; rest = ml.rest; }
   const ck = pickBoolFlag(rest, "--check"); const check = ck.value; rest = ck.rest;
-  const slug = rest[0];
-  if (!slug || fileArgs.length === 0) {
-    usage('usage: adompkg push <slug> --files <f...> -m "<message>" [--check] [--allow-secret <substr>...]');
+  const ownF = pickFlag(rest, "--owner"); rest = ownF.rest;
+  const ref = rest[0];
+  // Accept both <owner>/<slug> and a bare <slug> [--owner <owner>] (parity with
+  // hero/delete/status — slugs are per-owner now, so a bare slug can be ambiguous).
+  const { owner: refOwner, slug } = splitRef(ref || "");
+  const owner = refOwner || ownF.value;
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+  if (!ref || fileArgs.length === 0) {
+    usage('usage: adompkg push <[owner/]slug> --files <f...> -m "<message>" [--owner <owner>] [--check] [--allow-secret <substr>...]');
   }
   if (!message) message = `Update ${fileArgs.length} file(s)`;
 
@@ -4578,7 +5113,11 @@ async function cmdPush(args) {
   const parts = []; // { name, buf, binary }
   for (const fp of fileArgs) {
     const buf = fs.readFileSync(fp);
-    const name = path.basename(fp);
+    // Preserve the repo-relative path the user gave (docs/hero.png stays at
+    // docs/hero.png, not flattened to hero.png at the root — which used to break
+    // `hero --screenshot docs/hero.png`). Absolute paths fall back to basename
+    // since we can't infer their intended repo location.
+    const name = path.isAbsolute(fp) ? path.basename(fp) : fp.replace(/^\.\/+/, "").replace(/\\/g, "/");
     const binary = looksBinary(name, buf);
     if (!binary) {
       const secrets = scanTextForSecrets(buf.toString("utf8"), allowSecret);
@@ -4600,14 +5139,14 @@ async function cmdPush(args) {
   // Large binaries are usually better shipped as an installable release tarball.
   const bigBinary = parts.find(p => p.binary && p.buf.length > 10 * 1024 * 1024);
   if (bigBinary) {
-    process.stderr.write(`${yel("note")}: ${bigBinary.name} is a large binary — for an installable artifact, ship it in a release tarball via 'adompkg publish' rather than a raw file push.\n`);
+    process.stderr.write(`${yel("note")}: ${bigBinary.name} is a large binary: for an installable artifact, ship it in a release tarball via 'adompkg publish' rather than a raw file push.\n`);
   }
 
   const form = new FormData();
   form.append("message", message);
   for (const p of parts) form.append("files", new Blob([p.buf]), p.name);
 
-  const url = `${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/files`;
+  const url = `${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/files${qs}`;
   let res;
   // No explicit Content-Type — fetch sets multipart/form-data with the boundary.
   try {
@@ -4622,7 +5161,7 @@ async function cmdPush(args) {
     die(parsed.hint ? `${base}\n  hint: ${parsed.hint}` : base);
   }
   let resp; try { resp = JSON.parse(text); } catch { resp = {}; }
-  process.stdout.write(`Pushed ${resp.files_count} file(s) to ${slug}${resp.commit ? ` (${String(resp.commit).slice(0, 8)})` : ""}\n`);
+  process.stdout.write(`Pushed ${resp.files_count} file(s) to ${owner ? `${owner}/${slug}` : slug}${resp.commit ? ` (${String(resp.commit).slice(0, 8)})` : ""}\n`);
   if (resp.hint) process.stdout.write(`  hint: ${resp.hint}\n`);
 }
 
@@ -4666,6 +5205,202 @@ async function cmdDelete(args) {
   const r = await httpJson(`${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}${qs}`, { method: "DELETE" });
   process.stdout.write(`${r.message || `Deleted ${slug}`}\n`);
   if (r.dependent_count) process.stderr.write(`${yel("WARNING:")} ${r.warning || `${r.dependent_count} dependent(s) now unresolved`}\n`);
+  if (!hf.value) process.stdout.write(`${dim(`(reversible, run 'adompkg undelete ${owner ? `${owner}/` : ""}${slug}' to restore)`)}\n`);
+}
+
+// Reverse a soft delete. Mirrors `POST /api/v1/pages/:slug/undelete`. Restores a
+// page (and its prior visibility) without a republish or DB surgery. A --hard
+// delete is irreversible and cannot be undone here.
+async function cmdUndelete(args) {
+  const ownerFlag = pickFlag(args, "--owner");
+  const orgFlag = pickFlag(ownerFlag.rest, "--org");
+  const ref = orgFlag.rest[0];
+  if (!ref) usage("usage: adompkg undelete <[owner/]slug> [--owner <owner>]");
+  const parsed = splitRef(ref);
+  const owner = ownerFlag.value || orgFlag.value || parsed.owner;
+  const slug = parsed.owner ? parsed.slug : ref;
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+  const r = await httpJson(`${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/undelete${qs}`, { method: "POST" });
+  process.stdout.write(`${r.message || `Restored ${slug}`}${r.visibility ? ` (visibility: ${r.visibility})` : ""}\n`);
+  if (r.visibility === "private") {
+    process.stderr.write(`${yel("note:")} the page is private: anonymous users still won't see it on web/search. Run 'adompkg visibility ${owner ? `${owner}/` : ""}${slug} public' if it should be.\n`);
+  }
+}
+
+// Set (or clear) a page's hero image/video. The image must already be in the
+// repo (push it with `adompkg push`/POST .../files first). Mirrors
+// POST /api/v1/pages/:slug/hero.
+// Set a page's hero. The RECOMMENDED form is a declarative BILLBOARD — the wiki
+// composes a spec 1200x630 promo (headline + sub-head + your screenshot) reused
+// on the page, homepage, HD installer, and screensaver. You supply a screenshot
+// already pushed to the repo + two lines of copy; no image editing, no renderer.
+//   adompkg hero <slug> --headline "Make a KiCad symbol from any part" \
+//                       --subhead "Live viewer, pin tooltips -> KiCad & Fusion" \
+//                       --screenshot docs/shot.png [--accent "#00b8b0"]
+//   adompkg hero <slug> --image docs/hero.png    # use a pre-made image as-is
+//   adompkg hero <slug> --clear
+// Upload one local file to a page's repo (preserving its relative path), so a
+// hero/screenshot can be set in a single step instead of "push then hero".
+async function pushLocalFile(slug, owner, relPath, message) {
+  const buf = fs.readFileSync(relPath);
+  const name = path.isAbsolute(relPath) ? path.basename(relPath) : relPath.replace(/^\.\/+/, "").replace(/\\/g, "/");
+  const form = new FormData();
+  form.append("message", message || `Add ${name}`);
+  form.append("files", new Blob([buf]), name);
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+  const res = await fetch(`${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/files${qs}`, { method: "POST", body: form, headers: authHeaders() });
+  if (!res.ok) {
+    const t = await res.text(); let p; try { p = JSON.parse(t); } catch { p = { error: t }; }
+    die(`auto-push of ${name} failed: ${p.error || `HTTP ${res.status}`}${p.hint ? `\n  hint: ${p.hint}` : ""}`);
+  }
+}
+
+async function cmdHero(args) {
+  const clearFlag = pickBoolFlag(args, "--clear");
+  const headF = pickFlag(clearFlag.rest, "--headline");
+  const subF = pickFlag(headF.rest, "--subhead");
+  const shotF = pickFlag(subF.rest, "--screenshot");
+  const imgF = pickFlag(shotF.rest, "--image");
+  const accentF = pickFlag(imgF.rest, "--accent");
+  const ownerFlag = pickFlag(accentF.rest, "--owner");
+  const orgFlag = pickFlag(ownerFlag.rest, "--org");
+  const ref = orgFlag.rest[0];
+  const posImage = orgFlag.rest[1]; // back-compat: `hero <slug> <image>`
+  if (!ref) usage('usage: adompkg hero <[owner/]slug> --headline "..." --subhead "..." --screenshot <path>   (or --image <path> | --clear)');
+  const parsed = splitRef(ref);
+  const owner = ownerFlag.value || orgFlag.value || parsed.owner;
+  const slug = parsed.owner ? parsed.slug : ref;
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+
+  let payload;
+  if (clearFlag.value) {
+    payload = { path: null };
+  } else if (headF.value || subF.value || shotF.value) {
+    payload = { headline: headF.value, subhead: subF.value, screenshot: shotF.value };
+    if (accentF.value) payload.accent = accentF.value;
+  } else if (imgF.value || posImage) {
+    payload = { path: imgF.value || posImage };
+  } else {
+    usage('provide a billboard (--headline "..." --subhead "..." --screenshot <path>), a static --image <path>, or --clear');
+  }
+  // Auto-push the screenshot/image when it's a local file (so the one-step
+  // `hero --screenshot docs/shot.png` works without a separate push first). Only
+  // for a relative path that exists locally; an absolute path or an already-in-repo
+  // path is left for the server to resolve.
+  const localAsset = clearFlag.value ? null : (shotF.value || imgF.value || posImage);
+  if (localAsset && !path.isAbsolute(localAsset) && fs.existsSync(localAsset)) {
+    await pushLocalFile(slug, owner, localAsset, `Add hero asset ${localAsset}`);
+  }
+  const r = await httpJson(`${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/hero${qs}`, {
+    method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "application/json" },
+  });
+  if (r.hero?.type === "billboard") process.stdout.write(`Billboard hero set for ${slug} (composed at ${REGISTRY}${r.billboard_url})\n`);
+  else if (r.hero) process.stdout.write(`Hero set to ${r.hero.path} for ${slug}\n`);
+  else process.stdout.write(`Hero cleared for ${slug}\n`);
+  if (r.hint) process.stdout.write(`${dim(r.hint)}\n`);
+}
+
+// Transfer a page between a user namespace and an org. Mirrors POST .../transfer.
+async function cmdTransfer(args) {
+  const orgF = pickFlag(args, "--to-org");
+  const userF = pickFlag(orgF.rest, "--to-user");
+  const ownerFlag = pickFlag(userF.rest, "--owner");
+  const ref = ownerFlag.rest[0];
+  if (!ref) usage("usage: adompkg transfer <[owner/]slug> (--to-org <org> | --to-user <handle>)");
+  if (!orgF.value && !userF.value) usage("specify --to-org <org> or --to-user <handle>");
+  const parsed = splitRef(ref);
+  const owner = ownerFlag.value || parsed.owner;
+  const slug = parsed.owner ? parsed.slug : ref;
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+  const payload = orgF.value ? { org: orgF.value } : { user: userF.value };
+  const r = await httpJson(`${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/transfer${qs}`, {
+    method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "application/json" },
+  });
+  process.stdout.write(`${r.moved_to ? `Transferred to ${r.moved_to}` : "Transferred"}\n`);
+  if (r.hint) process.stdout.write(`${dim(r.hint)}\n`);
+}
+
+// Rebuild a page's SQLite index from its git repo (admin). Mirrors
+// POST /api/v1/admin/reindex/:slug. Useful after a manual git push / repair.
+async function cmdReindex(args) {
+  const ownerFlag = pickFlag(args, "--owner");
+  const ref = ownerFlag.rest[0];
+  if (!ref) usage("usage: adompkg reindex <[owner/]slug>");
+  const parsed = splitRef(ref);
+  const slug = parsed.owner ? parsed.slug : ref;
+  const r = await httpJson(`${REGISTRY}/api/v1/admin/reindex/${encodeURIComponent(slug)}`, { method: "POST" });
+  process.stdout.write(`Reindexed ${r.slug || slug}\n`);
+}
+
+// Delete a file from a page's repo. Mirrors DELETE /api/v1/pages/:slug/files/<path>.
+async function cmdRm(args) {
+  const ownerFlag = pickFlag(args, "--owner");
+  const orgFlag = pickFlag(ownerFlag.rest, "--org");
+  const ref = orgFlag.rest[0];
+  const filePath = orgFlag.rest[1];
+  if (!ref || !filePath) usage("usage: adompkg rm <[owner/]slug> <path> [--owner <owner>]");
+  const parsed = splitRef(ref);
+  const owner = ownerFlag.value || orgFlag.value || parsed.owner;
+  const slug = parsed.owner ? parsed.slug : ref;
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+  const url = `${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/files/${filePath.split("/").map(encodeURIComponent).join("/")}${qs}`;
+  const r = await httpJson(url, { method: "DELETE" });
+  process.stdout.write(`Removed ${(r.removed || [filePath]).join(", ")} from ${slug}\n`);
+  if (r.hint) process.stdout.write(`${dim(r.hint)}\n`);
+}
+
+// Show or set a page's visibility. `adompkg visibility <slug>` shows the current
+// value + recent change log; `adompkg visibility <slug> public|private` sets it.
+async function cmdVisibility(args) {
+  // --public-releases / --private-releases toggle the RELEASE (installable
+  // tarball) independently of the page/source: "private source, public release".
+  const pubRel = pickBoolFlag(args, "--public-releases");
+  const privRel = pickBoolFlag(pubRel.rest, "--private-releases");
+  // --hide-source / --show-source seal (or unseal) the SOURCE (repo file
+  // browsing) to org members while the listing + release stay public.
+  const hideSrc = pickBoolFlag(privRel.rest, "--hide-source");
+  const showSrc = pickBoolFlag(hideSrc.rest, "--show-source");
+  const ownerFlag = pickFlag(showSrc.rest, "--owner");
+  const orgFlag = pickFlag(ownerFlag.rest, "--org");
+  const rest = orgFlag.rest;
+  const ref = rest[0];
+  if (!ref) usage("usage: adompkg visibility <[owner/]slug> [public|private] [--public-releases|--private-releases] [--hide-source|--show-source]");
+  const parsed = splitRef(ref);
+  const owner = ownerFlag.value || orgFlag.value || parsed.owner;
+  const slug = parsed.owner ? parsed.slug : ref;
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+  const want = rest[1];
+  if (want && want !== "public" && want !== "private") usage("visibility must be 'public' or 'private'");
+  if (pubRel.value && privRel.value) usage("pass only one of --public-releases / --private-releases");
+  if (hideSrc.value && showSrc.value) usage("pass only one of --hide-source / --show-source");
+  // undefined = leave as-is; otherwise set.
+  const relVis = pubRel.value ? "public" : (privRel.value ? null : undefined);
+  const srcVis = hideSrc.value ? "private" : (showSrc.value ? "public" : undefined);
+
+  if (!want && relVis === undefined && srcVis === undefined) {
+    const r = await httpJson(`${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/visibility-log${qs}`);
+    process.stdout.write(`${r.owner}/${r.slug}: ${(r.current || "?").toUpperCase()}\n`);
+    if (Array.isArray(r.log) && r.log.length) {
+      process.stdout.write(`recent changes:\n`);
+      for (const e of r.log.slice(0, 10)) {
+        process.stdout.write(`  ${e.created_at}  ${e.old_visibility || "(new)"} -> ${e.new_visibility}  by ${e.actor || "?"} (${e.source})\n`);
+      }
+    }
+    return;
+  }
+  const payload = {};
+  if (want) payload.visibility = want;
+  if (relVis !== undefined) payload.release_visibility = relVis; // null clears (inherit page)
+  if (srcVis !== undefined) payload.source_visibility = srcVis;  // "public" clears (inherit page)
+  const r = await httpJson(`${REGISTRY}/api/v1/pages/${encodeURIComponent(slug)}/visibility${qs}`, {
+    method: "POST", body: JSON.stringify(payload), headers: { "Content-Type": "application/json" },
+  });
+  let line = `${r.owner}/${r.slug}: page ${String(r.visibility).toUpperCase()}`;
+  if (r.release_visibility !== undefined) line += `, releases ${r.release_visibility === "public" ? "PUBLIC" : "INHERIT"}`;
+  if (r.source_visibility !== undefined) line += `, source ${r.source_visibility === "private" ? "SEALED" : "INHERIT"}`;
+  process.stdout.write(line + "\n");
+  if (r.warning) process.stderr.write(`${yel("WARNING:")} ${r.warning}\n`);
+  else if (r.hint) process.stdout.write(`${dim(r.hint)}\n`);
 }
 
 // Page status: type, version, releases, commit count, visibility.
@@ -4692,7 +5427,7 @@ async function cmdStatus(args) {
   process.stdout.write(`  releases:     ${status.releases}${status.latest_release ? ` (latest ${status.latest_release})` : ""}\n`);
   process.stdout.write(`  commits:      ${status.commits}\n`);
   process.stdout.write(`  visibility:   ${status.visibility}\n`);
-  if (status.releases === 0) process.stdout.write(`  ${yel("No release yet")} — run 'adompkg publish' to make it installable.\n`);
+  if (status.releases === 0) process.stdout.write(`  ${yel("No release yet")}: run 'adompkg publish' to make it installable.\n`);
 }
 
 // Best-effort screenshot of a wiki page, native-Hydrogen first, then adom-desktop.
@@ -4760,6 +5495,34 @@ async function cmdHealth() {
   }
 }
 
+// Read/write persisted CLI preferences in ~/.adom/config.json. Today the only
+// key is allow-sudo (let install scripts run as root without asking each time).
+async function cmdConfig(args) {
+  const KEYS = { "allow-sudo": "allow_sudo" };
+  const [sub, key, value] = args;
+  const cfg = loadConfig();
+  if (!sub || sub === "get") {
+    if (key) {
+      const ck = KEYS[key] || key;
+      process.stdout.write(`${key} = ${JSON.stringify(cfg[ck])}\n`);
+    } else {
+      process.stdout.write(JSON.stringify(cfg, null, 2) + "\n");
+    }
+    return;
+  }
+  if (sub === "set") {
+    const ck = KEYS[key];
+    if (!ck) die(`unknown config key '${key}'. Known keys: ${Object.keys(KEYS).join(", ")}.`, EXIT_USAGE);
+    if (value === undefined) die(`usage: adompkg config set ${key} <true|false>`, EXIT_USAGE);
+    const val = value === "true" ? true : value === "false" ? false : value;
+    cfg[ck] = val;
+    if (saveConfig(cfg)) process.stdout.write(`set ${key} = ${JSON.stringify(val)} (${CONFIG_FILE})\n`);
+    else die(`could not write ${CONFIG_FILE}`);
+    return;
+  }
+  die(`usage: adompkg config <get [key] | set <key> <value>>`, EXIT_USAGE);
+}
+
 async function main() {
   const args = normalizeEqualsFlags(process.argv.slice(2));
   if (args.length === 0) {
@@ -4778,6 +5541,9 @@ async function main() {
     process.stdout.write(`adompkg ${VERSION}\n`);
     return;
   }
+  // Refuse a dead/stale registry mirror before running any command (help/version
+  // above are exempt — they need no registry). Stops silent downgrades.
+  assertLiveRegistry();
   const cmd = args[0];
   // Global opt-in flags are read straight from process.argv where needed; drop
   // them here so per-command parsers don't see them as positionals.
@@ -4790,6 +5556,10 @@ async function main() {
   if (cmd !== "version") {
     handleInlineHelp(cmd, rest);
   }
+
+  // Keep the CLI current before running a real command (throttled + bounded, so
+  // it's near-free on the hot path). If it upgrades it re-execs and never returns.
+  await maybeAutoUpdate(cmd);
 
   try {
     switch (cmd) {
@@ -4805,6 +5575,8 @@ async function main() {
       case "list":      cmdList(); break;
       case "outdated":  await cmdOutdated(rest); break;
       case "update":    await cmdUpdate(rest); break;
+      case "self-update": await cmdSelfUpdate(); break;
+      case "config":    await cmdConfig(rest); break;
       case "publish":   await cmdPublish(rest); break;
       case "pack":      await cmdPack(rest); break;
       case "ci":        await cmdCi(rest); break;
@@ -4816,12 +5588,20 @@ async function main() {
       case "deprecate": await cmdDeprecate(rest); break;
       case "platform":  await cmdPlatform(rest); break;
       case "release":   await cmdRelease(rest); break;
+      case "unpublish": await cmdUnpublish(rest); break;
       case "vouch":     await cmdVouch(rest); break;
       case "whoami":    await cmdWhoami(); break;
       case "create":    await cmdCreate(rest); break;
       case "push":      await cmdPush(rest); break;
       case "log":       await cmdLog(rest); break;
       case "delete":    await cmdDelete(rest); break;
+      case "undelete":  await cmdUndelete(rest); break;
+      case "visibility": await cmdVisibility(rest); break;
+      case "rm":        await cmdRm(rest); break;
+      case "hero":      await cmdHero(rest); break;
+      case "set-hero":  await cmdHero(rest); break;
+      case "transfer":  await cmdTransfer(rest); break;
+      case "reindex":   await cmdReindex(rest); break;
       case "status":    await cmdStatus(rest); break;
       case "verify":    await cmdVerify(rest); break;
       case "secrets-list": await cmdSecretsList(); break;

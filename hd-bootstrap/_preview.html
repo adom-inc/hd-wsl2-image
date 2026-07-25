@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>adom/hd-bootstrap</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121922; --panel2:#0e141c; --line:#1f2b38;
+    --teal:#2dd4bf; --teal-dim:#155e57; --ink:#e6edf3; --mut:#8b9bab;
+    --amber:#f0b429; --green:#3fb950; --red:#f85149; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#10202a 0%,var(--bg) 55%);
+    color:var(--ink);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    padding:40px 48px 60px;}
+  h1{font-size:30px;margin:0 0 2px;letter-spacing:-.4px}
+  h1 .pkg{color:var(--teal)}
+  .sub{color:var(--mut);margin:0 0 28px;font-size:15px}
+  .cmd{display:inline-block;background:#06223a;border:1px solid var(--teal-dim);color:#bff3ec;
+    padding:7px 14px;border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;margin-bottom:30px}
+  .grid{display:grid;grid-template-columns:380px 1fr;gap:26px;align-items:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin-bottom:22px}
+  .card h2{margin:0 0 14px;font-size:13px;text-transform:uppercase;letter-spacing:1.2px;color:var(--mut)}
+  /* layering stack */
+  .layer{border-radius:11px;padding:13px 16px;margin:9px 0;border:1px solid var(--line);position:relative}
+  .layer .nm{font-family:ui-monospace,monospace;font-weight:600;font-size:15px}
+  .layer .ds{color:var(--mut);font-size:12.5px;margin-top:2px}
+  .l-core{background:linear-gradient(180deg,#11202b,#0e1a23);border-color:#244)}
+  .l-core .nm{color:var(--teal)}
+  .l-hd{background:linear-gradient(180deg,#1a2233,#141b29);border-color:#2c3a55}
+  .l-hd .nm{color:var(--violet)}
+  .l-vendor{background:var(--panel2);border-style:dashed;opacity:.85}
+  .l-vendor .nm{color:#9fb2c4}
+  .arrow{text-align:center;color:#3a4b5c;font-size:18px;margin:-2px 0}
+  .tag{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:20px;margin-left:7px;vertical-align:middle;font-family:ui-sans-serif}
+  .t-pub{background:#0f2e1b;color:var(--green);border:1px solid #1c5232}
+  .t-todo{background:#3a2a06;color:var(--amber);border:1px solid #6b4d10}
+  .t-move{background:#2a1430;color:#e0a3f0;border:1px solid #5a2a66}
+  /* deps table */
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  td,th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+  td.dep{font-family:ui-monospace,monospace;color:var(--ink);white-space:nowrap}
+  td.why{color:var(--mut)}
+  /* hook list */
+  ol.hook{margin:0;padding-left:20px;color:#cdd9e5;font-size:13.5px}
+  ol.hook li{margin:5px 0}
+  ol.hook code{color:#bff3ec}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .pill{font-size:12px;color:var(--mut);background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:10px 13px;margin:7px 0}
+  .pill b{color:var(--ink)}
+  .foot{color:#5f7185;font-size:12px;margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
+  code{font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+  <h1>The <span class="pkg">adom/hd-bootstrap</span> package</h1>
+  <p class="sub">Hydrogen Desktop's workspace layer, as an adompkg bootstrap — a dependency list + one config hook.</p>
+  <div class="cmd">$ adompkg install adom/hd-bootstrap&nbsp;&nbsp;<span style="color:#5f7185">← the golden image bakes exactly this line</span></div>
+
+  <div class="grid">
+    <!-- LEFT: layering -->
+    <div>
+      <div class="card">
+        <h2>How it layers</h2>
+        <div class="layer l-vendor"><div class="nm">ntx/bootstrap&nbsp;&nbsp;cosmiic/bootstrap</div><div class="ds">other orgs copy this shape — deps adom/core</div></div>
+        <div class="arrow">▲ depends on</div>
+        <div class="layer l-hd"><div class="nm">adom/hd-bootstrap</div><div class="ds">hd-* runtime skills · updater daemon · HD editor config</div></div>
+        <div class="arrow">▲ depends on</div>
+        <div class="layer l-core"><div class="nm">adom/core <span style="font-weight:400;color:var(--mut)">4.9.0</span></div><div class="ds">the Adom ecosystem — shared with web Hydrogen, pulled unmodified</div></div>
+      </div>
+      <div class="card">
+        <h2>Not in this package</h2>
+        <div class="pill"><b>Dockerfile (“hardware”):</b> apt baseline · code-server · systemd · cron · gh · user/linger/pam</div>
+        <div class="pill"><b>Injected by HD at <code>wsl --import</code>:</b> Carbon API key · DefaultUid=1001 · host.docker.internal</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: deps + hook -->
+    <div>
+      <div class="card">
+        <h2>Dependencies — anything that is a package</h2>
+        <table>
+          <tr><th>Package</th><th>Role</th><th></th></tr>
+          <tr><td class="dep">adom/core</td><td class="why">whole ecosystem: skills hub, distributor search, KiCad/Fusion, pup, adom-cli, adom-vscode binary, adompkg</td><td><span class="tag t-pub">published</span></td></tr>
+          <tr><td class="dep">adom/hd-skills</td><td class="why">the ~41 hd-* runtime skills (HD-specific)</td><td><span class="tag t-todo">needs publish</span></td></tr>
+          <tr><td class="dep">adom/adom-workspace-updater</td><td class="why">in-distro updater daemon (systemd .timer)</td><td><span class="tag t-todo">needs publish</span></td></tr>
+          <tr><td class="dep">adom/adom-desktop</td><td class="why">Adom Desktop relay CLI (today a wiki curl)</td><td><span class="tag t-todo">needs publish</span></td></tr>
+          <tr><td class="dep">adom/adom-google</td><td class="why">ecosystem app we bake</td><td><span class="tag t-move">→ core</span></td></tr>
+          <tr><td class="dep">adom/adom-tts</td><td class="why">ecosystem app — not anon-resolvable yet</td><td><span class="tag t-move">→ core</span></td></tr>
+          <tr><td class="dep">adom/adom-gchat</td><td class="why">ecosystem app we bake</td><td><span class="tag t-move">→ core</span></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>postinstall.sh — environment config that isn't a package</h2>
+        <ol class="hook">
+          <li>Claude Code CLI → <code>~/.local/bin/claude</code></li>
+          <li>Claude Code extension (Open VSX) → code-server</li>
+          <li><code>adom-vscode</code> .vsix → code-server <span style="color:#5f7185">(binary from core)</span></li>
+          <li>code-server <code>settings.json</code> — dark, Claude perms, agent panel off, no model pin</li>
+          <li>code-server <code>config.yaml</code> — telemetry + update-check off</li>
+          <li><code>workbench.html</code> seed — trusted domains <code>*</code> + activity-bar unpin</li>
+          <li>tidy — <code>rm ~/project/.mcp.json</code></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Convention: <b>core</b> is the sole unsuffixed root; every other bootstrap is <code>&lt;org&gt;/bootstrap</code> (or <code>&lt;layer&gt;-bootstrap</code> when a namespace holds several → <code>adom/hd-bootstrap</code>).
+    &nbsp;·&nbsp; Status: authored source, <b>not yet published or test-installed</b> — gated on the 4 deps above + the adom/core contract (anonymous + sudo-less install, name alignment, hook ordering).
+  </div>
+</body>
+</html>

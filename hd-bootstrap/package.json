@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "slug": "hd-bootstrap",
+  "type": "bootstrap",
+  "title": "Hydrogen Desktop",
+  "brief": "Layer Hydrogen Desktop's workspace onto a standard Adom workstation.",
+  "version": "0.2.3",
+  "description": "Hydrogen Desktop's PLATFORM-GENERIC workspace layer on top of adom/core. Installs adom/core for the full Adom ecosystem, then adds everything common to running inside Hydrogen Desktop on ANY platform: the runtime-neutral hd-* skills and the generic HD editor configuration (Claude Code CLI + extension, VS Code settings, trusted domains). Platform-specific layers depend on THIS: adom/hd-windows-bootstrap (WSL2), adom/hd-mac-bootstrap, adom/hd-ubuntu-bootstrap. The reference design other orgs copy to build their own bootstrap on adom/core.",
+  "org": "adom",
+  "platform": "any",
+  "tags": [
+    "bootstrap",
+    "hydrogen-desktop",
+    "hd",
+    "workspace"
+  ],
+  "needs_sudo": false,
+  "scripts": {
+    "postinstall": "./postinstall.sh"
+  },
+  "dependencies": {
+    "adom/core": "^4.9.0",
+    "adom/adom-desktop": "^1.8.0"
+  }
+}
