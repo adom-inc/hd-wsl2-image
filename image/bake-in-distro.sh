@@ -22,7 +22,7 @@
 # Then the host runs `wsl --export golden-build adom-golden-vN.tar`.
 set -euo pipefail
 trap 'echo "[bake-in-distro] FAILED at line ${LINENO} (exit $?)" >&2' ERR
-VER="${GOLDEN_VERSION:-v20}"
+VER="${GOLDEN_VERSION:-v21}"
 CSV="${CODE_SERVER_VERSION:-4.124.2}"
 CTX="${CTX:-/tmp/ctx}"
 export DEBIAN_FRONTEND=noninteractive
@@ -67,7 +67,28 @@ log "adom user"
 groupadd -g 1001 adom
 useradd -m -u 1001 -g 1001 -s /bin/bash adom
 echo 'adom ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/adom && chmod 0440 /etc/sudoers.d/adom
-mkdir -p /home/adom/project && chown adom:adom /home/adom/project
+# ── STANDARD FOLDER CONTRACT (John's call, 2026-07-26) ───────────────────────
+# Seeded, not create-on-write: the skeleton TEACHES the convention. An AI that sees
+# 3d-chips/ and schematics/ files things correctly; an empty $HOME invites a junk
+# drawer (the cloud container accreted datasheet-visualizer/, goldentmp/, a stray
+# `nul`, etc. precisely because nothing declared the shape).
+#
+# $HOME level — exactly four visible dirs; nothing else belongs at the top.
+# Scratch -> /tmp, caches -> ~/.cache, tool state -> ~/.config | ~/.local.
+for d in project downloads apps; do
+    install -d -o adom -g adom -m 0755 "/home/adom/${d}"
+done
+# ~/project holds MANY named projects (battery-charger/, esp32-sensor/, ...). The
+# 12 type folders (libraries symbols footprints 3d-chips schematics 2d-layouts
+# 3d-boards gerbers datasheets screenshots videos docs) belong INSIDE each named
+# project, so they CANNOT be baked — you cannot seed "battery-charger/" before the
+# user names it. Seeding them at ~/project root would declare "the workspace is one
+# project" and go ambiguous on the second board. The canonical list lives in the
+# adom/adom skill; whatever scaffolds a project (adom-nucleus on delivery,
+# chip-fetcher for per-part bundles) creates them under ~/project/<name>/.
+# ⚠ PARITY: HD and the Web Hydrogen cloud container must ship the SAME skeleton
+# (invariant 1). This bake covers HD; the cloud image owner must mirror it, or the two
+# diverge. The shared standard lives in the adom/adom skill, which both read.
 mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/adom
 for f in /etc/pam.d/login /etc/pam.d/common-session /etc/pam.d/common-session-noninteractive; do
     [ -f "$f" ] && sed -i 's/^\([[:space:]]*session[[:space:]].*pam_lastlog\.so.*\)$/# \1  # removed: module absent/' "$f" || true
@@ -192,7 +213,11 @@ Wants=network-online.target
 Type=exec
 User=adom
 Environment=HOME=/home/adom
-WorkingDirectory=/home/adom
+# cwd MUST be ~/project: shotlog's --data-dir defaults to ./screenshots/shotlog, and the
+# cloud container resolves that to ~/project/screenshots/shotlog. Using /home/adom here
+# would put HD's shots one level up = a parity divergence from Web Hydrogen (invariant 1)
+# and a split from adom-desktop, which writes ~/project/screenshots/adom-desktop/.
+WorkingDirectory=/home/adom/project
 ExecStart=/bin/bash -lc 'exec adom-shotlog serve'
 Restart=always
 RestartSec=2
@@ -210,6 +235,33 @@ mkdir -p /etc/systemd/system/multi-user.target.wants
 for u in code-server adom-relay adom-shotlog; do
     ln -sf "/etc/systemd/system/${u}.service" "/etc/systemd/system/multi-user.target.wants/${u}.service"
 done
+
+# ── 6e. Adom theme system + editor default theme (v21) ────────────────────────
+# LICENSE-CRITICAL: ADOM_THEME_SKIP_SATOSHI=1. Satoshi's Fontshare EULA forbids
+# distributing the files "in a public server"; this tarball IS a public GitHub release
+# asset, so Satoshi must never be baked. The flag ships the VS Code theme pack + the two
+# OFL faces (JetBrains Mono, Familjen Grotesk, with their OFL.txt) and fetches NOTHING
+# from Fontshare. Satoshi is installed per-machine INTO WINDOWS at setup (the Claude chat
+# webview can't use container webfonts anyway), so skipping it here loses nothing.
+# ORDER MATTERS: this must run AFTER the bootstrap install, because the theme pack only
+# lands if ~/.local/share/code-server/extensions exists — otherwise install.sh logs
+# "extensions dir not found" and silently skips (the smoke gate below catches that).
+log "adom theme system (license-safe: no Satoshi)"
+runuser -u adom -- bash -lc \
+    "ADOM_THEME_SKIP_SATOSHI=1 /home/adom/.local/bin/adom-wiki pkg install adom/adom-theme-system"
+
+# Editor default theme = "Adom Studio" (theme-system contract default, slug `studio`;
+# what HD's name guards expect). NOTE: the published adom/hd-bootstrap currently seeds
+# "Default Dark Modern", so we set it here at image level — a later `adom-wiki pkg update`
+# that rewrites settings.json could revert it until hd-bootstrap seeds Studio itself.
+SETTINGS=/home/adom/.local/share/code-server/User/settings.json
+runuser -u adom -- bash -lc \
+    "jq '.\"workbench.colorTheme\" = \"Adom Studio\"' '${SETTINGS}' > /tmp/s.json && mv /tmp/s.json '${SETTINGS}'"
+
+# Headless distro: boot straight to multi-user.target. Ubuntu's default.target symlinks
+# to graphical.target, which Wants= a display-manager that does not exist here; multi-user
+# is what our units are WantedBy and what cron already relies on.
+ln -sf /lib/systemd/system/multi-user.target /etc/systemd/system/default.target
 
 # ── 7. sentinel + version stamp ───────────────────────────────────────────────
 mkdir -p /var/lib/adom-bootstrap
@@ -308,6 +360,21 @@ test -e /home/adom/.local/bin/shotlog || { echo "MISSING shotlog alias"; exit 1;
 test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak: $(find /home/adom ! -user adom -print -quit)"; exit 1; }
 # v15: confirm the build toolchain really is gone (it was dead weight in v1..v14)
 ! dpkg -l gcc-13 g++-13 cmake build-essential 2>/dev/null | grep -q '^ii' || { echo "TOOLCHAIN still present"; exit 1; }
+# ── v21 GATES ─────────────────────────────────────────────────────────────────
+# LICENSE (hard fail): zero Satoshi bytes may ship in a public tarball.
+! find /home/adom -iname 'Satoshi*' 2>/dev/null | grep -q . || { echo "LICENSE VIOLATION: Satoshi font files in the image (public tarball) — bake with ADOM_THEME_SKIP_SATOSHI=1"; exit 1; }
+# theme pack actually landed (its install.sh SILENTLY skips if the extensions dir is missing)
+ls -d /home/adom/.local/share/code-server/extensions/adom.adom-themes-* >/dev/null 2>&1 || { echo "MISSING Adom theme pack (install ran before code-server extensions dir existed?)"; exit 1; }
+jq -e '."workbench.colorTheme" == "Adom Studio"' /home/adom/.local/share/code-server/User/settings.json >/dev/null || { echo "THEME: default colorTheme is not 'Adom Studio'"; exit 1; }
+# OFL compliance: the license text must travel beside the fonts we DO ship
+test -e /home/adom/.local/share/fonts/adom-theme-system/JetBrainsMono-OFL.txt || { echo "OFL: JetBrains Mono license text missing beside the fonts"; exit 1; }
+# standard folder contract (seeded, adom-owned)
+for d in project downloads apps; do
+    test -d "/home/adom/${d}" || { echo "MISSING standard folder ~/${d}"; exit 1; }
+done
+# headless boot target (our units are WantedBy=multi-user.target)
+test "$(readlink -f /etc/systemd/system/default.target)" = "/lib/systemd/system/multi-user.target" || { echo "default.target is not multi-user"; exit 1; }
+echo "v21: theme pack + Adom Studio + OFL ok, no Satoshi, folder contract seeded ✓"
 echo SMOKE-OK
 
 # ── 10. cleanup + slim pass ───────────────────────────────────────────────────
