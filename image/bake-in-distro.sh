@@ -178,7 +178,14 @@ Wants=network-online.target
 Type=exec
 User=adom
 Environment=HOME=/home/adom
-ExecStart=/usr/bin/code-server --bind-addr 0.0.0.0:7380 --auth none --disable-telemetry --disable-update-check /home/adom
+# W = the workspace root. LOCKED to /home/adom/project (John 2026-07-26, "we can never
+# go back"). It is what the Web Hydrogen cloud container opens, so terminals, relative
+# paths, shotlog's ./screenshots/shotlog default and adom-desktop's hardcoded
+# ~/project/screenshots/adom-desktop all resolve IDENTICALLY in both runtimes.
+# It is also where `git clone` / `adom-wiki repo clone` land by default (they use cwd),
+# so W must be the place where accumulation is ALLOWED — pointing it at $HOME would make
+# "nothing else at the top of $HOME" unenforceable by construction.
+ExecStart=/usr/bin/code-server --bind-addr 0.0.0.0:7380 --auth none --disable-telemetry --disable-update-check /home/adom/project
 Restart=always
 RestartSec=2
 
@@ -362,7 +369,9 @@ test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak
 ! dpkg -l gcc-13 g++-13 cmake build-essential 2>/dev/null | grep -q '^ii' || { echo "TOOLCHAIN still present"; exit 1; }
 # ── v21 GATES ─────────────────────────────────────────────────────────────────
 # LICENSE (hard fail): zero Satoshi bytes may ship in a public tarball.
-! find /home/adom -iname 'Satoshi*' 2>/dev/null | grep -q . || { echo "LICENSE VIOLATION: Satoshi font files in the image (public tarball) — bake with ADOM_THEME_SKIP_SATOSHI=1"; exit 1; }
+# Match font BINARIES only. `-iname 'Satoshi*'` also matched the package's docs dir
+# fonts/satoshi/ (a README pointing at Fontshare, zero font bytes) = false positive.
+! find /home/adom -type f \( -iname 'Satoshi*.woff2' -o -iname 'Satoshi*.woff' -o -iname 'Satoshi*.otf' -o -iname 'Satoshi*.ttf' \) 2>/dev/null | grep -q . || { echo "LICENSE VIOLATION: Satoshi font binaries in the image (public tarball) — bake with ADOM_THEME_SKIP_SATOSHI=1"; exit 1; }
 # theme pack actually landed (its install.sh SILENTLY skips if the extensions dir is missing)
 ls -d /home/adom/.local/share/code-server/extensions/adom.adom-themes-* >/dev/null 2>&1 || { echo "MISSING Adom theme pack (install ran before code-server extensions dir existed?)"; exit 1; }
 jq -e '."workbench.colorTheme" == "Adom Studio"' /home/adom/.local/share/code-server/User/settings.json >/dev/null || { echo "THEME: default colorTheme is not 'Adom Studio'"; exit 1; }

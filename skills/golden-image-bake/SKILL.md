@@ -41,8 +41,22 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    `adom-wiki pkg install adom/hd-windows-bootstrap` → core + hd-bootstrap + WSL2 layer
    + adom-desktop. No gallia clone / install.mjs / GALLIA_TOKEN anywhere in the image.
 5. **WSL2-native bake, NEVER docker** (see [[feedback_golden_image_wsl2_never_docker]]).
-6. **Workspace opens at `/home/adom`** (the home folder), not `/home/adom/project` —
-   though the opened folder is ultimately an HD launch-time arg.
+6. **WORKSPACE ROOT (W) = `/home/adom/project` — LOCKED (John 2026-07-26: "we can
+   never go back").** This supersedes the earlier `/home/adom` choice. W is the folder
+   code-server is launched with, and it decides FAR more than the Explorer view: every
+   integrated terminal starts there, every relative path resolves from there, and tools
+   with relative defaults land under it (`adom-shotlog serve` -> `./screenshots/shotlog`).
+   The Web Hydrogen container opens `~/project`, so W must match or the same prompt puts
+   files in different places in the two runtimes. Decisive argument: `git clone` and
+   `adom-wiki repo clone` default to **cwd** (= W), so W is by construction where things
+   accumulate — pointing it at `$HOME` makes "nothing else at the top of $HOME"
+   unenforceable, which is exactly how the cloud's $HOME grew datasheet-visualizer/,
+   demo/, service-watcher/, wiki-backups/ and a stray `nul`.
+   Corollary: do NOT set W to `$HOME` "so users can see their files" — that also drags
+   302 MB of `~/.local` (271 MB of it the claude-code extension) into VS Code's watcher
+   and search index, and shows every dotfile. Targeted visibility (skills, downloads)
+   belongs in symlinks or a file viewer, not in moving W. Full contract: the
+   `standard-folders` skill in adom/adom.
 7. **Bootstrap script contract: `install.sh` (DONE 2026-07-20).** History: adompkg
    required `scripts.postinstall` on bootstraps; the new registry initially kept that
    validation while the CLI didn't execute postinstall — bootstraps couldn't have a
