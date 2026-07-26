@@ -391,7 +391,9 @@ for d in project project/downloads project/screenshots; do
     test -d "/home/adom/${d}" || { echo "MISSING seeded folder ~/${d}"; exit 1; }
 done
 # headless boot target (our units are WantedBy=multi-user.target)
-test "$(readlink -f /etc/systemd/system/default.target)" = "/lib/systemd/system/multi-user.target" || { echo "default.target is not multi-user"; exit 1; }
+# compare the BASENAME: /lib is a symlink to /usr/lib (usr-merge), so `readlink -f`
+# returns /usr/lib/... and a literal /lib/... comparison always fails.
+test "$(basename "$(readlink -f /etc/systemd/system/default.target)")" = "multi-user.target" || { echo "default.target is not multi-user (got $(readlink -f /etc/systemd/system/default.target))"; exit 1; }
 echo "v21: theme pack + Adom Studio + OFL ok, no Satoshi, folder contract seeded ✓"
 echo SMOKE-OK
 
