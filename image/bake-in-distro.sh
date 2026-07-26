@@ -67,17 +67,19 @@ log "adom user"
 groupadd -g 1001 adom
 useradd -m -u 1001 -g 1001 -s /bin/bash adom
 echo 'adom ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/adom && chmod 0440 /etc/sudoers.d/adom
-# ── STANDARD FOLDER CONTRACT (John's call, 2026-07-26) ───────────────────────
-# Seeded, not create-on-write: the skeleton TEACHES the convention. An AI that sees
-# 3d-chips/ and schematics/ files things correctly; an empty $HOME invites a junk
-# drawer (the cloud container accreted datasheet-visualizer/, goldentmp/, a stray
-# `nul`, etc. precisely because nothing declared the shape).
-#
-# $HOME level — exactly four visible dirs; nothing else belongs at the top.
-# Scratch -> /tmp, caches -> ~/.cache, tool state -> ~/.config | ~/.local.
-for d in project downloads apps; do
-    install -d -o adom -g adom -m 0755 "/home/adom/${d}"
-done
+# ── STANDARD FOLDER CONTRACT (John 2026-07-26) ───────────────────────────────
+# Seed exactly ONE dir: ~/project. It is W (what code-server opens) and it is
+# load-bearing (adom_modules lives under it). Nothing else is seeded:
+#  - ~/downloads and ~/apps were dropped. With W = ~/project they are OUTSIDE the
+#    workspace, so they'd be invisible empty dirs nobody asked for. In the cloud they
+#    exist only because they ACCUMULATED. Whatever downloads or installs creates them.
+#  - NO SYMLINKS into the workspace (loops in find/rg/watchers, and a link into
+#    ~/.local drags 302 MB of extensions into VS Code's index). Browsing ~/.claude and
+#    ~/.codex is a file-viewer job, not a filesystem trick.
+# Everything else is CREATE-ON-WRITE by its owning tool (verified: `adom-shotlog serve`
+# makes its own ./screenshots/shotlog). The per-project type folders live under a
+# user-named project (~/project/battery-charger/...) so they cannot be seeded at all.
+# Full contract: the `standard-folders` skill in adom/adom.
 # ~/project holds MANY named projects (battery-charger/, esp32-sensor/, ...). The
 # 12 type folders (libraries symbols footprints 3d-chips schematics 2d-layouts
 # 3d-boards gerbers datasheets screenshots videos docs) belong INSIDE each named
@@ -86,9 +88,16 @@ done
 # project" and go ambiguous on the second board. The canonical list lives in the
 # adom/adom skill; whatever scaffolds a project (adom-nucleus on delivery,
 # chip-fetcher for per-part bundles) creates them under ~/project/<name>/.
-# ⚠ PARITY: HD and the Web Hydrogen cloud container must ship the SAME skeleton
-# (invariant 1). This bake covers HD; the cloud image owner must mirror it, or the two
-# diverge. The shared standard lives in the adom/adom skill, which both read.
+# ⚠ PARITY: HD and the Web Hydrogen cloud container must agree on W and on this
+# contract (invariant 1). The shared standard lives in the adom/adom skill, read by both.
+# Seed the three that are universal on day one. Everything else is create-on-demand by
+# the app/AI that needs it, following the `standard-folders` skill (adom/adom@3.2.0):
+#   project/      W — what code-server opens; adom_modules/ lives here
+#   downloads/    the catch-all; must exist BEFORE anything downloads
+#   screenshots/  universally used; shotlog + adom-desktop both write here
+for d in project project/downloads project/screenshots; do
+    install -d -o adom -g adom -m 0755 "/home/adom/${d}"
+done
 mkdir -p /var/lib/systemd/linger && touch /var/lib/systemd/linger/adom
 for f in /etc/pam.d/login /etc/pam.d/common-session /etc/pam.d/common-session-noninteractive; do
     [ -f "$f" ] && sed -i 's/^\([[:space:]]*session[[:space:]].*pam_lastlog\.so.*\)$/# \1  # removed: module absent/' "$f" || true
@@ -378,8 +387,8 @@ jq -e '."workbench.colorTheme" == "Adom Studio"' /home/adom/.local/share/code-se
 # OFL compliance: the license text must travel beside the fonts we DO ship
 test -e /home/adom/.local/share/fonts/adom-theme-system/JetBrainsMono-OFL.txt || { echo "OFL: JetBrains Mono license text missing beside the fonts"; exit 1; }
 # standard folder contract (seeded, adom-owned)
-for d in project downloads apps; do
-    test -d "/home/adom/${d}" || { echo "MISSING standard folder ~/${d}"; exit 1; }
+for d in project project/downloads project/screenshots; do
+    test -d "/home/adom/${d}" || { echo "MISSING seeded folder ~/${d}"; exit 1; }
 done
 # headless boot target (our units are WantedBy=multi-user.target)
 test "$(readlink -f /etc/systemd/system/default.target)" = "/lib/systemd/system/multi-user.target" || { echo "default.target is not multi-user"; exit 1; }
