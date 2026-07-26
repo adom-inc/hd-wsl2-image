@@ -24,7 +24,7 @@ core stays generic across web + desktop Hydrogen.
 
 ## What this layer adds
 
-- **Dependencies:** `adom/hd-bootstrap` (generic HD) + `adom/adom-workspace-updater`
+- **Dependencies:** `adom/hd-bootstrap` (generic HD) + `~~adom/adom-workspace-updater~~ (RETIRED 2026-07-16, dep removed in 0.2.3)`
   (the in-distro systemd updater daemon — WSL2/systemd-specific).
 - **Bundled skills:** the WSL2-runtime `hd-*` skills (container, networking,
   ports, port-watcher, setup, setup-steps, topology, volume, workspace-lifecycle,

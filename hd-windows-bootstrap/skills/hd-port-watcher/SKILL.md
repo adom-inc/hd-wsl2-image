@@ -1,33 +1,47 @@
 ---
 name: hd-port-watcher
 description: >
-  Dynamic port forwarding for Hydrogen Desktop. A daemon inside the WSL2
-  workspace watches for new TCP listeners (OAuth callbacks from VS Code
-  extensions like Codex, Copilot, GitLens) and notifies HD to create
-  host-side TCP proxies. Covers the cases WSL2 auto-forward can't:
-  `127.0.0.1`-only listeners and auto-forward gaps. Makes localhost:{port}
-  on Windows reach the distro. Extensions just work — no manual setup.
-  Trigger words: port forward, dynamic port, OAuth callback, Codex auth,
-  extension auth, port mapping, localhost port, port watcher, port proxy.
+  Port reachability in Hydrogen Desktop — and why you do NOT need to set up
+  port forwarding. Under WSL2 networkingMode=mirrored (HD's default, which the
+  setup cascade hard-targets), the distro SHARES the Windows loopback, so every
+  port a service binds in the workspace — including `127.0.0.1`-only OAuth
+  callback servers from VS Code extensions (Codex, Copilot, GitLens) — is
+  reachable at the same `localhost:<port>` on Windows automatically. No daemon,
+  no proxies, no manual mapping. The old port-watcher daemon was a Docker/NAT-era
+  mechanism and is not used under mirrored networking. Trigger words: port
+  forward, dynamic port, OAuth callback, Codex auth, extension auth, port mapping,
+  localhost port, port watcher, port proxy, does port forwarding work, why can't
+  I reach my port.
 ---
 
-# HD Port Watcher — Dynamic Port Forwarding
+# HD Port Watcher — you don't port-watch anymore (mirrored networking does it)
 
-> This is the WSL2-runtime version (default). For the legacy Docker container
-> runtime (`HD_RUNTIME=docker`) see the docker/ bucket.
+> **TL;DR for the AI: do NOT try to set up port forwarding in HD.** Under the
+> default WSL2 `networkingMode=mirrored`, ports just work. If a `localhost:<port>`
+> from the workspace isn't reachable on Windows, the fix is almost never "forward
+> the port" — it's "confirm mirrored is on" (see below), or the service didn't
+> actually bind.
 
-## Why the daemon is still here under WSL2
+## Why there's nothing to do (mirrored networking)
 
-WSL2 auto-forwards any `0.0.0.0:<port>` listener in the distro to
-`localhost:<sameport>` on Windows — so you might think a port watcher is
-unnecessary. It isn't. The daemon is **RETAINED** because WSL2's auto-forward
-has two gaps the watcher closes:
+HD's setup cascade hard-targets `networkingMode=mirrored` in `.wslconfig`. Under
+mirrored, the WSL2 distro shares the Windows loopback interface, so **any** listener
+in the distro — `0.0.0.0:<port>` AND `127.0.0.1:<port>` — is reachable at the same
+`localhost:<port>` on Windows with zero setup. This is why HD's own OAuth host-proxy
+is explicitly **skipped** under mirrored (`lib.rs`: *"under WSL2 mirrored it's
+redundant… host proxy not needed"*).
 
-1. **`127.0.0.1`-only listeners.** WSL2 does NOT forward loopback-only
+## The legacy daemon (Docker / non-mirrored only — historical)
+
+The `port-watcher` daemon below existed for the pre-mirroring world: the Docker/NAT
+runtime, where the distro could NOT reach Windows loopback, so a daemon watched
+`/proc/net/tcp` for new listeners and HD spun up host-side TCP proxies. It closed
+two gaps that DO NOT EXIST under mirrored:
+
+1. **`127.0.0.1`-only listeners.** NAT-mode WSL2 did NOT forward loopback-only
    listeners. VS Code extensions (Codex, Copilot, GitLens) start OAuth callback
-   servers that frequently bind `127.0.0.1` — the browser redirects to
-   `localhost:{port}/auth/callback?code=...` but WSL2 never mirrored that port,
-   so on Windows it doesn't exist.
+   servers that frequently bind `127.0.0.1`; without mirroring the browser redirect
+   to `localhost:{port}/auth/callback?code=...` hit a port that didn't exist on Windows.
 2. **Auto-forward lag / wedge.** WSL2 localhost-forwarding can lag or break
    even for `0.0.0.0` listeners (a real HD-logged failure mode:
    "code-server alive in distro but Windows can't reach 127.0.0.1:7380"). The

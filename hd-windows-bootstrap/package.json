@@ -2,17 +2,34 @@
   "schema_version": 1,
   "slug": "hd-windows-bootstrap",
   "type": "bootstrap",
-  "title": "Hydrogen Desktop (Windows / WSL2)",
+  "title": "Hydrogen Desktop Bootstrap for Windows (apps + skills)",
   "brief": "The Windows (WSL2) platform layer for Hydrogen Desktop.",
-  "version": "0.2.2",
-  "description": "The Windows platform layer for Hydrogen Desktop, where the workspace runs in a WSL2 Ubuntu distro. Depends on adom/hd-bootstrap (the platform-generic HD layer) and adds everything specific to the WSL2 runtime: the WSL2/networking/lifecycle hd-* skills, the in-distro workspace-updater daemon, and the WSL2 code-server workbench seed. Sibling layers adom/hd-mac-bootstrap and adom/hd-ubuntu-bootstrap depend on the same adom/hd-bootstrap. This is the package the golden WSL2 image installs.",
+  "version": "0.2.9",
+  "description": "The Windows platform layer for Hydrogen Desktop, where the workspace runs in a WSL2 Ubuntu distro. Depends on adom/hd-bootstrap (the platform-generic HD layer, which bundles the generic hd-* skills) and adds everything specific to the WSL2 runtime: the WSL2/networking/lifecycle hd-* skills (BUNDLED here by design, John+Kyle 2026-07-16) and the WSL2 code-server workbench seed. Sibling adom/hd-mac-bootstrap carries the parallel mac skills. This is the package the golden WSL2 image installs.",
   "org": "adom",
   "platform": "linux",
-  "tags": ["bootstrap", "hydrogen-desktop", "hd", "windows", "wsl2"],
+  "tags": [
+    "bootstrap",
+    "hydrogen-desktop",
+    "hd",
+    "windows",
+    "wsl2"
+  ],
   "needs_sudo": false,
-  "scripts": { "postinstall": "./postinstall.sh" },
+  "scripts": {
+    "install": "./install.sh"
+  },
   "dependencies": {
     "adom/hd-bootstrap": "^0.2.0",
-    "adom/adom-workspace-updater": "^0.1.0"
+    "adom/adom-shotlog": "^0.24.0"
+  },
+  "files": [
+    "package.json",
+    "install.sh",
+    "README.md",
+    "skills/**"
+  ],
+  "hero": {
+    "path": "docs/hero.png"
   }
 }

@@ -6,8 +6,8 @@
 #   - deploy the WSL2/networking/lifecycle hd-* skills (this package's skills/)
 #   - seed the WSL2 code-server workbench.html (trusted domains + activity bar)
 # The generic editor config (Claude CLI, extensions, settings.json) is in
-# adom/hd-bootstrap; the workspace-updater daemon is the adom/adom-workspace-updater
-# dependency. Mac/Ubuntu siblings provide their own platform layer instead.
+# adom/hd-bootstrap. (The workspace-updater daemon dep was RETIRED 2026-07-16 —
+# updates are registry-native: adom-wiki pkg update via adom/hook.) Mac/Ubuntu siblings provide their own platform layer instead.
 #
 # Idempotent + live-installable; the golden WSL2 image runs the same install.
 set -euo pipefail

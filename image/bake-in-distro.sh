@@ -133,6 +133,84 @@ runuser -u adom -- bash -lc \
 # fallback — now validating the REGISTRY binary, so a registry regression to
 # 0.5.11 FAILS the bake.
 
+# ── 6d. systemd units: the container manages its OWN services (John 2026-07-26) ─
+# History: HD (a Windows app) used to reach into the distro and babysit the relay and
+# shotlog as held wsl.exe children, because the thin tarball had no systemd. The golden
+# image boots systemd as PID 1, so the services belong to the container: code-server,
+# the AD relay (adom-desktop serve), and adom-shotlog are all plain units, enabled at
+# bake. HD's launch-time unit writer stays as the self-heal for legacy distros and
+# writes only the tiny *.service.d/hd-env.conf drop-ins (machine ports/env) here.
+# Binaries come from the ONE registry install above: adom-desktop via adom/hd-bootstrap,
+# adom-shotlog via adom/hd-windows-bootstrap@0.2.9 — both `adom-wiki pkg update`-able.
+# ExecStart uses a login shell so services see the same env/PATH as a user shell
+# (~/.local/bin, /etc/profile.d/hd-env.sh), matching how code-server children behave.
+# WorkingDirectory is explicit: a service with no cwd once resolved shotlog's relative
+# data dir under a read-only mount (the 2026-07-24 broken-gallery bug).
+log "systemd units (code-server, adom-relay, adom-shotlog)"
+cat > /etc/systemd/system/code-server.service <<'UNIT'
+[Unit]
+Description=Adom code-server (Hydrogen Desktop workspace editor)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=adom
+Environment=HOME=/home/adom
+ExecStart=/usr/bin/code-server --bind-addr 0.0.0.0:7380 --auth none --disable-telemetry --disable-update-check /home/adom
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+cat > /etc/systemd/system/adom-relay.service <<'UNIT'
+[Unit]
+Description=Adom Desktop relay (adom-desktop serve) - the bridge AD/HD connect back to
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=adom
+Environment=HOME=/home/adom
+WorkingDirectory=/home/adom
+ExecStart=/bin/bash -lc 'exec adom-desktop serve'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+cat > /etc/systemd/system/adom-shotlog.service <<'UNIT'
+[Unit]
+Description=Adom Shotlog (screenshot log viewer, port 8820)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=adom
+Environment=HOME=/home/adom
+WorkingDirectory=/home/adom
+ExecStart=/bin/bash -lc 'exec adom-shotlog serve'
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+# Drop-in dirs: HD writes <unit>.d/hd-env.conf with the live machine env at setup.
+mkdir -p /etc/systemd/system/code-server.service.d \
+         /etc/systemd/system/adom-relay.service.d \
+         /etc/systemd/system/adom-shotlog.service.d
+# Enable by symlink (systemd is not PID 1 inside the bake distro, so no `systemctl
+# enable`): this is exactly what enable does for WantedBy=multi-user.target.
+mkdir -p /etc/systemd/system/multi-user.target.wants
+for u in code-server adom-relay adom-shotlog; do
+    ln -sf "/etc/systemd/system/${u}.service" "/etc/systemd/system/multi-user.target.wants/${u}.service"
+done
+
 # ── 7. sentinel + version stamp ───────────────────────────────────────────────
 mkdir -p /var/lib/adom-bootstrap
 date -Iseconds > /var/lib/adom-bootstrap/phase-a-done
@@ -216,6 +294,17 @@ LC_ALL=C grep -qa 'hd-proxy-url' /usr/local/bin/adom-cli || { echo "ADOM-CLI: 'h
 echo "adom-cli: >=0.5.12 + hd-proxy-url fallback present ✓"
 test -x /usr/lib/systemd/systemd && test -e /sbin/init || { echo "MISSING systemd"; exit 1; }
 test -e /var/lib/systemd/linger/adom || { echo "MISSING adom linger"; exit 1; }
+# v21: the container manages its own services — units present AND enabled, cron alive.
+for u in code-server adom-relay adom-shotlog; do
+    test -f "/etc/systemd/system/${u}.service" || { echo "MISSING unit ${u}.service"; exit 1; }
+    test -L "/etc/systemd/system/multi-user.target.wants/${u}.service" || { echo "UNIT ${u} not enabled"; exit 1; }
+done
+dpkg -l cron 2>/dev/null | grep -q '^ii' || { echo "MISSING cron package"; exit 1; }
+test -x /usr/bin/crontab || { echo "MISSING crontab"; exit 1; }
+# adom-shotlog: registry-tracked (hd-windows-bootstrap>=0.2.9 dependency), binary + alias.
+test -d /home/adom/project/adom_modules/adom/adom-shotlog || { echo "MISSING module adom/adom-shotlog (bootstrap dep not resolved?)"; exit 1; }
+test -x /home/adom/.local/bin/adom-shotlog || { echo "MISSING adom-shotlog binary"; exit 1; }
+test -e /home/adom/.local/bin/shotlog || { echo "MISSING shotlog alias"; exit 1; }
 test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak: $(find /home/adom ! -user adom -print -quit)"; exit 1; }
 # v15: confirm the build toolchain really is gone (it was dead weight in v1..v14)
 ! dpkg -l gcc-13 g++-13 cmake build-essential 2>/dev/null | grep -q '^ii' || { echo "TOOLCHAIN still present"; exit 1; }
