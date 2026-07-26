@@ -63,6 +63,36 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    Corollary — same rule for the toolchain: **fetch the `adom-wiki` CLI fresh at bake
    time, never reuse a staged/pinned binary** (see the v19 stale-1.0.41 incident below).
 
+9. **NO SATOSHI BYTES IN THE PUBLIC TARBALL — bake the theme system with the skip flag
+   (John, 2026-07-26).** The image SHOULD carry the Adom theme system (VS Code pack +
+   fonts), installed license-safe:
+
+   ```bash
+   ADOM_THEME_SKIP_SATOSHI=1 adom-wiki pkg install adom/adom-theme-system
+   ```
+
+   That ships the theme pack plus JetBrains Mono + Familjen Grotesk (OFL 1.1, license
+   texts beside the files) and fetches NOTHING from Fontshare. Satoshi's EULA forbids
+   distribution on public servers, and the release tarball is a public artifact, so any
+   bake that leaves `Satoshi-*.woff2` in the tree is a license violation — gate it:
+   `! find /home/adom -iname 'Satoshi*' | grep -q .` belongs in the smoke section.
+
+   THE FONTS MODEL (so nobody "fixes" this the wrong way again): container-served
+   webfonts DO work for the editor — code-server serves the woff2 and the editor,
+   terminal, and markdown preview render brand type with no Windows install. The ONE
+   surface that cannot use them is the Claude chat webview (isolated, never loads
+   workbench webfonts), which is why Satoshi must be installed INTO WINDOWS per machine
+   at setup time (HD setup step today, AD's font_ensure_brand verb when it lands) and
+   fetched from Fontshare's own servers, the EULA-sanctioned channel. Baking Satoshi
+   into the image is therefore wrong twice: illegal in a public artifact, and
+   insufficient for the surface that actually needs it. Full rules:
+   https://wiki.adom.inc/api/pages/adom/adom-theme-system/files/fonts/LICENSES.md
+
+   While in this area: the editor's default `workbench.colorTheme` must be
+   **"Adom Studio"** (slug `studio`) — the theme-system contract's default, what
+   hd-bootstrap seeds, and what HD's name guards expect. An earlier image commit set
+   Kickstand; reconcile to Adom Studio unless John rules otherwise.
+
 When in doubt about ANY of the above, VERIFY empirically against a re-imported image
 (boot code-server, test the actual behaviour) before changing the bake — do not guess.
 
@@ -189,7 +219,7 @@ have re-installed the retired daemon into a clean image).
 | v16 | clean first-load editor (per-workspace sidebar-collapse seed, no welcome/tabs/panel) |
 | v17 | Web Hydrogen port parity: `autoForwardPortsSource: hybrid` (kills the >20-ports popup) |
 | v18 | REGISTRY-NATIVE: `adom-wiki pkg install` replaces adompkg/gallia; workspace-updater + hd-skillpack RETIRED; tree sudo-free |
-| v21 (next) | CONTAINER-MANAGED SERVICES: code-server + adom-relay (`adom-desktop serve`) + adom-shotlog baked as enabled systemd units (HD stops holding wsl.exe children; its unit-writer stays as legacy self-heal, drop-ins `*.service.d/hd-env.conf` remain HD-written); adom-shotlog registry-tracked via hd-windows-bootstrap@0.2.9 dependency (Colby's `pkg update` sweep now covers it); cron asserted enabled; smoke gates for all units + shotlog module/binary/alias |
+| v21 (next) | CONTAINER-MANAGED SERVICES: code-server + adom-relay (`adom-desktop serve`) + adom-shotlog baked as enabled systemd units (HD stops holding wsl.exe children; its unit-writer stays as legacy self-heal, drop-ins `*.service.d/hd-env.conf` remain HD-written); adom-shotlog registry-tracked via hd-windows-bootstrap@0.2.9 dependency (Colby's `pkg update` sweep now covers it); cron asserted enabled; smoke gates for all units + shotlog module/binary/alias; theme system baked license-safe (`ADOM_THEME_SKIP_SATOSHI=1`, invariant 9) |
 | v20 | python parity libs baked (`python3-{requests,yaml,bs4,lxml,pil}` via apt — Web Hydrogen parity; NO numpy); `definitions` skill litmus (core@4.13.4 depends on adom/definitions — guard it); adom-cli source-overlay REMOVED (registry adom/adom-cli@4.0.5 now ships 0.5.12); PEP-668 install guidance added to the hd-container skill |
 | v19 | adom-cli 0.5.12 overlay (`~/.adom/hd-proxy-url` fallback for env-less shells); bake fetches adom-wiki fresh; postinstall shim removed (bootstraps now `scripts.install`). **Shipped in HD 0.1.170** (pin 4c3f159b); virgin fresh-install PASSED 20/20 cascade, and the fix was proven in the ACTUAL failure condition — `env -u ADOM_CARBON_URL -u ADOM_HYDROGEN_URL adom-cli hydrogen webview open-or-refresh` returned `created` instead of 404ing against carbon. HD also hardened its `test-adom-cli` setup gate to cover the AI-shell (code-server systemd env) channel, so this class of regression now HALTS setup. |
 
