@@ -52,6 +52,10 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    accumulate — pointing it at `$HOME` makes "nothing else at the top of $HOME"
    unenforceable, which is exactly how the cloud's $HOME grew datasheet-visualizer/,
    demo/, service-watcher/, wiki-backups/ and a stray `nul`.
+   NO SYMLINKS in the workspace (John 2026-07-26): do not "solve" visibility by
+   symlinking ~/.claude/skills or ~/downloads into W. Symlinks cause loops in `find`,
+   ripgrep, build tools and file watchers, and a link into ~/.local drags the 302 MB
+   extension tree back into the index. Targeted visibility = a file viewer app, not links.
    Corollary: do NOT set W to `$HOME` "so users can see their files" — that also drags
    302 MB of `~/.local` (271 MB of it the claude-code extension) into VS Code's watcher
    and search index, and shows every dotfile. Targeted visibility (skills, downloads)
