@@ -388,6 +388,13 @@ test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak
 ! find /home/adom -type f \( -iname 'Satoshi*.woff2' -o -iname 'Satoshi*.woff' -o -iname 'Satoshi*.otf' -o -iname 'Satoshi*.ttf' \) 2>/dev/null | grep -q . || { echo "LICENSE VIOLATION: Satoshi font binaries in the image (public tarball) — bake with ADOM_THEME_SKIP_SATOSHI=1"; exit 1; }
 # theme pack actually landed (its install.sh SILENTLY skips if the extensions dir is missing)
 ls -d /home/adom/.local/share/code-server/extensions/adom.adom-themes-* >/dev/null 2>&1 || { echo "MISSING Adom theme pack (install ran before code-server extensions dir existed?)"; exit 1; }
+# ...AND is REGISTERED. A folder on disk is NOT an installed extension: code-server prunes
+# anything missing from extensions.json on its next launch. v21-rc shipped a pack that
+# passed the ls check above and was deleted at first boot, leaving the picker with zero
+# "Adom ..." themes and the editor falling back to stock Light. Registration is the litmus.
+jq -e '[.[] | select(.identifier.id == "adom.adom-themes")] | length == 1' \
+    /home/adom/.local/share/code-server/extensions/extensions.json >/dev/null 2>&1 \
+    || { echo "THEME PACK NOT REGISTERED: adom.adom-themes absent from extensions.json — code-server will prune it on first launch (adom-theme-system must install via 'code-server --install-extension', not cp -r; needs adom/adom-theme-system >= 1.1.2)"; exit 1; }
 jq -e '."workbench.colorTheme" == "Adom Studio"' /home/adom/.local/share/code-server/User/settings.json >/dev/null || { echo "THEME: default colorTheme is not 'Adom Studio'"; exit 1; }
 # OFL compliance: the license text must travel beside the fonts we DO ship
 test -e /home/adom/.local/share/fonts/adom-theme-system/JetBrainsMono-OFL.txt || { echo "OFL: JetBrains Mono license text missing beside the fonts"; exit 1; }
