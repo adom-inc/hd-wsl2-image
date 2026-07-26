@@ -187,6 +187,8 @@ cat > /etc/systemd/system/code-server.service <<'UNIT'
 Description=Adom code-server (Hydrogen Desktop workspace editor)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=exec
@@ -200,7 +202,11 @@ Environment=HOME=/home/adom
 # so W must be the place where accumulation is ALLOWED — pointing it at $HOME would make
 # "nothing else at the top of $HOME" unenforceable by construction.
 ExecStart=/usr/bin/code-server --bind-addr 0.0.0.0:7380 --auth none --disable-telemetry --disable-update-check /home/adom/project
-Restart=always
+# on-failure, NOT always: these services deliberately exit 0 when they detect a peer
+# already holding their port (a second workspace on the same host sees the production
+# instance through WSL2 mirrored networking and defers). Restart=always turned that clean
+# defer into a spin (45 restarts observed). The start limit caps a genuine crash loop too.
+Restart=on-failure
 RestartSec=2
 
 [Install]
@@ -211,6 +217,8 @@ cat > /etc/systemd/system/adom-relay.service <<'UNIT'
 Description=Adom Desktop relay (adom-desktop serve) - the bridge AD/HD connect back to
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=exec
@@ -218,7 +226,11 @@ User=adom
 Environment=HOME=/home/adom
 WorkingDirectory=/home/adom
 ExecStart=/bin/bash -lc 'exec adom-desktop serve'
-Restart=always
+# on-failure, NOT always: these services deliberately exit 0 when they detect a peer
+# already holding their port (a second workspace on the same host sees the production
+# instance through WSL2 mirrored networking and defers). Restart=always turned that clean
+# defer into a spin (45 restarts observed). The start limit caps a genuine crash loop too.
+Restart=on-failure
 RestartSec=2
 
 [Install]
@@ -229,6 +241,8 @@ cat > /etc/systemd/system/adom-shotlog.service <<'UNIT'
 Description=Adom Shotlog (screenshot log viewer, port 8820)
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=exec
@@ -240,7 +254,11 @@ Environment=HOME=/home/adom
 # and a split from adom-desktop, which writes ~/project/screenshots/adom-desktop/.
 WorkingDirectory=/home/adom/project
 ExecStart=/bin/bash -lc 'exec adom-shotlog serve'
-Restart=always
+# on-failure, NOT always: these services deliberately exit 0 when they detect a peer
+# already holding their port (a second workspace on the same host sees the production
+# instance through WSL2 mirrored networking and defers). Restart=always turned that clean
+# defer into a spin (45 restarts observed). The start limit caps a genuine crash loop too.
+Restart=on-failure
 RestartSec=2
 
 [Install]
