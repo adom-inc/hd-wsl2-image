@@ -143,8 +143,13 @@ log "adom-wiki CLI = $(runuser -u adom -- /home/adom/.local/bin/adom-wiki --vers
 # which is exactly the guard we want.
 log "adom-wiki pkg install adom/hd-windows-bootstrap"
 chown -R adom:adom /home/adom
+# ADOM_THEME_SKIP_SATOSHI=1 must cover the WHOLE install: as of hd-bootstrap@0.2.32 the
+# theme system is a DEPENDENCY (so "Adom Studio" is the package default and the pack that
+# provides it is always present). Without the flag this dependency install fetches 4
+# Satoshi faces from Fontshare — legal on a user's machine, a license violation in a
+# public release tarball. The flag is bake-only; user installs still get Satoshi.
 runuser -u adom -- bash -lc \
-    "/home/adom/.local/bin/adom-wiki pkg install adom/hd-windows-bootstrap"
+    "ADOM_THEME_SKIP_SATOSHI=1 /home/adom/.local/bin/adom-wiki pkg install adom/hd-windows-bootstrap"
 
 # ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
 # declare scripts.install (hd-bootstrap@0.2.23, hd-windows-bootstrap@0.2.8) and
