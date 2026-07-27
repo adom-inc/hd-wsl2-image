@@ -22,7 +22,7 @@
 # Then the host runs `wsl --export golden-build adom-golden-vN.tar`.
 set -euo pipefail
 trap 'echo "[bake-in-distro] FAILED at line ${LINENO} (exit $?)" >&2' ERR
-VER="${GOLDEN_VERSION:-v21}"
+VER="${GOLDEN_VERSION:-v22}"
 CSV="${CODE_SERVER_VERSION:-4.124.2}"
 CTX="${CTX:-/tmp/ctx}"
 export DEBIAN_FRONTEND=noninteractive
@@ -187,8 +187,12 @@ cat > /etc/systemd/system/code-server.service <<'UNIT'
 Description=Adom code-server (Hydrogen Desktop workspace editor)
 After=network-online.target
 Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=5
+# 900s window / 4 attempts: the field report (hd-wsl2-image#1) measured a unit
+# restart-looping every ~2 min for 15h (NRestarts=435) — a 60s window never trips
+# when the failure cycle is slower than window/burst. 4 failures inside 15 min
+# parks even a 2-minute cycle. Parking is the GOAL on a squatted port.
+StartLimitIntervalSec=900
+StartLimitBurst=4
 
 [Service]
 Type=exec
@@ -217,8 +221,12 @@ cat > /etc/systemd/system/adom-relay.service <<'UNIT'
 Description=Adom Desktop relay (adom-desktop serve) - the bridge AD/HD connect back to
 After=network-online.target
 Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=5
+# 900s window / 4 attempts: the field report (hd-wsl2-image#1) measured a unit
+# restart-looping every ~2 min for 15h (NRestarts=435) — a 60s window never trips
+# when the failure cycle is slower than window/burst. 4 failures inside 15 min
+# parks even a 2-minute cycle. Parking is the GOAL on a squatted port.
+StartLimitIntervalSec=900
+StartLimitBurst=4
 
 [Service]
 Type=exec
@@ -241,8 +249,12 @@ cat > /etc/systemd/system/adom-shotlog.service <<'UNIT'
 Description=Adom Shotlog (screenshot log viewer, port 8820)
 After=network-online.target
 Wants=network-online.target
-StartLimitIntervalSec=60
-StartLimitBurst=5
+# 900s window / 4 attempts: the field report (hd-wsl2-image#1) measured a unit
+# restart-looping every ~2 min for 15h (NRestarts=435) — a 60s window never trips
+# when the failure cycle is slower than window/burst. 4 failures inside 15 min
+# parks even a 2-minute cycle. Parking is the GOAL on a squatted port.
+StartLimitIntervalSec=900
+StartLimitBurst=4
 
 [Service]
 Type=exec
@@ -274,6 +286,27 @@ mkdir -p /etc/systemd/system/multi-user.target.wants
 for u in code-server adom-relay adom-shotlog; do
     ln -sf "/etc/systemd/system/${u}.service" "/etc/systemd/system/multi-user.target.wants/${u}.service"
 done
+
+# ── 6d-bis. per-import distro identity (v22, hd-wsl2-image#1 item 4) ─────────────
+# /etc/adom-distro-id must be UNIQUE PER IMPORT, so it CANNOT be baked into the tar
+# (every import would share it). A oneshot generates it on first boot; the cleanup
+# pass deletes any id the bake distro itself generated, and the tar gate asserts the
+# marker is ABSENT from the artifact. HD verifies "the editor I reached is MY distro"
+# by reading this via the adom-vscode :8821 API (client side is HD's to wire).
+cat > /etc/systemd/system/adom-distro-id.service <<'UNIT'
+[Unit]
+Description=Generate the per-import Adom distro identity marker
+ConditionPathExists=!/etc/adom-distro-id
+Before=multi-user.target code-server.service adom-relay.service adom-shotlog.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'cat /proc/sys/kernel/random/uuid > /etc/adom-distro-id && chmod 0644 /etc/adom-distro-id'
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+ln -sf /etc/systemd/system/adom-distro-id.service /etc/systemd/system/multi-user.target.wants/adom-distro-id.service
 
 # ── 6e. Adom theme system + editor default theme (v21) ────────────────────────
 # LICENSE-CRITICAL: ADOM_THEME_SKIP_SATOSHI=1. Satoshi's Fontshare EULA forbids
@@ -425,6 +458,27 @@ done
 # returns /usr/lib/... and a literal /lib/... comparison always fails.
 test "$(basename "$(readlink -f /etc/systemd/system/default.target)")" = "multi-user.target" || { echo "default.target is not multi-user (got $(readlink -f /etc/systemd/system/default.target))"; exit 1; }
 echo "v21: theme pack + Adom Studio + OFL ok, no Satoshi, folder contract seeded ✓"
+# ── v22 GATES (theme standard v2 + hd-wsl2-image#1 unit fixes) ────────────────
+PACK_DIR="$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-themes-* | head -1)"
+# exactly five themes contributed
+test "$(jq '.contributes.themes | length' "$PACK_DIR/package.json")" = "5" || { echo "THEME: pack does not contribute exactly five themes"; exit 1; }
+# the NEW Adom Studio (Dark-2026-derived): #1f2125 is the 2026 chrome value and does not
+# exist in the old template projection — its presence proves gen-adom-studio-v2 output.
+grep -q '#1f2125' "$PACK_DIR/themes/adom-studio-color-theme.json" || { echo "THEME: adom-studio-color-theme.json lacks #1f2125 — this is the OLD Studio, need adom-theme-system >= 1.3.1"; exit 1; }
+# unit opens W, not $HOME (field report item 2)
+grep -q 'ExecStart=.*code-server.*/home/adom/project$' /etc/systemd/system/code-server.service || { echo "UNIT: code-server ExecStart does not open /home/adom/project"; exit 1; }
+# parking directives present in every unit (field report item 1)
+for u in code-server adom-relay adom-shotlog; do
+    grep -q 'StartLimitIntervalSec=900' "/etc/systemd/system/${u}.service" || { echo "UNIT ${u}: missing StartLimitIntervalSec=900"; exit 1; }
+    grep -q 'StartLimitBurst=4' "/etc/systemd/system/${u}.service" || { echo "UNIT ${u}: missing StartLimitBurst=4"; exit 1; }
+done
+# per-import identity: generator enabled, marker NOT baked (uniqueness requires first-boot generation)
+test -L /etc/systemd/system/multi-user.target.wants/adom-distro-id.service || { echo "UNIT: adom-distro-id not enabled"; exit 1; }
+# the bake distro boots systemd, so the oneshot may have fired IN THE BAKE — that id must
+# not ship (every import would share it). Clear it now; the gate then guards regressions.
+rm -f /etc/adom-distro-id
+test ! -e /etc/adom-distro-id || { echo "IDENTITY: /etc/adom-distro-id must NOT be baked (would be shared by every import)"; exit 1; }
+echo "v22: five themes + new Studio (#1f2125) + unit parking 900/4 + W root + distro-id generator ✓"
 echo SMOKE-OK
 
 # ── 10. cleanup + slim pass ───────────────────────────────────────────────────
@@ -432,6 +486,9 @@ echo SMOKE-OK
 # documentation / man pages / non-English locale catalogs that nothing at runtime
 # reads. This is the second lever the lean v1 image used; it compresses away cheaply.
 log "cleanup + slim"
+# the bake distro itself boots systemd, so the distro-id oneshot may have fired here —
+# a baked id would be SHARED by every import. Delete it; imports regenerate at first boot.
+rm -f /etc/adom-distro-id
 apt-get autoremove -y --purge || true
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/code-server.deb
