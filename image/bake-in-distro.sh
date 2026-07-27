@@ -43,6 +43,9 @@ log "apt baseline (runtime, no build toolchain)"
 # with BLAS/LAPACK) — no evidence our AIs reach for it; revisit with evidence.
 # The long tail is handled by the PEP-668 escape-hatch hint in a skill, not by
 # growing this list forever.
+# Transient network drops killed two consecutive v22 bakes (one at the gh keyring
+# curl, one mid apt fetch). Make every downloader retry instead of dying on a blip.
+echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-adom-retries
 apt-get update
 apt-get install -y --no-install-recommends \
     ca-certificates curl wget git jq unzip zip tar gnupg openssh-client \
@@ -51,13 +54,13 @@ apt-get install -y --no-install-recommends \
     python3-requests python3-yaml python3-bs4 python3-lxml python3-pil \
     systemd systemd-sysv cron
 log "github cli"
-curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
     > /etc/apt/sources.list.d/github-cli.list
 apt-get update && apt-get install -y --no-install-recommends gh
 log "code-server ${CSV}"
-curl -fsSL "https://github.com/coder/code-server/releases/download/v${CSV}/code-server_${CSV}_$(dpkg --print-architecture).deb" -o /tmp/code-server.deb
+curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors "https://github.com/coder/code-server/releases/download/v${CSV}/code-server_${CSV}_$(dpkg --print-architecture).deb" -o /tmp/code-server.deb
 dpkg -i /tmp/code-server.deb && rm -f /tmp/code-server.deb
 log "locale"
 sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
@@ -127,11 +130,11 @@ chown -R adom:adom /opt/adom
 # live ecosystem problem. A pinned CLI silently ages out; the registry is the truth.
 log "adom-wiki CLI (fetching current release)"
 install -d -o adom -g adom -m 0755 /home/adom/.local /home/adom/.local/bin
-AWV="$(curl -fsSL https://wiki.adom.inc/api/v1/packages/adom-wiki-cli/manifest | jq -r .version)"
-AWURL="$(curl -fsSL "https://wiki.adom.inc/api/packages/adom-wiki-cli/${AWV}/assets" \
+AWV="$(curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors https://wiki.adom.inc/api/v1/packages/adom-wiki-cli/manifest | jq -r .version)"
+AWURL="$(curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors "https://wiki.adom.inc/api/packages/adom-wiki-cli/${AWV}/assets" \
     | jq -r '[.assets[] | select(.platform=="linux" and (.arch=="x64" or .arch=="x86_64" or .arch=="amd64"))][0].download_url')"
 case "$AWURL" in http*) ;; *) AWURL="https://wiki.adom.inc${AWURL}";; esac
-curl -fsSL "$AWURL" -o /home/adom/.local/bin/adom-wiki
+curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors "$AWURL" -o /home/adom/.local/bin/adom-wiki
 chmod 0755 /home/adom/.local/bin/adom-wiki && chown adom:adom /home/adom/.local/bin/adom-wiki
 log "adom-wiki CLI = $(runuser -u adom -- /home/adom/.local/bin/adom-wiki --version) (fetched ${AWV})"
 
