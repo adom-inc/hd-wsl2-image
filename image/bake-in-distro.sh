@@ -22,7 +22,7 @@
 # Then the host runs `wsl --export golden-build adom-golden-vN.tar`.
 set -euo pipefail
 trap 'echo "[bake-in-distro] FAILED at line ${LINENO} (exit $?)" >&2' ERR
-VER="${GOLDEN_VERSION:-v22}"
+VER="${GOLDEN_VERSION:-v23}"
 CSV="${CODE_SERVER_VERSION:-4.124.2}"
 CTX="${CTX:-/tmp/ctx}"
 export DEBIAN_FRONTEND=noninteractive
@@ -482,6 +482,17 @@ test -L /etc/systemd/system/multi-user.target.wants/adom-distro-id.service || { 
 rm -f /etc/adom-distro-id
 test ! -e /etc/adom-distro-id || { echo "IDENTITY: /etc/adom-distro-id must NOT be baked (would be shared by every import)"; exit 1; }
 echo "v22: five themes + new Studio (#1f2125) + unit parking 900/4 + W root + distro-id generator ✓"
+# ── v23 GATES (fresh adom-vscode) ─────────────────────────────────────────────
+# adom-vscode < 1.0.17 bundled its own contributes.themes, which puts DUPLICATE
+# "Adom Studio" entries in the picker beside the real adom-themes pack (hit live
+# 2026-07-27). 1.0.16+ also serves POST /exec on :8821 (the HD dock launch path).
+AVX_DIR="$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-vscode-* | sort -V | tail -1)"
+AVX_VER="$(jq -r .version "$AVX_DIR/package.json")"
+printf '%s\n%s\n' "1.0.17" "$AVX_VER" | sort -V -C || { echo "ADOM-VSCODE too old: $AVX_VER < 1.0.17 (need adom/adom-vscode >= 4.0.11)"; exit 1; }
+test "$(jq '.contributes.themes | length' "$AVX_DIR/package.json" 2>/dev/null || echo 0)" = "0" || { echo "ADOM-VSCODE $AVX_VER still bundles contributes.themes — duplicate picker entries"; exit 1; }
+# only ONE adom-vscode extension dir may ship (two = duplicate everything)
+test "$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-vscode-* | wc -l)" = "1" || { echo "MULTIPLE adom-vscode extension dirs baked"; exit 1; }
+echo "v23: adom-vscode $AVX_VER (>=1.0.17, no bundled themes) ✓"
 echo SMOKE-OK
 
 # ── 10. cleanup + slim pass ───────────────────────────────────────────────────
