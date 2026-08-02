@@ -86,7 +86,7 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    fonts), installed license-safe:
 
    ```bash
-   ADOM_THEME_SKIP_SATOSHI=1 adom-wiki pkg install adom/adom-theme-system
+   ADOM_THEME_SKIP_SATOSHI=1 adom-wiki pkg install adom/adom-theme
    ```
 
    That ships the theme pack plus JetBrains Mono + Familjen Grotesk (OFL 1.1, license
@@ -104,7 +104,7 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    fetched from Fontshare's own servers, the EULA-sanctioned channel. Baking Satoshi
    into the image is therefore wrong twice: illegal in a public artifact, and
    insufficient for the surface that actually needs it. Full rules:
-   https://wiki.adom.inc/api/pages/adom/adom-theme-system/files/fonts/LICENSES.md
+   https://wiki.adom.inc/api/pages/adom/adom-theme/files/fonts/LICENSES.md
 
    While in this area: the editor's default `workbench.colorTheme` must be
    **"Adom Studio"** (slug `studio`) — the theme-system contract's default, what
