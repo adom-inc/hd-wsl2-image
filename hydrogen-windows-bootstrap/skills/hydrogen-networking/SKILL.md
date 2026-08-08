@@ -1,7 +1,7 @@
 ---
 name: hydrogen-networking
 description: >
-  Port architecture, hostnames, and networking rules for Hydrogen Desktop.
+  Port architecture, hostnames, and networking rules for Hydrogen.
   MUST READ before adding ports, exposing a service to your Windows host,
   referencing host URLs from inside the workspace, or wiring any service
   communication.
@@ -11,7 +11,7 @@ description: >
   ADOM_CARBON_URL, ADOM_HYDROGEN_URL, direct connect, 8770, 7380.
 ---
 
-# Hydrogen Desktop — Networking & Port Architecture
+# Hydrogen — Networking & Port Architecture
 
 > This is the WSL2-runtime version (default). For the legacy Docker container
 > runtime (`HD_RUNTIME=docker`) see the docker/ bucket.
@@ -54,7 +54,7 @@ native TCP listeners on Windows — not inside the distro.
 | Port | Service | Notes |
 |------|---------|-------|
 | 1420 | Dev file server | Dev mode only, serves `build/` |
-| 8770 | adom-desktop direct connect | Owned by Adom Desktop, NOT HD |
+| 8770 | adom-bridge-cli direct connect | Owned by Adom Bridge, NOT HD |
 | 47080 | HD discovery server | |
 | 47083 | HD reverse proxy | Proxies to code-server |
 | 47084 | HD control API | Health, setup, eval, CDP, `/wsl/status`, `/port-forward` |
@@ -111,12 +111,12 @@ Direct connect → `http://127.0.0.1:8770/health`
 
 ## Relay Architecture
 
-The relay (`adom-desktop serve`) runs inside the distro on ports 8765
+The relay (`adom-bridge-cli serve`) runs inside the distro on ports 8765
 (WebSocket) and 8766 (HTTP). It binds `0.0.0.0`, so it is reachable both via
 WSL2 auto-forward (`localhost:8765` / `localhost:8766` on Windows) and via the
 code-server proxy. The proxy path is preferred for connection stability:
 
-1. **adom-desktop on Windows** connects as a WS client via the
+1. **adom-bridge-cli on Windows** connects as a WS client via the
    code-server proxy: `ws://127.0.0.1:7380/proxy/8765/`
 2. **Registration** happens via `server_add` on the direct connect
    API (port 8770):
@@ -130,7 +130,7 @@ code-server proxy. The proxy path is preferred for connection stability:
 3. **Health checks** use the proxy path:
    `http://127.0.0.1:7380/proxy/8766/health`
 
-This matches cloud containers where adom-desktop connects via
+This matches cloud containers where adom-bridge-cli connects via
 `wss://<slug>.adom.cloud/proxy/8765/`.
 
 ## VSCODE_PROXY_URI
@@ -170,6 +170,6 @@ wsl -d Adom-Workspace -- su - adom -c '<cmd>'
 5. **NEVER hardcode port numbers** in distro code. Read from env vars
    (`ADOM_CARBON_URL`, `ADOM_HYDROGEN_URL`) or discover via the direct
    connect API.
-6. **NEVER assume adom-desktop direct connect (8770) is owned by HD.**
-   It's owned by Adom Desktop. HD's direct-api thread binds to 8770
-   as a fallback but Adom Desktop takes priority when both are running.
+6. **NEVER assume adom-bridge-cli direct connect (8770) is owned by HD.**
+   It's owned by Adom Bridge. HD's direct-api thread binds to 8770
+   as a fallback but Adom Bridge takes priority when both are running.

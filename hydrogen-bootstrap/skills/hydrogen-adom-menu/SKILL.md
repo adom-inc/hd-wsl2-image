@@ -1,14 +1,14 @@
 ---
 name: hydrogen-adom-menu
 description: >
-  The Adom menu — the logo dropdown in the UPPER-LEFT corner of Hydrogen Desktop
+  The Adom menu — the logo dropdown in the UPPER-LEFT corner of Hydrogen
   (click the teal Adom logo). It is the hub for app-level actions: Go to
-  Dashboard, Settings, Ports, API Explorer, and a Desktop section (Adom Desktop,
+  Dashboard, Settings, Ports, API Explorer, and a Desktop section (Adom Bridge,
   Zoom, Fullscreen, Console, Developer Tools, Dev Toolbar), a
   Container section (Start/Restart/Stop), and an Admin section (Setup Steps,
   Virgin Reset, Browser Picker Manager). Also covers the window
   TITLE BAR version readout and the About dialog (version/sha/build/signed +
-  Adom Desktop version + wiki/repo links). Use when the user asks "what's in the
+  Adom Bridge version + wiki/repo links). Use when the user asks "what's in the
   Adom menu", "where's settings/devtools/about", "what version am I running", or
   about any upper-left menu item. NOTE: this is the upper-LEFT logo menu — the
   upper-RIGHT avatar dropdown is hydrogen-profile-menu. Trigger words: adom menu, logo
@@ -36,7 +36,7 @@ logo = go straight to the Dashboard.) Source: `EditorNav.svelte` → `.logo-butt
 | **Ports…** | Configure local host port assignments for HD services (`SettingsPortsDialog`) |
 | **API Explorer…** | Browse + test every HD control-API endpoint (`ApiExplorerDialog`); see **hydrogen-api** |
 | *— Desktop —* | (desktop-only section, shown when running in HD/Tauri; in order) |
-| **Adom Desktop** | Bring the embedded Adom Desktop window to the foreground (taskbar) — FIRST item in the section |
+| **Adom Bridge** | Bring the embedded Adom Bridge window to the foreground (taskbar) — FIRST item in the section |
 | **Zoom** | −/+ zoom the whole HD UI (persisted) |
 | **Fullscreen** | Toggle fullscreen |
 | **Console** | Show/hide the native HD debug console window |
@@ -67,13 +67,12 @@ inspect/inject into any panel.
 ## Version readout — title bar + About dialog
 
 **Title bar** (always visible) shows, in order:
-`Hydrogen Desktop  v<version> · <dev|release> · <sha>-dirty · <build time> · <signed|unsigned> · AD <ad-version>`
+`Hydrogen  v<version> · <dev|release> · <sha>-dirty · <build time> · <signed|unsigned> · AD <ad-version>`
 — a fast way to confirm which build is running and whether it's signed.
 
 **About dialog** (deep version info) — open it from the **tray menu → "About
-Hydrogen Desktop"** (emits the `show-about` event; the dialog is mounted
-app-wide). It shows, for **both** Hydrogen Desktop and the embedded **Adom
-Desktop**:
+Hydrogen"** (emits the `show-about` event; the dialog is mounted
+app-wide). It shows, for **both** Hydrogen and the embedded **Adom Bridge**:
 - Version, channel (dev/release), signed yes/no, commit SHA (+dirty), build time,
   install path, and reachability/endpoint (for AD)
 - Links to each app's GitHub repo and **Wiki v1 + Wiki v2** pages (they're git

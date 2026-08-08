@@ -1,7 +1,7 @@
 ---
 name: hydrogen-workspace-monitoring
 description: >
-  How Hydrogen Desktop monitors and manages the local WSL2 workspace distro
+  How Hydrogen monitors and manages the local WSL2 workspace distro
   (`Adom-Workspace`) and code-server. Covers the 15s workspace state poll, the
   two health levels (WSL2 available, distro Running + code-server reachable), the
   floaty states (WSL not available, distro stopped), auto-start via setup_and_start,

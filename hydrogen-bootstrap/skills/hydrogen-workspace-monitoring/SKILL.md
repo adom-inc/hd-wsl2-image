@@ -1,7 +1,7 @@
 ---
 name: hydrogen-workspace-monitoring
 description: >
-  How Hydrogen Desktop monitors and manages the local workspace and code-server.
+  How Hydrogen monitors and manages the local workspace and code-server.
   Covers the 15s workspace state poll, the two health levels (runtime available,
   workspace Running + code-server reachable), the floaty states, auto-start via
   setup_and_start, auto-reload of the VS Code iframe, and the lifecycle dialog

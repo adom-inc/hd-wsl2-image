@@ -1,6 +1,6 @@
 ---
 name: hydrogen-who-am-i
-description: How to answer "who am I and what can I do here?" — the auto-question HD's welcome step injects on first launch. Tells Claude what data sources to pull (Adom session token, adom-cli user/repo/container queries), the Linux-username-vs-Adom-username distinction (everyone is `adom` inside the container), and the template answer that names the user, shows their resources, and explains what HD + the Adom ecosystem can do for them. READ this skill when answering "who am i", "what can i do here", or "what is this environment". Trigger words — who am i, what can I do here, who is this user, welcome question, first AI question, introduce yourself, what is HD, what can hydrogen desktop do, user identity, user introspection, my profile in HD, my repos, my containers, linux username vs adom username, adom username container.
+description: How to answer "who am I and what can I do here?" — the auto-question HD's welcome step injects on first launch. Tells Claude what data sources to pull (Adom session token, adom-cli user/repo/container queries), the Linux-username-vs-Adom-username distinction (everyone is `adom` inside the container), and the template answer that names the user, shows their resources, and explains what HD + the Adom ecosystem can do for them. READ this skill when answering "who am i", "what can i do here", or "what is this environment". Trigger words — who am i, what can I do here, who is this user, welcome question, first AI question, introduce yourself, what is HD, what can hydrogen do, user identity, user introspection, my profile in HD, my repos, my containers, linux username vs adom username, adom username container.
 ---
 
 # HD Who Am I — answer the welcome-step prompt coherently
@@ -40,7 +40,7 @@ Tell them they have access to a full electronics prototyping ecosystem. Specific
 - **Build CLIs** — automate workflows from the terminal
 - **3D viewers** — full 3D component / STEP / GLB viewing in HD (via adom-step / adom-tsci panels)
 - **Open KiCad or Fusion 360** on their Windows machine — HD bridges to the local apps
-- **File transfer** — send/receive files between container and their Windows desktop (`adom-desktop send_files` / `pull_file`)
+- **File transfer** — send/receive files between container and their Windows desktop (`adom-bridge-cli send_files` / `pull_file`)
 - **Talk to their cloud containers** — adom-cli reaches Adom-cloud-hosted containers under their account
 - **Main AI dev environment** — HD is designed as the primary AI-powered dev surface for hardware + software
 
@@ -49,7 +49,7 @@ Tell them they have access to a full electronics prototyping ecosystem. Specific
 Adapt this to whatever the user's data is. Don't bullet-dump everything — write it as a warm welcome paragraph followed by capabilities. Use markdown.
 
 ```markdown
-You're **{user.formatted_name}**, signed in to Adom as **{user.name}** ({user.email}). You're running in **Hydrogen Desktop**, Adom's local AI dev environment, on your Windows machine. The workspace itself is Ubuntu 24.04 with code-server, the `claude` CLI, and the full Adom skill ecosystem (gallia + HD skills) already loaded.
+You're **{user.formatted_name}**, signed in to Adom as **{user.name}** ({user.email}). You're running in **Hydrogen**, Adom's local AI dev environment, on your Windows machine. The workspace itself is Ubuntu 24.04 with code-server, the `claude` CLI, and the full Adom skill ecosystem (gallia + HD skills) already loaded.
 
 A few quick orientation notes:
 - Your **Linux username here is `adom`** (not `{user.name}`) — that's intentional, every Adom workspace uses `adom` for consistency. Your Adom identity (`{user.name}`) is what shows up across the Adom ecosystem.

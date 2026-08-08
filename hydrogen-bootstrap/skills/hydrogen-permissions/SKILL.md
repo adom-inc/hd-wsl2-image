@@ -1,7 +1,7 @@
 ---
 name: hydrogen-permissions
 description: >
-  Hydrogen Desktop AUTO-GRANTS every webview permission — microphone, camera,
+  Hydrogen AUTO-GRANTS every webview permission — microphone, camera,
   clipboard-read, geolocation, notifications, sensors — so inside HD a webview app NEVER
   shows a "this site wants to use your microphone/camera/clipboard/location" prompt. READ
   THIS before building or debugging a webview app that uses getUserMedia / clipboard /
@@ -19,7 +19,7 @@ description: >
 
 # HD auto-grants every webview permission
 
-Hydrogen Desktop's webview registers a permission handler that returns **ALLOW for every
+Hydrogen's webview registers a permission handler that returns **ALLOW for every
 permission kind** — microphone, camera, clipboard-read, geolocation, notifications,
 sensors, etc. So **inside HD the user never sees a "this site wants to use your microphone /
 camera / clipboard / location" dialog.** Webview apps that call `getUserMedia`, read the

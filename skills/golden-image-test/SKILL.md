@@ -1,6 +1,6 @@
 ---
 name: golden-image-test
-description: Test/preview the HD golden WSL2 rootfs by importing it into a DISPOSABLE WSL2 distro on the user's Windows laptop via adom-desktop (real systemd PID 1, real code-server for pup). Use when the user says "test the golden image", "run the golden image", "serve the rootfs", "let me see the golden code-server", "verify the image config", or reports something wrong/missing in a golden image build. Every confirmed gap gets fixed in image/bake-in-distro.sh AND added as a build-FAILING smoke assertion — that is the rule.
+description: Test/preview the HD golden WSL2 rootfs by importing it into a DISPOSABLE WSL2 distro on the user's Windows laptop via adom-bridge-cli (real systemd PID 1, real code-server for pup). Use when the user says "test the golden image", "run the golden image", "serve the rootfs", "let me see the golden code-server", "verify the image config", or reports something wrong/missing in a golden image build. Every confirmed gap gets fixed in image/bake-in-distro.sh AND added as a build-FAILING smoke assertion — that is the rule.
 ---
 
 # Golden image testing — the feedback loop
@@ -32,15 +32,15 @@ the user's real `Adom-Workspace` distro is never touched, and
 
 ```bash
 # 0. See what distros exist (NEVER touch Adom-Workspace / docker-desktop):
-adom-desktop run_script '{"interpreter":"powershell","scriptB64":"<b64: wsl.exe -l -v | Out-String>"}'
+adom-bridge-cli run_script '{"interpreter":"powershell","scriptB64":"<b64: wsl.exe -l -v | Out-String>"}'
 # 1. Detached worker on the laptop: download the release tarball from the
 #    GitHub URL (public, anonymous — the exact path HD will use), then
 #    wsl --import golden-test-vN <dir>\fs <tar> --version 2, write done.txt.
 #    Launch via Start-Process -WindowStyle Hidden (download > relay timeout).
 # 2. Block on the marker (server-side, no poll loop):
-adom-desktop desktop_watch_files '{"path":"C:\\golden-test-vN","glob":"done.txt","timeoutMs":540000,"pollMs":3000}'
+adom-bridge-cli desktop_watch_files '{"path":"C:\\golden-test-vN","glob":"done.txt","timeoutMs":540000,"pollMs":3000}'
 # 3. PID 1 must be systemd (this is the whole point):
-adom-desktop run_script '{"interpreter":"powershell","scriptB64":"<b64: wsl -d golden-test-vN -- cat /proc/1/comm>"}'   # → systemd
+adom-bridge-cli run_script '{"interpreter":"powershell","scriptB64":"<b64: wsl -d golden-test-vN -- cat /proc/1/comm>"}'   # → systemd
 # 4. Registry-native checks (the workspace-updater daemon is RETIRED — assert it is ABSENT):
 #    wsl -d golden-test-vN -- cat /etc/adom-golden-version                 # → vN
 #    wsl -d golden-test-vN -- test ! -e /usr/local/bin/adom-workspace-updater
@@ -65,7 +65,7 @@ show the user in pup. The code-server runs on the LAPTOP, not this container.
 - Extensions panel: `anthropic.claude-code` + `adom.adom-vscode` present;
   auto-update enabled (settings `extensions.autoUpdate: true`)
 - Terminal: `claude --version`, `which claude` (→ `~/.local/bin/claude`),
-  `adom-cli --version`, `adom-desktop --version`, `code-server --version`
+  `adom-cli --version`, `adom-bridge-cli --version`, `code-server --version`
 - `ls ~/.claude/skills/` shows `adom/` + 45+ `hd-*` skills (38 generic + 11 wsl2)
 - **Web Hydrogen parity**: start a server (`python3 -m http.server 9999`) and confirm
   `http://localhost:<cs-port>/proxy/9999/` serves it — the `/proxy/<port>/` route is

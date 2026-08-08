@@ -12,14 +12,14 @@ description: >
   setup panel, Adom menu, HD UI.
 ---
 
-# Hydrogen Desktop — UI Reference
+# Hydrogen — UI Reference
 
 ## Window Layout
 
 HD's window has these regions (top to bottom, left to right):
 
 ### Title Bar
-- **Left**: "jlauer12 / Hydrogen Desktop" — shows user + app name
+- **Left**: "jlauer12 / Hydrogen" — shows user + app name
 - **Right**: CPU/RAM badges, window controls (minimize/maximize/close)
 
 ### Tab Bar
@@ -48,7 +48,7 @@ The main menu, opened by clicking the Adom logo at the top-left. Items are group
 - **API Explorer...** — opens the control-API endpoint explorer dialog
 
 **DESKTOP** (Tauri-only — won't appear in browser-served HD; in order)
-- **Adom Desktop** — brings the embedded Adom Desktop window to the foreground (taskbar); bus id `adom-desktop.open`
+- **Adom Bridge** — brings the embedded Adom Bridge window to the foreground (taskbar); bus id `adom-bridge-cli.open`
 - **Zoom** — webview zoom controls (− %  +) with persistence across launches
 - **Fullscreen** — toggle fullscreen
 - **Console** — show/hide the HD debug console window
@@ -129,7 +129,7 @@ CTRL="$(cat ~/.adom/hd-control-url)"
 Common ids (always `GET /ui/actions` for the live set): `adom-menu.open`/`.close`,
 **`profile-menu.open`/`.close`**, `ports.open`/`.close`, `settings.open`/`.close`,
 `api-explorer.open`/`.close`, `browser-picker.open`/`.close`, `about.open`/`.close`,
-`adom-desktop.open`, `setup-panel.show`, `virgin-reset.open`, `dashboard.go`,
+`adom-bridge-cli.open`, `setup-panel.show`, `virgin-reset.open`, `dashboard.go`,
 `fullscreen.toggle`, `console.toggle`, `devtools.open`, `dev-toolbar.toggle`,
 `container.start`/`.stop`/`.restart`.
 

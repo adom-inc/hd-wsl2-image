@@ -9,7 +9,7 @@ description: >
   rollback, step failed, 28 steps, wipe, reset workspace, keep auth, test setup.
 ---
 
-# Hydrogen Desktop — Setup Panel & Virgin Reset
+# Hydrogen — Setup Panel & Virgin Reset
 
 WSL2-runtime version (default). The legacy 24-step Docker cascade
 (`HD_RUNTIME=docker`) is in the docker/ bucket.
@@ -43,10 +43,10 @@ Adom-Workspace`.
 | 4 | set-env-vars | ADOM_CARBON_URL / ADOM_HYDROGEN_URL / ADOM_HD_CONTROL_URL / VSCODE_PROXY_URI / ADOM_DESKTOP_MODE | ✓ |
 | 5 | inject-api-key | Write the Adom session token to `/var/run/adom/api-key` (mode 644) | ✓ |
 | 6 | configure-vscode | settings.json / trusted-domains / activity-bar are BAKED; re-assert theme + workbench backstops idempotently; apply per-session layout via :8821 | ✓ |
-| 7 | ensure-adom-desktop | Verify the Adom Desktop companion app is running on Windows | ✗ |
-| 8 | start-relay | Start the adom-desktop relay inside the workspace (8765/8766) | ✓ |
+| 7 | ensure-adom-bridge-cli | Verify the Adom Bridge companion app is running on Windows | ✗ |
+| 8 | start-relay | Start the adom-bridge-cli relay inside the workspace (8765/8766) | ✓ |
 | 9 | test-direct-connect | Prove the fast container→desktop command path | ✗ |
-| 10 | test-relay | Register the relay with Adom Desktop for file streaming | ✗ |
+| 10 | test-relay | Register the relay with Adom Bridge for file streaming | ✗ |
 | 11 | test-adom-cli | GATE: carbon path + hydrogen-proxy reachability via adom-cli (6 retries) | ✗ |
 | 12 | install-claude-cli | Install the `claude` CLI into the distro at RUNTIME (NOT baked — its self-setup needs a live session). Idempotent | ✗ |
 | 13 | claude-auth | The single human gate; restore creds or drive in-editor Claude.ai sign-in; runs just before payoff | ✓ |
@@ -61,7 +61,7 @@ Adom-Workspace`.
 
 These are NOT setup steps anymore — they are baked at image-build time and
 must not be listed or "run": `install-gallia`, `install-hd-skills`,
-`verify-adom-desktop`, `install-claude-ext`,
+`verify-adom-bridge-cli`, `install-claude-ext`,
 `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. gallia, the 8
 Adom CLIs, the Claude Code VS Code extension (the claude CLI is runtime step 12, NOT baked), code-server, settings, and all
 `hd-*` skills are baked into the golden image. See
@@ -166,10 +166,10 @@ Writes the Adom session token into the distro at `/var/run/adom/api-key`
 ### Step 9 — test-direct-connect
 Proves the fast container→desktop command path. The CLI auto-probes the host
 control API (wired to the WSL gateway IP by `/etc/init-host-internal.sh`) and
-routes through Adom Desktop's direct connect API.
+routes through Adom Bridge's direct connect API.
 
 ### Step 10 — test-relay (register relay)
-Registers the relay (started by step 8, `start-relay`) with Adom Desktop for
+Registers the relay (started by step 8, `start-relay`) with Adom Bridge for
 file streaming via the code-server proxy path. This enables `pull_file`,
 `send_files`, and `shell_execute`.
 

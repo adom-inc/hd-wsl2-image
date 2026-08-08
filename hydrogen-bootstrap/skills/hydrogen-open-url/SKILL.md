@@ -1,7 +1,7 @@
 ---
 name: hydrogen-open-url
 description: >
-  The decision guide for "open a URL / open a website" inside Hydrogen Desktop.
+  The decision guide for "open a URL / open a website" inside Hydrogen.
   When the user says "open ti.com" / "pull up the datasheet page" / "show me
   that site", HD has SIX distinct ways to do it — a Hydrogen webview tab, an HD
   browser window, Pup (AI-drivable Chrome), a native desktop browser profile,
@@ -111,12 +111,12 @@ The Browser Picker defaults the "Open in a fresh window" toggle ON for auth URLs
 On `/open-url`, `fresh` pre-seeds that toggle (the picker still shows; add `direct:true`
 to skip it); `/open-in-profile` opens fresh directly. See `hd-browser-picker`.
 
-**3. Pup** — open and then drive it with `adom-desktop browser_*` verbs
+**3. Pup** — open and then drive it with `adom-bridge-cli browser_*` verbs
 (`browser_open_window`, `browser_navigate`, `browser_screenshot`, `browser_eval`,
 `browser_reload`, …). Either open the URL directly via Pup, or let the picker
 route to Pup. See the `pup` skill for the full verb set.
 ```bash
-adom-desktop browser_eval '{"sessionId":"default","js":"document.title"}'
+adom-bridge-cli browser_eval '{"sessionId":"default","js":"document.title"}'
 ```
 
 **6. Headless content** — if you only need to *read* the page, skip the browser

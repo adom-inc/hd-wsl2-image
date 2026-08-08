@@ -1,7 +1,7 @@
 ---
 name: hydrogen-api
 description: >
-  Complete reference for Hydrogen Desktop control API endpoints. The control
+  Complete reference for Hydrogen control API endpoints. The control
   API runs on a dynamic port (find it via port discovery). Use these endpoints
   to drive HD programmatically: manage the workspace runtime, control Claude
   Code, manipulate VS Code, manage workspace tabs, run setup steps, trigger
@@ -35,7 +35,7 @@ The control API port is dynamic (default 47084, auto-resolves conflicts).
 
 ```bash
 # From HD log
-adom-desktop hd_log '{"tail":100}' | grep "control="
+adom-bridge-cli hd_log '{"tail":100}' | grep "control="
 
 # From inside the workspace — USE THIS. HD writes its live control URL to a discovery
 # file every launch, so you never hunt for the dynamic port:
@@ -63,13 +63,13 @@ which is unchanged for web-hydrogen parity.
 
 ## AD-health diagnostics (`/ad/*`)
 
-These verify the **adom-desktop / relay / embedded-AD** half of HD is alive (the
+These verify the **adom-bridge-cli / relay / embedded-AD** half of HD is alive (the
 bridge that connects this cloud container to HD). All GET, all return `{ok, ...}`.
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/ad/health` | Overall embedded-AD health roll-up |
-| GET | `/ad/process` | Is the adom-desktop process running |
+| GET | `/ad/process` | Is the adom-bridge-cli process running |
 | GET | `/ad/embedded` | Embedded-AD module status |
 | GET | `/ad/workspace-direct` | ⭐ The **converged** check — direct path to the workspace relay (use this one) |
 | GET | `/ad/relay` | Relay (WS/HTTP) reachability |

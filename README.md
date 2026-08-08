@@ -1,6 +1,6 @@
-# hd-wsl2-image — golden WSL2 rootfs for Hydrogen Desktop
+# hd-wsl2-image — golden WSL2 rootfs for Hydrogen
 
-Builds the **golden image** that Hydrogen Desktop imports via
+Builds the **golden image** that Hydrogen imports via
 `wsl --import Adom-Workspace <dir> adom-golden-<ver>.tar.gz`.
 
 Successor to `hydrogen-desktop/wsl-thin` (the ~30 MB bare-Ubuntu tarball
@@ -18,7 +18,7 @@ updates ship as new image versions (monthly bake), not git pulls.
 | **Claude Code extension** from Open VSX (step 16) | relay start + tests (steps 9, 11–14) |
 | **adom-vscode binary + extension** registered with code-server (step 3) | `claude-auth` — user OAuth (step 17) |
 | **HD self-awareness skills** shared/ + wsl2/ (step 8) | `welcome` (step 18) |
-| **adom-desktop CLI** latest published (step 10) | `host.docker.internal` alias (per boot) |
+| **adom-bridge-cli CLI** latest published (step 10) | `host.docker.internal` alias (per boot) |
 | Adom CLIs from the public wiki: adom-cli, adom-wiki, adom-vscode, adom-mouser, adom-digikey, adom-jlcpcb, adom-parts-search, adom-gchat | per-user state: Carbon API key, wiki token |
 | `adom` user 1001 + sudoers + `/etc/wsl.conf` (`default=adom`, systemd on) | |
 

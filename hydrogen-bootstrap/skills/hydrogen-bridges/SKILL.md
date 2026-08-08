@@ -3,7 +3,7 @@ name: hydrogen-bridges
 description: >
   Complete reference for the HD bridge ecosystem: the built-in KiCad, Fusion 360,
   and Puppeteer bridges, plus the extensible wiki bridge catalog (e.g. Blender)
-  and the full set of Adom Desktop capabilities. How they connect through adom-desktop, the Bridge Manager
+  and the full set of Adom Bridge capabilities. How they connect through adom-bridge-cli, the Bridge Manager
   dialog, bridge status polling, and all bridge CLI commands. Use when the AI
   needs to take screenshots, control KiCad/Fusion/browser, transfer files,
   interact with the user's desktop, or check bridge status. Trigger words --
@@ -12,7 +12,7 @@ description: >
   bridge manager, bridge status, bridge install.
 ---
 
-# Hydrogen Desktop -- Bridge Ecosystem
+# Hydrogen -- Bridge Ecosystem
 
 HD is the bridge between your Docker container and the user's Windows desktop.
 All commands go through the relay at ws://localhost:8765/.
@@ -31,17 +31,17 @@ ecosystem, not a fixed list — new bridges ship via the wiki catalog (see
 | `fusion-bridge` | Fusion 360 Bridge | 8773 | Fusion 360 | Control Fusion 360 CAD/CAM and EAGLE PCB |
 | `puppeteer-bridge` | Puppeteer Bridge | 8851 | Chrome for Testing | Chrome automation, screenshots, and recording |
 
-**Bridge ports have conventional defaults** (KiCad **8771**, Fusion **8773**, Pup **8851**), but adom-desktop registers the **live** port at bridge launch and may pick a different one if a default is taken. To find the actual live port, run `adom-desktop status` and look at `desktop.apps.<bridge>.bridgePort` (or `adom-desktop bridge_list`). In practice you don't need the port directly — use the `adom-desktop <verb>` CLI which routes to the right bridge automatically.
+**Bridge ports have conventional defaults** (KiCad **8771**, Fusion **8773**, Pup **8851**), but adom-bridge-cli registers the **live** port at bridge launch and may pick a different one if a default is taken. To find the actual live port, run `adom-bridge-cli status` and look at `desktop.apps.<bridge>.bridgePort` (or `adom-bridge-cli bridge_list`). In practice you don't need the port directly — use the `adom-bridge-cli <verb>` CLI which routes to the right bridge automatically.
 
 Bridges are launched on demand by HD. They are NOT always running. The Bridge
 Manager polls status every 15 seconds via Tauri `invoke('get_bridge_status')`.
 
-### What Adom Desktop can do (live capability list)
+### What Adom Bridge can do (live capability list)
 
 Bridges are only part of AD. Query the **authoritative, machine-specific** list:
 
 ```bash
-adom-desktop status   # → .capabilities  and  .desktop.apps
+adom-bridge-cli status   # → .capabilities  and  .desktop.apps
 ```
 
 On a typical machine `.capabilities` =
@@ -55,7 +55,7 @@ Mapping to where each is documented:
 | `files` | send_files / pull_file | **hd-file-transfer**, **hydrogen-adom-desktop** |
 | `notify` | desktop toast notifications | this skill |
 | `shell` | run a command on the user's PC (approval-gated) | **hydrogen-adom-desktop** |
-| `usb` | USB passthrough to the workspace (e.g. workcell hardware over USBIP) | not yet covered — query `adom-desktop status`; future skill |
+| `usb` | USB passthrough to the workspace (e.g. workcell hardware over USBIP) | not yet covered — query `adom-bridge-cli status`; future skill |
 
 > `.desktop.apps` also reports, per app: `bridgeRunning`, `installed`, `running`,
 > `version` — use it to check whether the target app (KiCad/Fusion/Chrome) is
@@ -77,7 +77,7 @@ interface BridgeInfo {
     display_name: string   // e.g. "KiCad Bridge"
     version: string        // e.g. "1.0.0"
     description: string
-    port: number           // conventional default; live port via `adom-desktop status`
+    port: number           // conventional default; live port via `adom-bridge-cli status`
     status: 'running' | 'stopped' | 'not_installed'
     app_detected: boolean  // true if target app (KiCad, Fusion, Chrome) is found
     app_name: string       // e.g. "KiCad"
@@ -106,7 +106,7 @@ each bridge's status. Auto-refreshes every 15 seconds.
 > the dialog shows an install link — but the AI doesn't have to stop there. For
 > KiCad and Node.js you can trigger an **unattended winget install** instead of
 > asking the user to download:
-> `adom-desktop desktop_install_kicad '{}'` / `adom-desktop desktop_install_node '{}'`.
+> `adom-bridge-cli desktop_install_kicad '{}'` / `adom-bridge-cli desktop_install_node '{}'`.
 > (Fusion 360 cannot be installed programmatically — surface the link for that.)
 
 ### CSS selectors
@@ -158,7 +158,7 @@ setTimeout(function() {
 
 ## Prerequisites
 
-Check connection: `adom-desktop ping` -- returns "pong" if HD is connected.
+Check connection: `adom-bridge-cli ping` -- returns "pong" if HD is connected.
 If not connected, the user needs to launch HD on their Windows machine.
 
 ---
@@ -167,16 +167,16 @@ If not connected, the user needs to launch HD on their Windows machine.
 
 ```bash
 # Full screen capture
-adom-desktop desktop_screenshot_screen
+adom-bridge-cli desktop_screenshot_screen
 
 # Resized for Claude vision (default to this)
-adom-desktop desktop_screenshot_screen '{"maxWidth": 1500}'
+adom-bridge-cli desktop_screenshot_screen '{"maxWidth": 1500}'
 
 # Specific window by HWND
-adom-desktop desktop_screenshot_window '{"hwnd": 12345}'
+adom-bridge-cli desktop_screenshot_window '{"hwnd": 12345}'
 
 # List all capturable windows
-adom-desktop desktop_list_windows
+adom-bridge-cli desktop_list_windows
 ```
 
 **AI guidance:**
@@ -189,46 +189,46 @@ adom-desktop desktop_list_windows
 
 ## Browser Automation (Puppeteer Bridge)
 
-Port: default **8851** (adom-desktop registers the live port; see `adom-desktop status`). Auto-downloads Chrome for Testing if not present.
+Port: default **8851** (adom-bridge-cli registers the live port; see `adom-bridge-cli status`). Auto-downloads Chrome for Testing if not present.
 
 ```bash
 # Open browser window
-adom-desktop browser_open_window '{"url": "https://example.com"}'
+adom-bridge-cli browser_open_window '{"url": "https://example.com"}'
 
 # Screenshot current tab
-adom-desktop browser_screenshot '{"sessionId": "default"}'
+adom-bridge-cli browser_screenshot '{"sessionId": "default"}'
 
 # Evaluate JavaScript
-adom-desktop browser_eval '{"js": "document.title", "sessionId": "default"}'
+adom-bridge-cli browser_eval '{"js": "document.title", "sessionId": "default"}'
 
 # Navigate
-adom-desktop browser_navigate '{"url": "https://...", "sessionId": "default"}'
+adom-bridge-cli browser_navigate '{"url": "https://...", "sessionId": "default"}'
 
 # List open windows/tabs
-adom-desktop browser_list_windows
+adom-bridge-cli browser_list_windows
 
 # Record tab (CDP screencast, zero dialogs)
-adom-desktop browser_record_start '{"sessionId": "default"}'
-adom-desktop browser_record_stop '{"sessionId": "default"}'
+adom-bridge-cli browser_record_start '{"sessionId": "default"}'
+adom-bridge-cli browser_record_stop '{"sessionId": "default"}'
 ```
 
 ---
 
 ## KiCad Bridge
 
-Port: default **8771** (adom-desktop registers the live port; see `adom-desktop status`). Requires KiCad to be installed on the user's Windows machine.
+Port: default **8771** (adom-bridge-cli registers the live port; see `adom-bridge-cli status`). Requires KiCad to be installed on the user's Windows machine.
 
 ```bash
-adom-desktop kicad_open_board '{"path": "C:\\path\\to\\board.kicad_pcb"}'
-adom-desktop kicad_open_schematic '{"path": "C:\\path\\to\\schematic.kicad_sch"}'
-adom-desktop kicad_open_3d_viewer
-adom-desktop kicad_run_drc '{"path": "..."}'
-adom-desktop kicad_screenshot_all
-adom-desktop kicad_window_info
-adom-desktop kicad_send_key '{"key": "ctrl+s"}'
-adom-desktop kicad_list_versions
-adom-desktop kicad_install_symbol '{"path": "/tmp/symbol.kicad_sym", "library": "MyLib"}'
-adom-desktop kicad_install_library '{"path": "/tmp/footprints", "name": "MyFootprints"}'
+adom-bridge-cli kicad_open_board '{"path": "C:\\path\\to\\board.kicad_pcb"}'
+adom-bridge-cli kicad_open_schematic '{"path": "C:\\path\\to\\schematic.kicad_sch"}'
+adom-bridge-cli kicad_open_3d_viewer
+adom-bridge-cli kicad_run_drc '{"path": "..."}'
+adom-bridge-cli kicad_screenshot_all
+adom-bridge-cli kicad_window_info
+adom-bridge-cli kicad_send_key '{"key": "ctrl+s"}'
+adom-bridge-cli kicad_list_versions
+adom-bridge-cli kicad_install_symbol '{"path": "/tmp/symbol.kicad_sym", "library": "MyLib"}'
+adom-bridge-cli kicad_install_library '{"path": "/tmp/footprints", "name": "MyFootprints"}'
 ```
 
 **Always run `kicad_window_info` BEFORE any KiCad operation** to check for modal dialogs —
@@ -240,12 +240,12 @@ you detect a KiCad error/blocking dialog** (a save-permission error, a file-form
 DRC blocker). Each entry is `{hwnd, ownerHwnd, title}` (e.g. `title:"Error"`):
 
 ```bash
-adom-desktop kicad_window_info '{}'
+adom-bridge-cli kicad_window_info '{}'
 # → { editors:[...], hasModalDialogs:true,
 #     modalDialogs:[{ "hwnd":200934, "ownerHwnd":6163368, "title":"Error" }], projectManager:{...} }
 ```
 - ⚠️ `modalDialogs` gives the **title + hwnd, NOT the body text**. To read *what the error says*,
-  **screenshot the dialog by its hwnd**: `adom-desktop desktop_screenshot_window '{"hwnd":200934}'`
+  **screenshot the dialog by its hwnd**: `adom-bridge-cli desktop_screenshot_window '{"hwnd":200934}'`
   → read the saved PNG. (Verified live 2026-06-15: a `ctrl+s` on a read-only board surfaced
   `hasModalDialogs:true` + a `title:"Error"` entry; screenshotting its hwnd read *"Insufficient
   permissions to save file …"*.)
@@ -259,14 +259,14 @@ adom-desktop kicad_window_info '{}'
 
 ## Fusion 360 Bridge
 
-Port: default **8773** (adom-desktop registers the live port; see `adom-desktop status`). Requires Fusion 360 to be installed on the user's Windows machine.
+Port: default **8773** (adom-bridge-cli registers the live port; see `adom-bridge-cli status`). Requires Fusion 360 to be installed on the user's Windows machine.
 
 ```bash
-adom-desktop fusion_start
-adom-desktop fusion_import_step '{"path": "C:\\path\\to\\model.step"}'
-adom-desktop fusion_export_step '{"path": "C:\\path\\to\\output.step"}'
-adom-desktop fusion_board_info
-adom-desktop fusion_electron_run '{"command": "..."}'
+adom-bridge-cli fusion_start
+adom-bridge-cli fusion_import_step '{"path": "C:\\path\\to\\model.step"}'
+adom-bridge-cli fusion_export_step '{"path": "C:\\path\\to\\output.step"}'
+adom-bridge-cli fusion_board_info
+adom-bridge-cli fusion_electron_run '{"command": "..."}'
 ```
 
 ---
@@ -274,23 +274,23 @@ adom-desktop fusion_electron_run '{"command": "..."}'
 ## Extensible bridge catalog (bridges are NOT a fixed set)
 
 Bridges are a growing ecosystem. The three above (KiCad / Fusion 360 / Puppeteer)
-are **built into Adom Desktop**. Additional bridges are published to the **wiki
+are **built into Adom Bridge**. Additional bridges are published to the **wiki
 bridge catalog** and installed on demand — for example the **Blender bridge**
-(`adom-blender-bridge`), which is NOT built in (it won't appear in `adom-desktop
+(`adom-blender-bridge`), which is NOT built in (it won't appear in `adom-bridge-cli
 status` until installed). To use a catalog bridge:
 
 - **Discover:** Bridge Manager → "Browse Bridge Catalog" → wiki `/apps?tag=hd-bridge`.
 - **Reserved ports:** the `8900-8999` range is set aside for 3rd-party bridges.
-- **Enumerate what's actually live:** `adom-desktop status` → `desktop.apps.*` lists
+- **Enumerate what's actually live:** `adom-bridge-cli status` → `desktop.apps.*` lists
   every bridge AD currently knows about, with `bridgePort`, `status`, and whether
   the target app was detected. **Treat that as the source of truth** for "what
   bridges exist right now" — this skill's table lists the core ones, but new
   catalog bridges will appear in `status` without being in this table.
-- **Invoke any bridge** through the `adom-desktop <verb>` CLI; it routes to the
+- **Invoke any bridge** through the `adom-bridge-cli <verb>` CLI; it routes to the
   right bridge automatically (you rarely need the port directly).
 
 > Maintainer note: keep this skill in sync by periodically running
-> `adom-desktop status` against a fully-bridged machine and reconciling the table.
+> `adom-bridge-cli status` against a fully-bridged machine and reconciling the table.
 
 ---
 
@@ -298,10 +298,10 @@ status` until installed). To use a catalog bridge:
 
 ```bash
 # Send file from Docker to Windows desktop
-adom-desktop send_files '{"files": [{"path": "/home/adom/project/output.pdf"}]}'
+adom-bridge-cli send_files '{"files": [{"path": "/home/adom/project/output.pdf"}]}'
 
 # Pull file from Windows to Docker
-adom-desktop pull_file '{"remotePath": "C:\\Users\\john\\Downloads\\data.csv", "localPath": "/tmp/data.csv"}'
+adom-bridge-cli pull_file '{"remotePath": "C:\\Users\\john\\Downloads\\data.csv", "localPath": "/tmp/data.csv"}'
 ```
 
 ---
@@ -310,16 +310,16 @@ adom-desktop pull_file '{"remotePath": "C:\\Users\\john\\Downloads\\data.csv", "
 
 ```bash
 # Toast notification
-adom-desktop notify_user '{"message": "Build complete!", "duration_ms": 5000}'
+adom-bridge-cli notify_user '{"message": "Build complete!", "duration_ms": 5000}'
 
 # Open URL in user's browser
-adom-desktop desktop_open_url '{"url": "https://..."}'
+adom-bridge-cli desktop_open_url '{"url": "https://..."}'
 
 # Open folder in Explorer
-adom-desktop desktop_open_folder '{"path": "C:\\Users\\john\\project"}'
+adom-bridge-cli desktop_open_folder '{"path": "C:\\Users\\john\\project"}'
 
 # Execute shell command (requires user approval)
-adom-desktop shell_execute '{"command": "dir C:\\Github"}'
+adom-bridge-cli shell_execute '{"command": "dir C:\\Github"}'
 ```
 
 ---
@@ -329,7 +329,7 @@ adom-desktop shell_execute '{"command": "dir C:\\Github"}'
 > **Served by the embedded AD process, NOT HD's built-in bridge.** The
 > `desktop_record_*` / `desktop_recorder_*` verbs only exist when the standalone
 > AD (spawned `--embedded`) is connected. Verify before using:
-> `adom-desktop status` → `.capabilities` must include `record`. If it's absent,
+> `adom-bridge-cli status` → `.capabilities` must include `record`. If it's absent,
 > only HD's built-in bridge is up and these verbs return "unknown desktop
 > command". See **hd-recording** for full details.
 
@@ -341,12 +341,12 @@ adom-desktop shell_execute '{"command": "dir C:\\Github"}'
 
 ```bash
 # Record entire desktop (AD-served; needs the confirm guard, zero dialogs)
-adom-desktop desktop_record_start '{"reason": "Demo recording", "confirmDesktopNotTabRecording": true}'
-adom-desktop desktop_record_stop
+adom-bridge-cli desktop_record_start '{"reason": "Demo recording", "confirmDesktopNotTabRecording": true}'
+adom-bridge-cli desktop_record_stop
 
 # Record a single browser tab (CDP screencast, zero dialogs) — prefer this for one tab
-adom-desktop browser_record_start '{"sessionId": "default"}'
-adom-desktop browser_record_stop '{"sessionId": "default"}'
+adom-bridge-cli browser_record_start '{"sessionId": "default"}'
+adom-bridge-cli browser_record_stop '{"sessionId": "default"}'
 ```
 
 ---
@@ -355,7 +355,7 @@ adom-desktop browser_record_stop '{"sessionId": "default"}'
 
 ```bash
 # 1. Take screenshot
-adom-desktop desktop_screenshot_screen '{"maxWidth": 1500}'
+adom-bridge-cli desktop_screenshot_screen '{"maxWidth": 1500}'
 # 2. Read the screenshot (it's saved to /screenshots/)
 # 3. Analyze with Claude vision
 # 4. Make changes

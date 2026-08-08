@@ -71,13 +71,13 @@ cp /home/adom/project/myfile.txt /mnt/c/Users/john/Downloads/
 cp /mnt/c/Users/john/Downloads/myfile.txt /home/adom/project/
 ```
 
-### 3. `adom-desktop send_files` / `pull_file` (from inside the workspace, via the relay)
+### 3. `adom-bridge-cli send_files` / `pull_file` (from inside the workspace, via the relay)
 ```bash
 # Send a workspace file to your Windows desktop's Downloads folder
-adom-desktop send_files '{"filePaths":["/home/adom/project/myfile.txt"],"targetApp":"general","destinationFolder":"."}'
+adom-bridge-cli send_files '{"filePaths":["/home/adom/project/myfile.txt"],"targetApp":"general","destinationFolder":"."}'
 
 # Pull a Windows file into the workspace's /tmp
-adom-desktop pull_file '{"filePaths":["C:\\Users\\john\\Downloads\\myfile.txt"],"saveTo":"/tmp"}'
+adom-bridge-cli pull_file '{"filePaths":["C:\\Users\\john\\Downloads\\myfile.txt"],"saveTo":"/tmp"}'
 ```
 
 ### 4. Open the workspace's `/home/adom/project/` in VS Code's File Explorer

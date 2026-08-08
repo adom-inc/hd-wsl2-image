@@ -11,7 +11,7 @@ description: >
   HD adom login, Your profile, Your repositories.
 ---
 
-# Hydrogen Desktop -- Authentication Reference
+# Hydrogen -- Authentication Reference
 
 ## Auth Flow Overview
 

@@ -2,76 +2,76 @@
 name: hydrogen-topology
 description: >
   MUST READ before ANY HD work. Explains the three-layer topology: cloud
-  Docker (where Claude runs), Windows machine (where HD + Adom Desktop run),
+  Docker (where Claude runs), Windows machine (where HD + Adom Bridge run),
   and the HD local WSL2 workspace (the Adom-Workspace distro). Every command
   you run goes through the relay to Windows. You CANNOT directly access the
   WSL2 distro — you must shell through Windows. Trigger words — HD topology,
-  cloud vs local, wsl exec, where am I, which workspace, adom-desktop
+  cloud vs local, wsl exec, where am I, which workspace, adom-bridge-cli
   relay, test from container, three tiers, architecture, windows machine.
 ---
 
-# Hydrogen Desktop — Topology (READ FIRST)
+# Hydrogen — Topology (READ FIRST)
 
 WSL2-runtime version (default). Legacy Docker container runtime (`HD_RUNTIME=docker`) is in the docker/ bucket.
 
 ## You are NOT on the user's machine
 
 You (Claude) run inside an **Adom cloud Docker container**. The user's
-Windows machine is a remote target you reach through the `adom-desktop`
+Windows machine is a remote target you reach through the `adom-bridge-cli`
 CLI relay. There are THREE separate environments:
 
 ### 1. Cloud Docker (where you run)
 - Your shell, your filesystem, your git repos
-- `adom-desktop` CLI connects to Adom Desktop on Windows via relay
+- `adom-bridge-cli` CLI connects to Adom Bridge on Windows via relay
 - This container has NOTHING to do with HD's local WSL2 workspace
 - Restarting the WSL2 distro on Windows does NOT affect you
 - You can freely `git push`, edit code, run builds here
 
 ### 2. Windows Machine (user's desktop)
-- **Adom Desktop** — relay client app, listens on port 8770 (direct connect)
-- **Hydrogen Desktop** — the Tauri app you're building
+- **Adom Bridge** — relay client app, listens on port 8770 (direct connect)
+- **Hydrogen** — the Tauri app you're building
 - **WSL2** — hosts the `Adom-Workspace` distro
-- You reach this via `adom-desktop shell_execute '{"command":"..."}'`
+- You reach this via `adom-bridge-cli shell_execute '{"command":"..."}'`
 - Commands run in `cmd.exe` on Windows
 
 ### 3. HD Local WSL2 Workspace (the `Adom-Workspace` distro)
 - Distro name: `Adom-Workspace` (fixed — no random suffix, no container name)
-- Runs code-server, adom-desktop CLI, relay server
-- You reach this via: `adom-desktop shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- <cmd>"}'`
+- Runs code-server, adom-bridge-cli CLI, relay server
+- You reach this via: `adom-bridge-cli shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- <cmd>"}'`
 - This is TWO hops: cloud → relay → Windows → wsl exec → distro
 
 ## Command Patterns
 
 ### Run something on Windows
 ```bash
-adom-desktop shell_execute '{"command":"dir C:\\Github"}'
+adom-bridge-cli shell_execute '{"command":"dir C:\\Github"}'
 ```
 
 ### Run something in the HD local WSL2 workspace
 ```bash
-adom-desktop shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- ls /home/adom"}'
+adom-bridge-cli shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- ls /home/adom"}'
 ```
 
-### Test adom-desktop CLI inside the WSL2 workspace
+### Test adom-bridge-cli CLI inside the WSL2 workspace
 ```bash
-adom-desktop shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- adom-desktop ping"}'
+adom-bridge-cli shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- adom-bridge-cli ping"}'
 ```
-This tests the FULL chain: distro → local relay → Adom Desktop on Windows.
+This tests the FULL chain: distro → local relay → Adom Bridge on Windows.
 
 ### Screenshot HD window
 ```bash
-adom-desktop desktop_screenshot_window '{"hwnd":HWND}'
+adom-bridge-cli desktop_screenshot_window '{"hwnd":HWND}'
 ```
 
 ### Pull file from Windows to cloud
 ```bash
-adom-desktop pull_file '{"filePaths":["C:\\path\\file"],"saveTo":"/tmp"}'
+adom-bridge-cli pull_file '{"filePaths":["C:\\path\\file"],"saveTo":"/tmp"}'
 ```
 
 ## The WSL2 distro ≠ Your Container
 
 - If the `Adom-Workspace` distro on Windows goes down, YOUR cloud container is fine
-- You can still talk to Adom Desktop, screenshot windows, run shell commands
+- You can still talk to Adom Bridge, screenshot windows, run shell commands
 - You just can't `wsl -d Adom-Workspace ...` into the workspace until it's back
 - Starting/stopping the distro on Windows is done via shell_execute. Only ever
   touch `Adom-Workspace` (`wsl --terminate Adom-Workspace`) — NEVER a global
@@ -81,10 +81,10 @@ adom-desktop pull_file '{"filePaths":["C:\\path\\file"],"saveTo":"/tmp"}'
 ## The Relay Chain
 
 ```
-Cloud adom-desktop CLI
+Cloud adom-bridge-cli CLI
   → WS relay (cloud :8765)
     → internet
-      → Adom Desktop on Windows (relay client)
+      → Adom Bridge on Windows (relay client)
         → executes command locally
           → returns result
             → back through relay to your CLI
@@ -92,10 +92,10 @@ Cloud adom-desktop CLI
 
 For the HD local WSL2 workspace, there's a SECOND relay:
 ```
-Workspace's adom-desktop CLI
+Workspace's adom-bridge-cli CLI
   → local relay (distro :8765)
     → code-server proxy (:7380/proxy/8765/)
-      → Adom Desktop on Windows (connected as WS client)
+      → Adom Bridge on Windows (connected as WS client)
         → executes command
           → returns through same chain
 ```
@@ -104,13 +104,13 @@ Workspace's adom-desktop CLI
 
 The HD install flow MUST verify this chain works:
 
-1. **Verify Adom Desktop running on Windows** — probe port 8770
+1. **Verify Adom Bridge running on Windows** — probe port 8770
    If not running: tell user to install from wiki and launch it
-2. **Install adom-desktop CLI into the workspace** — download binary
-3. **Start relay inside the workspace** — `adom-desktop serve`
-4. **Register relay with Adom Desktop** — `server_add` via direct connect
+2. **Install adom-bridge-cli CLI into the workspace** — download binary
+3. **Start relay inside the workspace** — `adom-bridge-cli serve`
+4. **Register relay with Adom Bridge** — `server_add` via direct connect
    URL: `ws://127.0.0.1:{code_server}/proxy/8765/`
-5. **Test round-trip** — `wsl -d Adom-Workspace -u adom -- adom-desktop ping`
+5. **Test round-trip** — `wsl -d Adom-Workspace -u adom -- adom-bridge-cli ping`
    Must return `pong` — proves the full chain works
 
 ## NEVER Do These
@@ -123,7 +123,7 @@ The HD install flow MUST verify this chain works:
    They're completely independent.
 4. **NEVER run a global `wsl --shutdown` or `wsl --unregister` of anything
    other than `Adom-Workspace`.** Those hit every distro on the user's machine.
-5. **NEVER skip the adom-desktop round-trip test.**
+5. **NEVER skip the adom-bridge-cli round-trip test.**
    The relay chain has many links — test end-to-end, not individual parts.
 
 ## Related skills

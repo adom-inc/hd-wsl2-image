@@ -1,34 +1,34 @@
 ---
 name: hydrogen-overview
 description: >
-  Master index for the platform-generic Hydrogen Desktop skills (the
-  hd-bootstrap set). Start here to find the right skill for any HD topic.
+  Master index for the platform-generic Hydrogen skills (the
+  hydrogen-bootstrap set). Start here to find the right skill for any HD topic.
   These skills are runtime-neutral and apply on every host HD runs on
   (Windows, macOS, Ubuntu); platform layers add their own *-windows (etc.)
-  companions. Trigger words: HD skills, hydrogen desktop, what skills, find
+  companions. Trigger words: HD skills, hydrogen, what skills, find
   skill, HD help, HD overview, skill index, HD reference.
 ---
 
-# Hydrogen Desktop — Skill Index
+# Hydrogen — Skill Index
 
-Hydrogen Desktop (HD) is Adom's standalone Tauri v2 app that runs the full
+Hydrogen (HD) is Adom's standalone Tauri v2 app that runs the full
 Hydrogen experience locally. One exe manages your workspace, VS Code,
 Claude Code, the bridges, and the Adom Wiki — zero cloud dependency. HD runs
 on Windows, macOS, and Ubuntu.
 
-This index lists the **platform-generic** HD skills (the `hd-bootstrap` set).
+This index lists the **platform-generic** HD skills (the `hydrogen-bootstrap` set).
 Every fact in these skills holds regardless of host OS. Where a topic has
 host-specific mechanics (e.g. how the workspace is hosted, host networking,
 host-side recording), the platform layer adds a companion skill — on Windows
 those are the **`hydrogen-windows-bootstrap`** `*-windows` skills (and equivalents
 for other platforms). The generic skill cross-references its companion.
 
-## The generic HD skills (hd-bootstrap)
+## The generic HD skills (hydrogen-bootstrap)
 
 | Skill | What it covers |
 |---|---|
 | **hydrogen-adom-auth** | Adom login/logout, session token, profile menu, how auth feeds setup. |
-| **hydrogen-adom-desktop** | What HD and Adom Desktop (AD) are and how they work together — AD is your hands on the user's real OS (files, shell, OS screenshots, app launch, bridges). |
+| **hydrogen-adom-desktop** | What HD and Adom Bridge (AD) are and how they work together — AD is your hands on the user's real OS (files, shell, OS screenshots, app launch, bridges). |
 | **hydrogen-adom-menu** | The upper-left Adom logo menu (Settings, Ports, API Explorer, DevTools, Setup/Virgin Reset) + About dialog + version readout. |
 | **hydrogen-api** | Control API reference. Runtime-neutral endpoints. |
 | **hydrogen-bridges** | Built-in KiCad/Fusion/Puppeteer bridges + extensible wiki catalog (e.g. Blender) + AD capability list. |

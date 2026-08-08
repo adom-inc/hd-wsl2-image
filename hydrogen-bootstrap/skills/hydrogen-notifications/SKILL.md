@@ -1,12 +1,12 @@
 ---
 name: hydrogen-notifications
 description: >
-  How Hydrogen Desktop reaches the user OUTSIDE the window — native OS toast
+  How Hydrogen reaches the user OUTSIDE the window — native OS toast
   notifications + taskbar/dock attention — so the AI can proactively tell the user a
   long job finished or that it needs them (great for hands-free / away-from-keyboard
   work). Covers HD's notify handler (levels info|warning|error|emergency, optional
   <actions> buttons; emergency = a persistent attention request until the user looks)
-  and how to fire one with the `notify` desktop command / `adom-desktop notify_user`.
+  and how to fire one with the `notify` desktop command / `adom-bridge-cli notify_user`.
   Also the in-app `/ui/toast` (a message INSIDE the HD window) and Pup's
   browser_alert_window taskbar/dock nudge. The native OS-toast backend is
   platform-specific (see [[hydrogen-notifications-windows]] for the Windows path);
@@ -18,7 +18,7 @@ description: >
   toast, ui toast, /ui/toast, show a toast in HD, toast inside the window.
 ---
 
-# Hydrogen Desktop — Notifications (reaching the user outside the window)
+# Hydrogen — Notifications (reaching the user outside the window)
 
 When the user isn't looking at HD — a long build is running, you've finished a job, or
 you're **blocked and need them** — you can reach them on the OS level: a native **toast**,
@@ -39,7 +39,7 @@ Source: `src-tauri/crates/hd-app/src/notifications.rs` (`handle_notify` → `sho
 Dispatched via the `notify` message; from the workspace use the AD CLI:
 
 ```bash
-adom-desktop notify_user '{"title":"Build complete","body":"hd_build_rust finished — exit 0","level":"info"}'
+adom-bridge-cli notify_user '{"title":"Build complete","body":"hd_build_rust finished — exit 0","level":"info"}'
 ```
 
 Payload shape (`NotifyPayload`):
@@ -102,7 +102,7 @@ notice — see [hd-recording](../hd-recording/SKILL.md).)
 For AI-driven browser work, Pup has its own attention nudge:
 
 ```bash
-adom-desktop browser_alert_window '{"sessionId":"default"}'
+adom-bridge-cli browser_alert_window '{"sessionId":"default"}'
 ```
 
 It **flashes the taskbar / bounces the dock** for that browser window (and brings the page
@@ -119,7 +119,7 @@ to front within Chrome) **without stealing foreground focus** — a gentle "look
   glance-able toast and the spoken answer.
 
 Don't spam: one notification per meaningful event. Verify the bridge first
-(`adom-desktop ping`) before claiming you notified them.
+(`adom-bridge-cli ping`) before claiming you notified them.
 
 ## Related skills
 - [hydrogen-adom-desktop](../hydrogen-adom-desktop/SKILL.md) — AD is what carries `notify_user` to the host; `ping`/`status` to verify the bridge and the `notify` capability

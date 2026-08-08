@@ -1,13 +1,13 @@
 ---
 name: hydrogen-container
-description: Context for Claude Code running inside a Hydrogen Desktop WSL2 workspace distro. Documents the exact OS (Ubuntu 24.04, code-server 4.112.0, the Adom-Workspace distro), explains how setup differs from Adom cloud containers (setup-steps NOT bootstrap.sh), what bridges are available, and how to use the relay. Trigger on startup, adom-cli errors, bridge commands, screenshot requests, container-platform questions, code-server / VS Code extension issues, or when the AI needs concrete facts about its environment instead of guessing.
+description: Context for Claude Code running inside a Hydrogen WSL2 workspace distro. Documents the exact OS (Ubuntu 24.04, code-server 4.112.0, the Adom-Workspace distro), explains how setup differs from Adom cloud containers (setup-steps NOT bootstrap.sh), what bridges are available, and how to use the relay. Trigger on startup, adom-cli errors, bridge commands, screenshot requests, container-platform questions, code-server / VS Code extension issues, or when the AI needs concrete facts about its environment instead of guessing.
 ---
 
-# Hydrogen Desktop Workspace (WSL2)
+# Hydrogen Workspace (WSL2)
 
 WSL2-runtime version (default). Legacy Docker container runtime (`HD_RUNTIME=docker`) is in the docker/ bucket.
 
-You are running inside the **`Adom-Workspace` WSL2 distro** managed by Hydrogen Desktop (HD). HD is the flagship Adom desktop app — it manages your WSL2 workspace, bridges to desktop apps, and provides VS Code + Claude Code.
+You are running inside the **`Adom-Workspace` WSL2 distro** managed by Hydrogen (HD). HD is the flagship Adom desktop app — it manages your WSL2 workspace, bridges to desktop apps, and provides VS Code + Claude Code.
 
 ## The workspace — exact facts (don't guess)
 
@@ -54,10 +54,10 @@ If this returns user data, all adom-cli commands work (containers, repos, orgs, 
 
 ## Relay server is running
 
-The adom-desktop relay runs on ports 8765 (WebSocket) / 8766 (HTTP) inside this distro. The `start-relay` setup step launches it.
+The adom-bridge-cli relay runs on ports 8765 (WebSocket) / 8766 (HTTP) inside this distro. The `start-relay` setup step launches it.
 
 Check health: `curl -sf http://127.0.0.1:8766/health`
-Check desktop connection: `adom-desktop ping`
+Check desktop connection: `adom-bridge-cli ping`
 
 The Windows host control API is reachable from inside the distro at `127.0.0.1` — WSL2 mirrored networking shares loopback with the Windows host. The port is dynamic per launch, so read the live URL from `~/.adom/hd-control-url` (`http://127.0.0.1:<dynamic>`): `BASE="$(cat ~/.adom/hd-control-url)"; curl "$BASE/health"`.
 
@@ -65,47 +65,47 @@ The Windows host control API is reachable from inside the distro at `127.0.0.1` 
 
 ### Screenshots (zero dialogs, instant)
 ```bash
-adom-desktop desktop_screenshot_screen                    # full screen capture
-adom-desktop desktop_screenshot_screen '{"maxWidth":1500}' # resized for Claude vision
-adom-desktop desktop_screenshot_window '{"hwnd": N}'       # capture specific window
-adom-desktop desktop_list_windows                          # list all windows with HWNDs
+adom-bridge-cli desktop_screenshot_screen                    # full screen capture
+adom-bridge-cli desktop_screenshot_screen '{"maxWidth":1500}' # resized for Claude vision
+adom-bridge-cli desktop_screenshot_window '{"hwnd": N}'       # capture specific window
+adom-bridge-cli desktop_list_windows                          # list all windows with HWNDs
 ```
 Default to `maxWidth: 1500, format: "png"` for UI screenshots. Use `"jpeg"` for natural photos, `"webp"` for smaller files.
 
 ### Browser automation (Puppeteer)
 ```bash
-adom-desktop browser_open_window '{"url": "https://..."}'
-adom-desktop browser_screenshot '{"sessionId": "default"}'
-adom-desktop browser_eval '{"js": "document.title"}'
-adom-desktop browser_navigate '{"url": "..."}'
+adom-bridge-cli browser_open_window '{"url": "https://..."}'
+adom-bridge-cli browser_screenshot '{"sessionId": "default"}'
+adom-bridge-cli browser_eval '{"js": "document.title"}'
+adom-bridge-cli browser_navigate '{"url": "..."}'
 ```
 
 ### KiCad bridge
 ```bash
-adom-desktop kicad_open_board '{"path": "C:\\path\\to\\board.kicad_pcb"}'
-adom-desktop kicad_screenshot_all
-adom-desktop kicad_run_drc '{"path": "..."}'
-adom-desktop kicad_window_info
+adom-bridge-cli kicad_open_board '{"path": "C:\\path\\to\\board.kicad_pcb"}'
+adom-bridge-cli kicad_screenshot_all
+adom-bridge-cli kicad_run_drc '{"path": "..."}'
+adom-bridge-cli kicad_window_info
 ```
 
 ### Fusion 360 bridge
 ```bash
-adom-desktop fusion_start
-adom-desktop fusion_import_step '{"path": "..."}'
-adom-desktop fusion_export_step '{"path": "..."}'
+adom-bridge-cli fusion_start
+adom-bridge-cli fusion_import_step '{"path": "..."}'
+adom-bridge-cli fusion_export_step '{"path": "..."}'
 ```
 
 ### File transfer
 ```bash
-adom-desktop send_files '{"files": [{"path": "/home/adom/file.txt"}]}'
-adom-desktop pull_file '{"remotePath": "C:\\Users\\john\\file.txt", "localPath": "/tmp/file.txt"}'
+adom-bridge-cli send_files '{"files": [{"path": "/home/adom/file.txt"}]}'
+adom-bridge-cli pull_file '{"remotePath": "C:\\Users\\john\\file.txt", "localPath": "/tmp/file.txt"}'
 ```
 
 ### Desktop interaction
 ```bash
-adom-desktop notify_user '{"message": "Build complete", "duration_ms": 3000}'
-adom-desktop desktop_open_url '{"url": "https://..."}'
-adom-desktop desktop_open_folder '{"path": "C:\\Users\\john\\project"}'
+adom-bridge-cli notify_user '{"message": "Build complete", "duration_ms": 3000}'
+adom-bridge-cli desktop_open_url '{"url": "https://..."}'
+adom-bridge-cli desktop_open_folder '{"path": "C:\\Users\\john\\project"}'
 ```
 
 ## What's different from Adom cloud containers

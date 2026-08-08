@@ -134,9 +134,9 @@ Defaults (you can override via ports.json):
 | Reverse proxy (`proxy`) | 47083 |
 | HD control API (`control`) | 47084 |
 | WebView2 CDP (`cdp`) | 47085 |
-| KiCad bridge | **dynamic** (adom-desktop picks at bridge launch) |
-| Fusion bridge | **dynamic** (adom-desktop picks at bridge launch) |
-| Puppeteer bridge | **dynamic** (adom-desktop picks at bridge launch) |
+| KiCad bridge | **dynamic** (adom-bridge-cli picks at bridge launch) |
+| Fusion bridge | **dynamic** (adom-bridge-cli picks at bridge launch) |
+| Puppeteer bridge | **dynamic** (adom-bridge-cli picks at bridge launch) |
 
 **Conflict resolution is NOT "next sequential port."** On startup
 `PortConfig::resolve_available()` checks `proxy`, `control`, and `cdp`; if a
@@ -202,22 +202,22 @@ of truth every consumer reads.
 ## Bridge ports are dynamic
 
 KiCad, Fusion 360, Puppeteer, and any 3rd-party bridges no longer have known
-fixed ports. When a bridge launches, **adom-desktop picks an available port at
+fixed ports. When a bridge launches, **adom-bridge-cli picks an available port at
 runtime** and registers it. To find a running bridge's current port, query
-adom-desktop:
+adom-bridge-cli:
 
 ```bash
-adom-desktop status
+adom-bridge-cli status
 # Look at desktop.apps.<bridge>.bridgePort
 ```
 
-Or use the bridge directly via adom-desktop CLI — you don't need the port at all:
+Or use the bridge directly via adom-bridge-cli CLI — you don't need the port at all:
 
 ```bash
-adom-desktop kicad_open_board '{"path":"..."}'  # adom-desktop routes to the right port
-adom-desktop browser_eval '{"js":"..."}'
+adom-bridge-cli kicad_open_board '{"path":"..."}'  # adom-bridge-cli routes to the right port
+adom-bridge-cli browser_eval '{"js":"..."}'
 ```
 
 This means **old code or skill examples that hardcoded fixed bridge ports
-(8771 / 8773 / 8851) are stale.** Use the adom-desktop CLI or `status` lookup
+(8771 / 8773 / 8851) are stale.** Use the adom-bridge-cli CLI or `status` lookup
 instead.

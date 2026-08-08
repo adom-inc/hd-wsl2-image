@@ -1,6 +1,6 @@
 ---
 name: hydrogen-workspace-updater
-description: "How Hydrogen Desktop keeps THIS workspace's Adom tooling up to date, and how an Adom employee ships a skill / extension / CLI to EVERY Adom workspace automatically. Use when asked \"how do I get the latest skills or tooling from Adom\", \"how are updates delivered here\", \"what's the reload banner\", \"how do I make a skill that distributes to all Adom users\", \"how do I publish tooling to every workspace\". Trigger words: workspace updater, adom-workspace-updater, latest skills, get updates, how do updates work, auto update, distribute a skill, publish to all users, ship to every workspace, reload banner."
+description: "How Hydrogen keeps THIS workspace's Adom tooling up to date, and how an Adom employee ships a skill / extension / CLI to EVERY Adom workspace automatically. Use when asked \"how do I get the latest skills or tooling from Adom\", \"how are updates delivered here\", \"what's the reload banner\", \"how do I make a skill that distributes to all Adom users\", \"how do I publish tooling to every workspace\". Trigger words: workspace updater, adom-workspace-updater, latest skills, get updates, how do updates work, auto update, distribute a skill, publish to all users, ship to every workspace, reload banner."
 ---
 
 # How this workspace stays up to date — and how to ship to every workspace
@@ -10,7 +10,7 @@ You don't do anything. A gentle background daemon, **`adom-workspace-updater`**,
 workspace's Adom tooling current automatically. It runs **~5 minutes after the workspace
 starts**, then **every ~2 hours** — low-priority and **out-of-band** (it is never part of
 startup and can't slow or break it). When an update needs the editor reloaded (e.g. a new VS
-Code extension landed), Hydrogen Desktop fades in a banner at the top of the editor:
+Code extension landed), Hydrogen fades in a banner at the top of the editor:
 **"<Tool> is ready — click to reload."** Click it. Done.
 
 Why a daemon at all? Your workspace is imaged **once at install and never re-imaged** — so

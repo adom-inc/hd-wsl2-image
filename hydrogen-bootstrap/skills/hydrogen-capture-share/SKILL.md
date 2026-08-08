@@ -17,7 +17,7 @@ description: >
   capture, capture scope, panel screenshot, capture frame, share with the AI.
 ---
 
-# Hydrogen Desktop — Screen Capture & Sharing (the AI-consent surface)
+# Hydrogen — Screen Capture & Sharing (the AI-consent surface)
 
 This is the surface **you (the AI) trigger to see HD's own screen.** To screenshot
 the *editor* (panels, the workspace, or the whole monitor) into the container, a

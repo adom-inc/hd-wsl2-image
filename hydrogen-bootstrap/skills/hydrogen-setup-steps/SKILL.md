@@ -10,7 +10,7 @@ exact per-platform step list, the workspace-provisioning commands, and the
 state-file name live in the companion [[hydrogen-setup-steps-windows]] skill (for
 Windows/WSL2).
 
-When you first launched Hydrogen Desktop (or after a virgin reset), HD ran an
+When you first launched Hydrogen (or after a virgin reset), HD ran an
 install sequence to turn a blank machine into a fully-tooled Adom workspace.
 The heavy tooling (code-server, gallia, the Adom CLIs, the claude CLI + Code
 extension, VS Code settings, and all `hd-*` skills) is already BAKED into the
@@ -34,10 +34,10 @@ auto-retry. The exact steps and ordering are platform-specific — see
 | set-env-vars | Set `ADOM_CARBON_URL`, `ADOM_HYDROGEN_URL`, `ADOM_HD_CONTROL_URL`, `VSCODE_PROXY_URI`, `ADOM_DESKTOP_MODE` |
 | inject-api-key | Write the Adom session token into the workspace so adom-cli works |
 | configure-vscode | settings.json / trusted-domains / activity-bar are BAKED; re-asserts theme + workbench backstops idempotently, and applies the per-session layout |
-| ensure-adom-desktop | Verify the Adom Desktop companion app is running (the relay's desktop bridge) |
-| start-relay | Start the adom-desktop relay inside the workspace |
+| ensure-adom-bridge-cli | Verify the Adom Bridge companion app is running (the relay's desktop bridge) |
+| start-relay | Start the adom-bridge-cli relay inside the workspace |
 | test-direct-connect | Prove the fast workspace→desktop command path |
-| test-relay | Register the relay with Adom Desktop for file streaming (file transfer + shell exec) |
+| test-relay | Register the relay with Adom Bridge for file streaming (file transfer + shell exec) |
 | test-adom-cli | GATE: carbon path + hydrogen-proxy reachability via adom-cli |
 | claude-auth | The single human gate — restore Claude creds or drive the in-editor Claude.ai sign-in via the native browser Browser Picker; runs LAST before the payoff steps |
 | ensure-sse | GATE: confirm the editor browser SSE session is connected so Welcome's webview-open doesn't 409 |
@@ -48,7 +48,7 @@ auto-retry. The exact steps and ordering are platform-specific — see
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
 These are NOT setup steps anymore — they are baked at image-build time:
-`install-gallia`, `install-hd-skills`, `verify-adom-desktop`,
+`install-gallia`, `install-hd-skills`, `verify-adom-bridge-cli`,
 `install-claude-cli`, `install-claude-ext`, `write-vscode-settings`,
 `set-trusted-domains`, `clean-layout`. If a user asks "what installed gallia /
 the Claude extension / my skills / VS Code settings", the answer is: **baked

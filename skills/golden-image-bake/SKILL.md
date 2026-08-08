@@ -1,13 +1,13 @@
 ---
 name: golden-image-bake
-description: "Rebuild + release the Hydrogen Desktop golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says \"bake the golden image\", \"rebuild the wsl2 image\", \"new golden image\", \"cut a new hd-wsl2-image version\", or when registry drift (bootstraps / CLIs / extensions) makes the shipped image stale. Registry-native: the whole image is ONE `adom-wiki pkg install adom/hydrogen-windows-bootstrap`. Built WSL2-NATIVE on John's laptop via adom-desktop — never docker, never in the cloud container. EMPLOYEE-ONLY — never publish this skill to the wiki or into the public image."
+description: "Rebuild + release the Hydrogen golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says \"bake the golden image\", \"rebuild the wsl2 image\", \"new golden image\", \"cut a new hd-wsl2-image version\", or when registry drift (bootstraps / CLIs / extensions) makes the shipped image stale. Registry-native: the whole image is ONE `adom-wiki pkg install adom/hydrogen-windows-bootstrap`. Built WSL2-NATIVE on John's laptop via adom-bridge-cli — never docker, never in the cloud container. EMPLOYEE-ONLY — never publish this skill to the wiki or into the public image."
 ---
 
 # Golden image bake — adom-inc/hd-wsl2-image
 
 ## 🔒 DESIGN GOALS — NON-NEGOTIABLE INVARIANTS (read before changing ANYTHING)
 
-**THE overarching goal: Hydrogen Desktop must behave as close to Web Hydrogen
+**THE overarching goal: Hydrogen must behave as close to Web Hydrogen
 (the cloud Docker container) as possible.** Every golden-image decision is judged
 against "does this match how Web Hydrogen works?" If a change would diverge HD's
 behaviour from Web Hydrogen, it is almost certainly wrong.
@@ -38,8 +38,8 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    v1–v14. Keep code-server, node, gh, git, python3.
 4. **Built from signed wiki.adom.inc packages via the `adom-wiki` CLI, NOT gallia and
    NOT adompkg (both retired here).** ONE declarative install:
-   `adom-wiki pkg install adom/hydrogen-windows-bootstrap` → core + hd-bootstrap + WSL2 layer
-   + adom-desktop. No gallia clone / install.mjs / GALLIA_TOKEN anywhere in the image.
+   `adom-wiki pkg install adom/hydrogen-windows-bootstrap` → core + hydrogen-bootstrap + WSL2 layer
+   + adom-bridge-cli. No gallia clone / install.mjs / GALLIA_TOKEN anywhere in the image.
 5. **WSL2-native bake, NEVER docker** (see [[feedback_golden_image_wsl2_never_docker]]).
 6. **WORKSPACE ROOT (W) = `/home/adom/project` — LOCKED (John 2026-07-26: "we can
    never go back").** This supersedes the earlier `/home/adom` choice. W is the folder
@@ -71,12 +71,12 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    `scripts.install`** — verified clean-HOME: 51 skills + settings.json, dependency
    ordered, no shim. `scripts.postinstall` is deprecated (publish warns
    `POSTINSTALL_DEPRECATED`; hard-reject is staged, gated on all three HD bootstraps
-   migrating — `adom/hd-mac-bootstrap` (Kyle) was the last straggler).
+   migrating — `adom/hydrogen-mac-bootstrap` (Kyle) was the last straggler).
 8. **ALWAYS RESOLVE LATEST — NEVER PIN PACKAGE VERSIONS (John's call, 2026-07-20).**
    The bake installs unpinned ON PURPOSE: John wants "give me whatever is newest right
    now." Do NOT add version pins for reproducibility, and do not propose it again. The
    tradeoff is understood and accepted: the same script on different days produces
-   different images (v18 got hd-bootstrap 0.2.10; v19, four days later, got 0.2.23 + 2
+   different images (v18 got hydrogen-bootstrap 0.2.10; v19, four days later, got 0.2.23 + 2
    extra skills). REPORT what drifted in the release notes; ship latest regardless.
    Corollary — same rule for the toolchain: **fetch the `adom-wiki` CLI fresh at bake
    time, never reuse a staged/pinned binary** (see the v19 stale-1.0.41 incident below).
@@ -108,7 +108,7 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
 
    While in this area: the editor's default `workbench.colorTheme` must be
    **"Adom Studio"** (slug `studio`) — the theme-system contract's default, what
-   hd-bootstrap seeds, and what HD's name guards expect. An earlier image commit set
+   hydrogen-bootstrap seeds, and what HD's name guards expect. An earlier image commit set
    Kickstand; reconcile to Adom Studio unless John rules otherwise.
 
 When in doubt about ANY of the above, VERIFY empirically against a re-imported image
@@ -130,7 +130,7 @@ Legacy/retired: `bake-hydrogen-setup.sh`, `scripts/build-rootfs.sh` (gallia+chro
 `image/public-scrub.sh` (existed only to strip gallia's check-updates hook — the
 registry-native bake never creates it), `image/adompkg/` (adompkg is deprecated).
 
-## Procedure — WSL2-native on the laptop via adom-desktop
+## Procedure — WSL2-native on the laptop via adom-bridge-cli
 
 Everything runs through the AD relay against `AdomLapper`. **If two ADs are connected
 (winvm + AdomLapper) every call needs `--target AdomLapper`** or you get
@@ -144,19 +144,19 @@ Everything runs through the AD relay against `AdomLapper`. **If two ADs are conn
 #    DO NOT stage adom-wiki: the bake fetches it fresh (invariant 8 corollary).
 
 # 1. fresh throwaway distro (never reuse — a used distro carries prior state)
-adom-desktop --target AdomLapper wsl_unregister '{"distro":"golden-build"}'
-adom-desktop --target AdomLapper wsl_import '{"distro":"golden-build","installDir":"C:\\tmp\\golden-build-vN","tarball":"C:\\tmp\\ubuntu-base.tar.gz"}'
+adom-bridge-cli --target AdomLapper wsl_unregister '{"distro":"golden-build"}'
+adom-bridge-cli --target AdomLapper wsl_import '{"distro":"golden-build","installDir":"C:\\tmp\\golden-build-vN","tarball":"C:\\tmp\\ubuntu-base.tar.gz"}'
 
 # 2. copy ctx in, then bake (async — held session keeps /tmp alive, no mid-bake shutdown)
 #    wsl_exec / run_script take a base64 `scriptB64`, NOT a raw command string.
-adom-desktop --target AdomLapper wsl_exec_async '{"distro":"golden-build","user":"root","scriptB64":"<b64 of: export GOLDEN_VERSION=vN; bash /tmp/ctx/bake-in-distro.sh>"}'
-adom-desktop --target AdomLapper wsl_job_status '{"jobId":"wsljob-…"}'   # poll until running:false
+adom-bridge-cli --target AdomLapper wsl_exec_async '{"distro":"golden-build","user":"root","scriptB64":"<b64 of: export GOLDEN_VERSION=vN; bash /tmp/ctx/bake-in-distro.sh>"}'
+adom-bridge-cli --target AdomLapper wsl_job_status '{"jobId":"wsljob-…"}'   # poll until running:false
 
 # 3. gate on SMOKE-OK in the output. The bake has an ERR trap that prints the failing
 #    line number — a bare `exit 2` with no message means you are on an old copy.
 
 # 4. export + compress + hash (gzip -9 takes ~4 min for ~450 MB)
-adom-desktop --target AdomLapper wsl_export '{"distro":"golden-build","tarball":"C:\\tmp\\adom-golden-vN.tar"}'
+adom-bridge-cli --target AdomLapper wsl_export '{"distro":"golden-build","tarball":"C:\\tmp\\adom-golden-vN.tar"}'
 #    then in the Ubuntu distro: gzip -9 -c … > …tar.gz && sha256sum … | tee ….tar.gz.sha256
 
 # 5. release BOTH assets (tar.gz + .sha256 sidecar)
@@ -237,7 +237,7 @@ have re-installed the retired daemon into a clean image).
 | v16 | clean first-load editor (per-workspace sidebar-collapse seed, no welcome/tabs/panel) |
 | v17 | Web Hydrogen port parity: `autoForwardPortsSource: hybrid` (kills the >20-ports popup) |
 | v18 | REGISTRY-NATIVE: `adom-wiki pkg install` replaces adompkg/gallia; workspace-updater + hd-skillpack RETIRED; tree sudo-free |
-| v21 (next) | CONTAINER-MANAGED SERVICES: code-server + adom-relay (`adom-desktop serve`) + adom-shotlog baked as enabled systemd units (HD stops holding wsl.exe children; its unit-writer stays as legacy self-heal, drop-ins `*.service.d/hd-env.conf` remain HD-written); adom-shotlog registry-tracked via hydrogen-windows-bootstrap@0.2.9 dependency (Colby's `pkg update` sweep now covers it); cron asserted enabled; smoke gates for all units + shotlog module/binary/alias; theme system baked license-safe (`ADOM_THEME_SKIP_SATOSHI=1`, invariant 9) |
+| v21 (next) | CONTAINER-MANAGED SERVICES: code-server + adom-relay (`adom-bridge-cli serve`) + adom-shotlog baked as enabled systemd units (HD stops holding wsl.exe children; its unit-writer stays as legacy self-heal, drop-ins `*.service.d/hd-env.conf` remain HD-written); adom-shotlog registry-tracked via hydrogen-windows-bootstrap@0.2.9 dependency (Colby's `pkg update` sweep now covers it); cron asserted enabled; smoke gates for all units + shotlog module/binary/alias; theme system baked license-safe (`ADOM_THEME_SKIP_SATOSHI=1`, invariant 9) |
 | v20 | python parity libs baked (`python3-{requests,yaml,bs4,lxml,pil}` via apt — Web Hydrogen parity; NO numpy); `definitions` skill litmus (core@4.13.4 depends on adom/definitions — guard it); adom-cli source-overlay REMOVED (registry adom/adom-cli@4.0.5 now ships 0.5.12); PEP-668 install guidance added to the hydrogen-container skill |
 | v19 | adom-cli 0.5.12 overlay (`~/.adom/hd-proxy-url` fallback for env-less shells); bake fetches adom-wiki fresh; postinstall shim removed (bootstraps now `scripts.install`). **Shipped in HD 0.1.170** (pin 4c3f159b); virgin fresh-install PASSED 20/20 cascade, and the fix was proven in the ACTUAL failure condition — `env -u ADOM_CARBON_URL -u ADOM_HYDROGEN_URL adom-cli hydrogen webview open-or-refresh` returned `created` instead of 404ing against carbon. HD also hardened its `test-adom-cli` setup gate to cover the AI-shell (code-server systemd env) channel, so this class of regression now HALTS setup. |
 
@@ -263,7 +263,7 @@ a bake-only assertion when the failure is runtime-shaped (env, sessions, network
   claude-code-extension version growth.
 
 **DEPENDENCY DIRECTION (get this right):** the bake installs the LEAF
-`adom-wiki pkg install adom/hydrogen-windows-bootstrap`, which pulls hd-bootstrap → core down
+`adom-wiki pkg install adom/hydrogen-windows-bootstrap`, which pulls hydrogen-bootstrap → core down
 as DEPS. Installing `adom/core` alone gets you NONE of the HD layers (core is the base;
 it doesn't know they exist). "Removed from core's deps" ≠ "removed from the image."
 
@@ -274,7 +274,7 @@ mouser survived but were RENAMED (`digikey`→`adom-digikey`) + reparented under
 `adom-parts-search`. LESSON: anything HD genuinely needs should be an EXPLICIT dep of
 `adom/hydrogen-bootstrap` (which we own), not left to `core`'s churn — and the smoke test
 should carry an "expected apps present" litmus so a dropped package FAILS the bake.
-v20 registry set (24 pkgs): apps = adom-cli, adom-desktop, adom-digikey, adom-jlcpcb,
+v20 registry set (24 pkgs): apps = adom-cli, adom-bridge-cli, adom-digikey, adom-jlcpcb,
 adom-mouser, adom-parts-search, adom-vscode, adom-wiki-cli, hook, prose-lint, step2glb;
 skills = adom, adom-cli-design, adom-ui-design, adom-workspace-control, app-creator,
 building-adom-apps, definitions, prose-style, ralph-loop-test, wiki; + 51 bundled hd-*.

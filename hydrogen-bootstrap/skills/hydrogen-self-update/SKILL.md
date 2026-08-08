@@ -1,11 +1,11 @@
 ---
 name: hydrogen-self-update
-description: "How the AI keeps the Hydrogen Desktop APP itself (the Windows/macOS frontend, not the workspace) up to date — AI-first, consent-based. Use when asked \"is there an HD update\", \"update Hydrogen Desktop\", \"is my HD current\", \"what version of HD am I on\", \"update the app\", \"new HD version\". Trigger words: HD update, update hydrogen desktop, app update, is HD current, HD version, new version of HD, relaunch to update, self-update."
+description: "How the AI keeps the Hydrogen APP itself (the Windows/macOS frontend, not the workspace) up to date — AI-first, consent-based. Use when asked \"is there an HD update\", \"update Hydrogen\", \"is my HD current\", \"what version of HD am I on\", \"update the app\", \"new HD version\". Trigger words: HD update, update hydrogen, app update, is HD current, HD version, new version of HD, relaunch to update, self-update."
 ---
 
 # HD Self-Update — the AI updates the app for you (consent-based)
 
-This is how the **Hydrogen Desktop app itself** (the Windows/macOS shell around your editor)
+This is how the **Hydrogen app itself** (the Windows/macOS shell around your editor)
 stays current. It is NOT the `workspace-updater` (that's the in-distro tooling). It's **AI-first**:
 there is no nagging button — the AI notices a new HD version, tells you both version numbers, and
 on your OK downloads + relaunches onto the new version.
@@ -27,7 +27,7 @@ Returns `{ current_version, latest_version, update_available, staged, ... }`:
 
 ## What to do
 If `update_available`, **tell the user both versions and ASK** — e.g.:
-> "Hydrogen Desktop **vX → vY** is available (already downloaded). Want me to update and relaunch?
+> "Hydrogen **vX → vY** is available (already downloaded). Want me to update and relaunch?
 > Takes a few seconds; this workspace and our chat reconnect right after."
 
 On **explicit consent**:

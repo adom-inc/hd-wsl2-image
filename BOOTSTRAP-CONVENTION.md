@@ -23,7 +23,7 @@ is additive; lower layers are pulled unmodified, never forked or curated.
 It's a DAG with `core` as the root, not a strict stack. Most vendor value
 (hardware, PCBs, parts, design skills) is runtime-agnostic, so vendors layer
 on **core** and compose with *any* environment (HD or web Hydrogen). A vendor
-layers on **hd-bootstrap** only for something that genuinely needs HD's
+layers on **hydrogen-bootstrap** only for something that genuinely needs HD's
 runtime (a tab integration, a bridge).
 
 ## Naming convention

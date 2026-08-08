@@ -1,7 +1,7 @@
 ---
 name: hydrogen-port-watcher
 description: >
-  Port reachability in Hydrogen Desktop — and why you do NOT need to set up
+  Port reachability in Hydrogen — and why you do NOT need to set up
   port forwarding. Under WSL2 networkingMode=mirrored (HD's default, which the
   setup cascade hard-targets), the distro SHARES the Windows loopback, so every
   port a service binds in the workspace — including `127.0.0.1`-only OAuth

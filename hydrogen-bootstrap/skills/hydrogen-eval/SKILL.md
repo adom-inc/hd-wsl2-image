@@ -1,7 +1,7 @@
 ---
 name: hydrogen-eval
 description: >
-  Inject JavaScript into ANY surface of the Hydrogen Desktop window from inside
+  Inject JavaScript into ANY surface of the Hydrogen window from inside
   the workspace — the app shell (top nav, dialogs), the VS Code workbench, the
   wiki panel, or the Claude chat webview. Backed by the control API's POST
   /eval-in, which connects directly to the right CDP target and returns the JS

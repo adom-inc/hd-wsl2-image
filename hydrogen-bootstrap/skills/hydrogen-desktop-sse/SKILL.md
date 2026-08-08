@@ -3,7 +3,7 @@ name: hydrogen-desktop-sse
 description: How HD's local workspace API + SSE works (a.k.a. the workspace API) — replaces Carbon for workspace commands so the workspace's adom-cli controls HD, not cloud Hydrogen. Covers the full pipeline, routing, env vars, field format differences, port discovery, and hard-won lessons. Trigger words — HD SSE, workspace API, local API, adom-cli workspace, add-tab, move-tab, webview tab, EventSource, workspace_updated, ADOM_CARBON_URL, ADOM_HYDROGEN_URL, discovery port.
 ---
 
-# Hydrogen Desktop — Local Workspace API + SSE
+# Hydrogen — Local Workspace API + SSE
 
 > Platform note: HD runs the same local workspace API on every platform (Windows/WSL2,
 > macOS, Linux). For the WSL2-specific networking details (mirrored loopback,
@@ -138,7 +138,7 @@ adom-cli hydrogen workspace move-tab \
   --to-panel-id desktop-pane-left
 
 # 5. Screenshot to verify
-adom-desktop hd_screenshot
+adom-bridge-cli hd_screenshot
 ```
 
 ## What Broke and Why
@@ -197,7 +197,7 @@ Returns:
 
 | Client | What it discovers | How |
 |---|---|---|
-| adom-desktop relay | Control API port (was hardcoded 9001) | `curl :47080/discover` → use `control` field |
+| adom-bridge-cli relay | Control API port (was hardcoded 9001) | `curl :47080/discover` → use `control` field |
 | adom-cli in the workspace | Proxy + Hydrogen URL | Already set via `ADOM_CARBON_URL` env var at workspace creation |
 | External tools / diagnostics | Any port | Hit discovery, get the full map |
 | Cloud Docker (this container) | All HD ports | `curl http://<desktop-ip>:47080/discover` via relay |
@@ -242,4 +242,4 @@ On first launch, defaults are written without scanning. Workspace-side ports (80
 | `src-tauri/crates/hd-app/src/lib.rs` | Discovery server on :47080, port resolution at startup |
 | `src/lib/stores/portStore.ts` | Frontend Svelte store, `initPorts()`, `controlUrl()`, `codeServerUrl()` |
 | `src/lib/components/editor/workspaces/PanelWorkspaceComponent.svelte` | Frontend SSE setup, autosave, workspace re-fetch |
-| `scripts/hd-bootstrap.sh` | Sets adom-cli config, injects API key, uses `HD_CONTROL_PORT` env var |
+| `scripts/hydrogen-bootstrap.sh` | Sets adom-cli config, injects API key, uses `HD_CONTROL_PORT` env var |

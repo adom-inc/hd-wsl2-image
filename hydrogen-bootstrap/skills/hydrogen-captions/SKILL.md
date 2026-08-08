@@ -1,7 +1,7 @@
 ---
 name: hydrogen-captions
 description: >
-  Paint labeled caption text on the Hydrogen Desktop workspace for demos/walkthroughs —
+  Paint labeled caption text on the Hydrogen workspace for demos/walkthroughs —
   captions are CAPTURED BY RECORDINGS so they show up in the finished video. Drive the
   WORKSPACE caption with `adom-cli hydrogen caption` — THE default, identical on
   web-Hydrogen AND HD (text positional; `-d` duration in SECONDS not ms; 30s auto-expire
@@ -18,9 +18,9 @@ description: >
   persist caption.
 ---
 
-# Hydrogen Desktop — On-Screen Captions
+# Hydrogen — On-Screen Captions
 
-You can **paint labeled caption text on the Hydrogen Desktop workspace** for demos and
+You can **paint labeled caption text on the Hydrogen workspace** for demos and
 walkthroughs — and because captions are real pixels, **they're captured by recordings**,
 so they end up in the finished video ("Step 3: run DRC →").
 

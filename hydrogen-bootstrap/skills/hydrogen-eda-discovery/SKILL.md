@@ -22,17 +22,17 @@ the user's electronics-design stack and show them what the AI-first Adom workflo
 **exploratory and opt-in** — detect first, then offer; never auto-install or auto-build. Do the
 detection in the background, then come back with a short, friendly summary + one clear offer.
 
-## 1. Detect (via `adom-desktop` — see `hydrogen-adom-desktop`, `hydrogen-bridges`, `pup`)
+## 1. Detect (via `adom-bridge-cli` — see `hydrogen-adom-desktop`, `hydrogen-bridges`, `pup`)
 
 ```bash
-adom-desktop status                       # relay up? caps include kicad / fusion360?
-adom-desktop kicad_list_versions '{}'     # KiCad installed (+ which versions)
-adom-desktop fusion_status '{}'           # Fusion 360 installed? ("installed but not running" = yes)
+adom-bridge-cli status                       # relay up? caps include kicad / fusion360?
+adom-bridge-cli kicad_list_versions '{}'     # KiCad installed (+ which versions)
+adom-bridge-cli fusion_status '{}'           # Fusion 360 installed? ("installed but not running" = yes)
 ```
 
 The KiCad/Fusion bridges work the same on every platform. For tools with **no bridge** (Altium,
 OrCAD, Cadence/Allegro, EAGLE, DipTrace, Eplan, ...), there's no bridge verb — detect them by
-**install path / running process** using `adom-desktop run_script`. The exact probe is
+**install path / running process** using `adom-bridge-cli run_script`. The exact probe is
 platform-specific:
 
 - **Windows:** scan `C:\Program Files` / `C:\Program Files (x86)` and `Get-Process` via a
@@ -55,7 +55,7 @@ platform-specific:
    ```
    (Also worth a one-line memory note if you keep memories.)
 2. **Show, don't tell** — offer to open an example so they *see* it work:
-   *"Want me to open a sample board in KiCad and pop the 3D viewer so you can see what I can drive?"* → use the `pic_programmer` demo flow (`hydrogen-self-screenshot`/`adom-desktop-kicad`): open `.kicad_sch` + `.kicad_pcb`, symbol/footprint editors, then the **board** 3D viewer (close the footprint+symbol editors first — `kicad_open_3d_viewer` attaches to the active editor otherwise).
+   *"Want me to open a sample board in KiCad and pop the 3D viewer so you can see what I can drive?"* → use the `pic_programmer` demo flow (`hydrogen-self-screenshot`/`adom-bridge-cli-kicad`): open `.kicad_sch` + `.kicad_pcb`, symbol/footprint editors, then the **board** 3D viewer (close the footprint+symbol editors first — `kicad_open_3d_viewer` attaches to the active editor otherwise).
 3. **Pitch the loop** that AI makes effortless — *"From here I can export gerbers and help you
    order the board — JLCPCB, PCBWay, or OSHPark."* If they're keen, that's the on-ramp to (4).
 4. **The real unlock — build the glue, publish it.** Most fab vendors have no clean API, so the
@@ -73,8 +73,8 @@ We don't have a bridge for these — **but that's an opportunity, not a dead end
 > probably ~30 minutes of vibe-coding. Then we publish it to the Adom wiki so every Altium
 > user gets it. We could all use it. Want to?"*
 
-- Reference bridges: `adom-inc/adom-desktop/plugins/kicad/` and `…/plugins/fusion360/` (a Python
-  bridge that the desktop app dispatches to; see `adom-desktop-kicad`/`-fusion` for the verb
+- Reference bridges: `adom-inc/adom-bridge-cli/plugins/kicad/` and `…/plugins/fusion360/` (a Python
+  bridge that the desktop app dispatches to; see `adom-bridge-cli-kicad`/`-fusion` for the verb
   shape). A new bridge = the same pattern (launch app, open files, screenshot, send keys, an
   optional in-process add-in for the richer API).
 - Publish flow: the Adom wiki hosts shared apps (`apps/<name>`) — see the wiki publish skills.
@@ -102,7 +102,7 @@ they can **contribute the missing piece** in half an hour.
   thing worth building.*
 
 ## Related skills
-- [hydrogen-adom-desktop](../hydrogen-adom-desktop/SKILL.md) / [hydrogen-bridges](../hydrogen-bridges/SKILL.md) — the `adom-desktop` relay + KiCad/Fusion bridge verbs (in-distro names; the `adom-desktop-*` skills are the cloud-side equivalents)
+- [hydrogen-adom-desktop](../hydrogen-adom-desktop/SKILL.md) / [hydrogen-bridges](../hydrogen-bridges/SKILL.md) — the `adom-bridge-cli` relay + KiCad/Fusion bridge verbs (in-distro names; the `adom-bridge-cli-*` skills are the cloud-side equivalents)
 - [[hydrogen-eda-discovery-windows]] — the Windows/PowerShell no-bridge install-path + process probe
 - `pup` — driving fab-vendor upload pages; [hydrogen-open-url](../hydrogen-open-url/SKILL.md) — opening vendor sites
 - the Adom wiki publish skills — sharing the bridge/app you build with the community

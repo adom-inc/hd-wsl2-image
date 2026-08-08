@@ -1,7 +1,7 @@
 ---
 name: hydrogen-adom-desktop
 description: >
-  What Hydrogen Desktop (HD) and Adom Desktop (AD) are, what each does, and how
+  What Hydrogen (HD) and Adom Bridge (AD) are, what each does, and how
   they work together — so the AI in the workspace knows it has HANDS on the
   user's real operating system. HD is the workspace app the user looks at; AD is
   the bridge that reaches the user's actual machine to create files & folders,
@@ -16,15 +16,15 @@ description: >
   on my machine, control the host, host screenshot, screenshot my screen, os
   screenshot, open a file on my computer, control my desktop, bridge to my pc,
   send file to my desktop, pull file from my desktop, hd and ad, two apps, how
-  do hd and ad work together, talk to hydrogen desktop, desktop bridge, relay,
-  embedded mode, AD hidden, hd_status, hd_api, shell_execute, adom-desktop ping,
-  adom-desktop status.
+  do hd and ad work together, talk to hydrogen, desktop bridge, relay,
+  embedded mode, AD hidden, hd_status, hd_api, shell_execute, adom-bridge-cli ping,
+  adom-bridge-cli status.
 ---
 
-# Hydrogen Desktop ↔ Adom Desktop — your reach onto the user's real machine
+# Hydrogen ↔ Adom Bridge — your reach onto the user's real machine
 
 You (the AI) run inside the **HD workspace** (a local Linux workspace on the
-user's machine). That's a sandbox. **Adom Desktop (AD) is how you reach OUT of it
+user's machine). That's a sandbox. **Adom Bridge (AD) is how you reach OUT of it
 onto the user's actual operating system** — their real files, shell, screen, and
 desktop apps. Knowing AD exists is the difference between "I can only work in
 here" and "I can create that file on your Desktop, screenshot your screen, and
@@ -32,13 +32,13 @@ open it in KiCad."
 
 > **Platform note:** HD's host layer (file/shell/screenshot/notification/window
 > control) is platform-specific. Before promising a host action on a given OS,
-> verify the capability with `adom-desktop status` rather than assuming it.
+> verify the capability with `adom-bridge-cli status` rather than assuming it.
 > For Windows/WSL2-specific host behavior, see the [[hydrogen-adom-desktop-windows]]
 > companion skill.
 
 ## Two apps, two jobs
 
-| | **Hydrogen Desktop (HD)** | **Adom Desktop (AD)** |
+| | **Hydrogen (HD)** | **Adom Bridge (AD)** |
 |---|---|---|
 | What it is | The user-facing workspace app (Tauri). VS Code pane + Wiki + the runtime that hosts your workspace. | A bridge app that talks to the user's real OS and local apps. |
 | What the user sees | The window they work in. | Usually nothing — HD hides it (embedded mode). |
@@ -71,13 +71,13 @@ Here's the subtlety that matters when you reason about "who serves this verb?":
    `desktop_record_*`, `desktop_recorder_*`, `desktop_list_monitors`,
    `desktop_pull_glob`, `desktop_embedded_*`.
 
-Both ends sit behind the same `adom-desktop` relay, so from the CLI you don't
+Both ends sit behind the same `adom-bridge-cli` relay, so from the CLI you don't
 choose between them — the relay routes to whichever client is connected. But
 "will this verb work right now?" depends on which client is up. **Don't assume a
 verb exists — verify capability first:**
 
 ```bash
-adom-desktop status   # → .capabilities lists what the connected client(s) can do
+adom-bridge-cli status   # → .capabilities lists what the connected client(s) can do
 ```
 
 If `.capabilities` is missing `record` (or `desktop_list_monitors` errors with
@@ -88,7 +88,7 @@ the KiCad/Fusion/browser bridges all work off HD's built-in bridge regardless.
 
 ## What AD/HD let you do on the user's real machine
 
-All via the `adom-desktop` CLI from inside the workspace. Rather than
+All via the `adom-bridge-cli` CLI from inside the workspace. Rather than
 re-document every verb here, this is a **capability map → the focused skill**:
 
 | Capability | Verb(s) / surface | Where it's documented |
@@ -104,8 +104,8 @@ re-document every verb here, this is a **capability map → the focused skill**:
 | **Drive KiCad / Fusion 360 / Pup** | `kicad_*`, `fusion_*`, `browser_*` | [hydrogen-bridges](../hydrogen-bridges/SKILL.md) |
 | **Embedded mechanics (tray/lifecycle)** | `desktop_embedded_*` | [hd-embedded-ad](../hd-embedded-ad/SKILL.md) — AD-served |
 
-For the complete verb list run `adom-desktop list_commands` (or see the
-`adom-desktop` skill).
+For the complete verb list run `adom-bridge-cli list_commands` (or see the
+`adom-bridge-cli` skill).
 
 ### Host shell-trust model
 
@@ -115,13 +115,13 @@ blocked on per-command approval dialogs — convenient, but it means anything yo
 run there really runs. Revoke the standing auto-approval at any time:
 
 ```bash
-adom-desktop shell_auto_approve '{"duration_secs":0}'   # turn auto-approve off now
+adom-bridge-cli shell_auto_approve '{"duration_secs":0}'   # turn auto-approve off now
 ```
 
 When you *don't* need a free-form shell, prefer the **no-escape structured
 runners** over hand-quoted `shell_execute` (AD ≥ 1.8.50):
-`adom-desktop run_script '{"interpreter":"bash|cmd|powershell","scriptB64":"<b64>"}'`
-and `adom-desktop wsl_exec '{"distro":"<workspace-distro>","user":"adom","scriptB64":"<b64>"}'`
+`adom-bridge-cli run_script '{"interpreter":"bash|cmd|powershell","scriptB64":"<b64>"}'`
+and `adom-bridge-cli wsl_exec '{"distro":"<workspace-distro>","user":"adom","scriptB64":"<b64>"}'`
 — base64 the script so no quoting survives to be mangled. (`wsl_exec` is a
 Windows/WSL2 path — see the [[hydrogen-adom-desktop-windows]] companion.)
 
@@ -145,41 +145,41 @@ without manual `send_files`/`pull_file` round-trips.
 
 ## Talking to HD + AD from the CLI
 
-You reach the host through the **`adom-desktop` CLI**, which relays your commands
+You reach the host through the **`adom-bridge-cli` CLI**, which relays your commands
 over a WebSocket to the desktop client(s).
 
 **Host shell + files:**
 ```bash
-adom-desktop shell_execute '{"command":"<cmd>","timeoutSeconds":60}'
-adom-desktop pull_file  '{"filePaths":["<host path>"],"saveTo":"/tmp"}'
-adom-desktop send_files '{"filePaths":["/tmp/x"],"saveTo":"<host dir>"}'
-adom-desktop desktop_list_windows
+adom-bridge-cli shell_execute '{"command":"<cmd>","timeoutSeconds":60}'
+adom-bridge-cli pull_file  '{"filePaths":["<host path>"],"saveTo":"/tmp"}'
+adom-bridge-cli send_files '{"filePaths":["/tmp/x"],"saveTo":"<host dir>"}'
+adom-bridge-cli desktop_list_windows
 ```
 
-**Hydrogen Desktop control (the HD app itself):**
+**Hydrogen control (the HD app itself):**
 ```bash
-adom-desktop hd_status            # is HD running + composed runtime state
-adom-desktop hd_screenshot        # window-bounded HD shot (resize <1500px before reading!)
-adom-desktop hd_log               # tail HD's log
-adom-desktop hd_launch            # start HD detached
+adom-bridge-cli hd_status            # is HD running + composed runtime state
+adom-bridge-cli hd_screenshot        # window-bounded HD shot (resize <1500px before reading!)
+adom-bridge-cli hd_log               # tail HD's log
+adom-bridge-cli hd_launch            # start HD detached
 # Direct HD control API (HTTP, no shell-escaping pain):
-adom-desktop hd_api '{"method":"POST","path":"/setup/run-all","body":{}}'
-adom-desktop hd_api '{"method":"GET","path":"/health"}'
+adom-bridge-cli hd_api '{"method":"POST","path":"/setup/run-all","body":{}}'
+adom-bridge-cli hd_api '{"method":"GET","path":"/health"}'
 ```
 `hd_api` hits HD's **control API** on its discovered port (fallback **47084**).
 See the [[hydrogen-adom-desktop-windows]] companion for the host port-discovery file.
 
 **Embedded-mode introspection (AD-served):**
 ```bash
-adom-desktop desktop_embedded_status   # embedded=true/false, enteredVia=launch-flag|runtime-adopt
+adom-bridge-cli desktop_embedded_status   # embedded=true/false, enteredVia=launch-flag|runtime-adopt
 ```
 
 ## How the connection works (and how you check it)
 
 ```
 You (AI in the workspace)
-  └─ adom-desktop <verb> '<json>'        ← CLI in the workspace
-       └─ relay  (adom-desktop serve: WS :8765 + HTTP :8766, started in the workspace)
+  └─ adom-bridge-cli <verb> '<json>'        ← CLI in the workspace
+       └─ relay  (adom-bridge-cli serve: WS :8765 + HTTP :8766, started in the workspace)
             └─ WebSocket ──► HD's built-in bridge AND/OR the embedded AD on the user's machine
                  └─ acts on the OS / KiCad / Fusion / Chrome
 ```
@@ -191,11 +191,11 @@ You (AI in the workspace)
   for the WSL2 loopback-forwarding details).
 - **Always verify the bridge before acting on the host:**
   ```bash
-  adom-desktop ping       # → {"status":"connected", ...} means a client is reachable
-  adom-desktop status     # who's connected + .capabilities + which local apps are installed/running
+  adom-bridge-cli ping       # → {"status":"connected", ...} means a client is reachable
+  adom-bridge-cli status     # who's connected + .capabilities + which local apps are installed/running
   ```
   If `ping` fails, no desktop client is connected — tell the user, and (if needed)
-  walk the `adom-desktop` setup steps. Don't claim you acted on their machine
+  walk the `adom-bridge-cli` setup steps. Don't claim you acted on their machine
   without a successful round-trip. Don't try to "fix" a dead host client from in
   here — surface it.
 
@@ -219,7 +219,7 @@ When the user asks for something that lives on their real computer — "save thi
 to my Desktop", "what's on my screen", "open this in KiCad", "run this command on
 my machine" — that's an **AD** job, and you can do it. When it's about the
 workspace itself (editor, files under `/home/adom/project`, the runtime), that's
-**HD**. Lead with what you can do, verify with `adom-desktop ping`, then act.
+**HD**. Lead with what you can do, verify with `adom-bridge-cli ping`, then act.
 
 ## Related skills
 - [[hydrogen-adom-desktop-windows]] — Windows/WSL2 host specifics (paths, winget installs, loopback forwarding, taskkill)
@@ -230,5 +230,5 @@ workspace itself (editor, files under `/home/adom/project`, the runtime), that's
 - [hd-recording](../hd-recording/SKILL.md) — screen vs tab recording (AD-served)
 - [hydrogen-notifications](../hydrogen-notifications/SKILL.md) — desktop toasts; [hydrogen-captions](../hydrogen-captions/SKILL.md) — on-screen caption overlay
 - [hydrogen-open-url](../hydrogen-open-url/SKILL.md) — the ways to open a URL (Pup, native browser, picker, …)
-- `pup` — driving Pup browser windows; `adom-desktop` — the full CLI verb reference
+- `pup` — driving Pup browser windows; `adom-bridge-cli` — the full CLI verb reference
 - [hd-runtime-mode](../hd-runtime-mode/SKILL.md) — the HD↔AD relationship is identical across runtimes

@@ -2,7 +2,7 @@
 name: hydrogen-instapcb
 description: >
   The playbook a (second, background) Claude conversation runs after setup to wire up the user's
-  InstaPCB quoting workflow inside Hydrogen Desktop: find any InstaPCB quotes they uploaded
+  InstaPCB quoting workflow inside Hydrogen: find any InstaPCB quotes they uploaded
   earlier, bring one up in the InstaPCB quoting engine in HD, and — if they want — set up a
   live loop so KiCad design changes auto-import and the quote re-quotes on-the-fly with zero
   manual steps. Detect + report + offer first; build the watch→reload loop only on a yes. READ
@@ -48,11 +48,11 @@ keep). If the app exposes a quote-by-id URL or an import action, use it; otherwi
 board, I re-export and the quote refreshes — no clicking."* If yes, build the loop:
 
 1. **Watch the KiCad design** — watch the user's `.kicad_pcb` (+ schematic) for saves. Use a
-   file watcher in the workspace, or `adom-desktop watch` around a poll of the board's mtime
-   (see `adom-desktop-fusion`'s `watch` wrapper for the streaming pattern).
+   file watcher in the workspace, or `adom-bridge-cli watch` around a poll of the board's mtime
+   (see `adom-bridge-cli-fusion`'s `watch` wrapper for the streaming pattern).
 2. **On change → produce the artifact InstaPCB needs.** Most quoting wants **gerbers** — export
    them from KiCad (kicad-cli / the PCB editor's plot), staged into `~/project`. (KiCad bridge:
-   open/drive the board — see `hydrogen-bridges`/`adom-desktop-kicad`.)
+   open/drive the board — see `hydrogen-bridges`/`adom-bridge-cli-kicad`.)
 3. **Push to the quoting engine + re-quote.** Feed the new gerbers/board to the `instapcb-quote`
    app (its import/upload path) and trigger a re-quote; if it has no API, drive the upload UI via
    `pup` and reload. **Reload the quote view** so the user sees the new number appear on its own.

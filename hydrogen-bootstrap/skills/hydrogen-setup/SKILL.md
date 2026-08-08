@@ -9,7 +9,7 @@ description: >
   rollback, step failed, wipe, reset workspace, keep auth, test setup.
 ---
 
-# Hydrogen Desktop -- Setup Panel & Virgin Reset
+# Hydrogen -- Setup Panel & Virgin Reset
 
 This is the platform-generic reference for the HD setup panel and virgin
 reset. The host-platform specifics (the exact install cascade on Windows/WSL2,
@@ -47,7 +47,7 @@ Conceptually the steps fall into these phases:
 3. **Wire identity + environment** — set the Adom env URLs, inject the Adom
    session token, re-assert VS Code config backstops idempotently, apply the
    per-session layout.
-4. **Wire the relay** — verify the Adom Desktop companion app, start the
+4. **Wire the relay** — verify the Adom Bridge companion app, start the
    relay inside the workspace, prove direct-connect and register the relay for
    file streaming.
 5. **Gates + payoff** — gate on adom-cli reachability (carbon +
@@ -60,7 +60,7 @@ Conceptually the steps fall into these phases:
 
 These are NOT setup steps anymore — they are baked at image-build time and
 must not be listed or "run": `install-gallia`, `install-hd-skills`,
-`verify-adom-desktop`, `install-claude-cli`, `install-claude-ext`,
+`verify-adom-bridge-cli`, `install-claude-cli`, `install-claude-ext`,
 `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. gallia, the
 Adom CLIs, the claude CLI + Code extension, code-server, settings, and all
 `hd-*` skills are baked into the golden image. See `hd-golden-image`.
@@ -160,10 +160,10 @@ automated test resets.
 
 ### test-direct-connect
 Proves the fast workspace→desktop command path. The CLI auto-probes the host
-control API and routes through Adom Desktop's direct connect API.
+control API and routes through Adom Bridge's direct connect API.
 
 ### test-relay (register relay)
-Registers the relay (started by the start-relay step) with Adom Desktop for
+Registers the relay (started by the start-relay step) with Adom Bridge for
 file streaming via the code-server proxy path. This enables `pull_file`,
 `send_files`, and `shell_execute`.
 

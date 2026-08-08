@@ -8,7 +8,7 @@ description: What HD's setup steps did to prepare your workspace — the 28-step
 WSL2-runtime version (default). The legacy 24-step Docker cascade
 (`HD_RUNTIME=docker`) is in the docker/ bucket.
 
-When you first launched Hydrogen Desktop (or after a virgin reset), HD ran a 28-step cascade to turn a blank machine into a fully-tooled Adom workspace — the `Adom-Workspace` WSL2 distro. The heavy tooling (code-server, gallia, the Adom CLIs, the Claude Code VS Code extension, VS Code settings, and all `hd-*` skills) is already BAKED into the golden image; setup imports that image, injects your Adom session, wires up the relay, installs the `claude` CLI at runtime (the one thing NOT baked — its self-setup needs a live session), walks the Claude auth gate, then opens the first conversation + 9 named AI-thread conversations. This skill explains what each step did so you can help the user understand their environment, re-run failed steps, or wipe and rebuild. See `hd-golden-image` for the baked-image model.
+When you first launched Hydrogen (or after a virgin reset), HD ran a 28-step cascade to turn a blank machine into a fully-tooled Adom workspace — the `Adom-Workspace` WSL2 distro. The heavy tooling (code-server, gallia, the Adom CLIs, the Claude Code VS Code extension, VS Code settings, and all `hd-*` skills) is already BAKED into the golden image; setup imports that image, injects your Adom session, wires up the relay, installs the `claude` CLI at runtime (the one thing NOT baked — its self-setup needs a live session), walks the Claude auth gate, then opens the first conversation + 9 named AI-thread conversations. This skill explains what each step did so you can help the user understand their environment, re-run failed steps, or wipe and rebuild. See `hd-golden-image` for the baked-image model.
 
 The cascade is executed by `setup_steps_wsl.rs` (`step_defs_wsl()` / `run_all_wsl()`). `run_all_wsl` is halt-on-failure, resume-not-restart, with per-step 3× auto-retry. In-distro work runs via `wsl -d Adom-Workspace -u adom -- <cmd>` (the distro's DEFAULT user is `adom` per `wsl.conf default=adom`, home `/home/adom`; root via `-u root`). There is NO `docker exec` and NO Docker image anywhere in this flow.
 
@@ -18,15 +18,15 @@ The cascade is executed by `setup_steps_wsl.rs` (`step_defs_wsl()` / `run_all_ws
 |---|------|---------|
 | 1 | ensure-workspace | Install WSL2 if needed (one auto-reboot), `wsl --import Adom-Workspace` from the golden image tarball (full pre-baked image from the `adom-inc/hd-wsl2-image` GitHub release), create the `adom` user, start code-server, verify host loopback on 7380. SUBSUMES the old Docker pull-image / create-container / start-container steps. |
 | 2 | wait-codeserver | Host TCP probe of the code-server port (default 7380), 120s |
-| 3 | update-packages | GATE: `adom-wiki pkg update` converges the container to the LATEST published packages (skills included) — the golden image is baked once but installed for months. Gates on the ARTIFACT (hd-bootstrap == registry latest + skills deployed), not the raw exit code; re-runs bootstrap postinstalls when an update lands. |
+| 3 | update-packages | GATE: `adom-wiki pkg update` converges the container to the LATEST published packages (skills included) — the golden image is baked once but installed for months. Gates on the ARTIFACT (hydrogen-bootstrap == registry latest + skills deployed), not the raw exit code; re-runs bootstrap postinstalls when an update lands. |
 | 4 | install-adom-vscode | "Activate editor extensions" — installs NOTHING (binary + extension are baked); waits for Adom sign-in, reloads the editor iframe, and proves the :8821 editor-control API answers |
 | 5 | set-env-vars | Set `ADOM_CARBON_URL`, `ADOM_HYDROGEN_URL`, `ADOM_HD_CONTROL_URL`, `VSCODE_PROXY_URI`, `ADOM_DESKTOP_MODE` |
 | 6 | inject-api-key | Write the Adom session token into the distro at `/var/run/adom/api-key` (mode 644) so adom-cli works |
 | 7 | configure-vscode | settings.json / trusted-domains / activity-bar are BAKED; re-asserts theme + workbench backstops idempotently, and applies the per-session layout via :8821 |
-| 8 | ensure-adom-desktop | Verify the Adom Desktop companion app is running on Windows (the relay's desktop bridge) |
-| 9 | start-relay | Start the adom-desktop relay inside the workspace (ports 8765 WS / 8766 HTTP) |
+| 8 | ensure-adom-bridge-cli | Verify the Adom Bridge companion app is running on Windows (the relay's desktop bridge) |
+| 9 | start-relay | Start the adom-bridge-cli relay inside the workspace (ports 8765 WS / 8766 HTTP) |
 | 10 | test-direct-connect | Prove the fast workspace→desktop command path |
-| 11 | test-relay | Register the relay with Adom Desktop for file streaming (file transfer + shell exec) |
+| 11 | test-relay | Register the relay with Adom Bridge for file streaming (file transfer + shell exec) |
 | 12 | test-adom-cli | GATE: carbon path + hydrogen-proxy reachability via adom-cli (6 retries) |
 | 13 | install-claude-cli | Install the Claude Code CLI (`claude`) into the distro via the official installer. NOT baked (its self-setup needs a live session) — HD installs it here at runtime, before sign-in, so the editor's Claude Code + the Welcome/thread conversations have a working `claude`. Idempotent (skips if present). |
 | 14 | claude-auth | The single human gate — restore Claude creds or drive the in-editor Claude.ai sign-in via the native browser Browser Picker; runs just before the payoff steps |
@@ -49,7 +49,7 @@ Steps 18–26 (the AI threads) each open a FRESH Claude conversation and human-t
 
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
-These are NOT setup steps anymore — they are baked at image-build time: `install-gallia`, `install-hd-skills`, `verify-adom-desktop`, `install-claude-ext`, `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. If a user asks "what installed gallia / the Claude extension / my skills / VS Code settings", the answer is: **baked into the golden image at build time, not a setup step.** (Note: `install-claude-cli` is NOT in this list — the `claude` CLI IS a live setup step, since its self-setup needs a live session.) See `hd-golden-image`.
+These are NOT setup steps anymore — they are baked at image-build time: `install-gallia`, `install-hd-skills`, `verify-adom-bridge-cli`, `install-claude-ext`, `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. If a user asks "what installed gallia / the Claude extension / my skills / VS Code settings", the answer is: **baked into the golden image at build time, not a setup step.** (Note: `install-claude-cli` is NOT in this list — the `claude` CLI IS a live setup step, since its self-setup needs a live session.) See `hd-golden-image`.
 
 ## Common user questions
 

@@ -1,9 +1,9 @@
 ---
 name: hydrogen-workspace-lifecycle
-description: WSL2 distro (`Adom-Workspace`) lifecycle management for Hydrogen Desktop on Windows. Import/export/unregister/terminate, code-server-as-HD-child, the resume reality-check, recovery after sleep/hibernate, and every hard-won rule about what NOT to do — above all, NEVER run global WSL operations; touch ONLY Adom-Workspace so a co-installed Docker Desktop WSL integration stays safe. MUST READ before any workspace operation. Trigger words — wsl, workspace, distro, Adom-Workspace, restart workspace, terminate distro, unregister, wsl --import, wsl --unregister, code-server, workspace broken, workspace unhealthy, wsl hung, fix workspace, /wsl/status.
+description: WSL2 distro (`Adom-Workspace`) lifecycle management for Hydrogen on Windows. Import/export/unregister/terminate, code-server-as-HD-child, the resume reality-check, recovery after sleep/hibernate, and every hard-won rule about what NOT to do — above all, NEVER run global WSL operations; touch ONLY Adom-Workspace so a co-installed Docker Desktop WSL integration stays safe. MUST READ before any workspace operation. Trigger words — wsl, workspace, distro, Adom-Workspace, restart workspace, terminate distro, unregister, wsl --import, wsl --unregister, code-server, workspace broken, workspace unhealthy, wsl hung, fix workspace, /wsl/status.
 ---
 
-# Hydrogen Desktop — WSL2 Workspace Lifecycle
+# Hydrogen — WSL2 Workspace Lifecycle
 
 > This is the WSL2-runtime version (default). The legacy Docker equivalent
 > (`HD_RUNTIME=docker`) is in the docker/ bucket.
