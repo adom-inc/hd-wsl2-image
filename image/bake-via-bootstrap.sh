@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # bake-via-bootstrap.sh — the REGISTRY-NATIVE golden-image bake (v18+).
 #
-# Replaces bake-hd-setup.sh's hand-rolled cascade (gallia install.mjs + claude
+# Replaces bake-hydrogen-setup.sh's hand-rolled cascade (gallia install.mjs + claude
 # CLI + extensions + settings + skill copy + adompkg-managed CLIs) with ONE
 # declarative install of the layered bootstrap via the `adom-wiki` CLI
 # (adompkg is DEPRECATED; gallia is never invoked — adom/core is the new gallia):
 #
-#     adom-wiki pkg install adom/hd-windows-bootstrap
+#     adom-wiki pkg install adom/hydrogen-windows-bootstrap
 #       → pulls adom/core             (the Adom ecosystem: skills hub, adom-cli,
 #                                       adom-vscode, adom-wiki-cli, adom/hook)
-#       → pulls adom/hd-bootstrap      (platform-generic HD: 38 skills + editor config)
-#       → installs adom/hd-windows-bootstrap (WSL2: 11 skills + workbench seed)
+#       → pulls adom/hydrogen-bootstrap      (platform-generic HD: 38 skills + editor config)
+#       → installs adom/hydrogen-windows-bootstrap (WSL2: 11 skills + workbench seed)
 #       → runs each package's install.sh / postinstall (deploy skills, write
 #         settings.json, install extensions, seed workbench.html)
 #
@@ -43,16 +43,16 @@ test -x /home/adom/.local/bin/adom-wiki \
 # Dockerfile creates can be root-owned, which blocks as-adom postinstalls).
 chown -R adom:adom /home/adom
 
-log "installing adom/hd-windows-bootstrap (resolves the full layered tree, sudo-free)"
-as_adom "/home/adom/.local/bin/adom-wiki pkg install adom/hd-windows-bootstrap"
+log "installing adom/hydrogen-windows-bootstrap (resolves the full layered tree, sudo-free)"
+as_adom "/home/adom/.local/bin/adom-wiki pkg install adom/hydrogen-windows-bootstrap"
 
 # (2026-07-20) postinstall shim removed: the bootstraps now declare scripts.install
-# (hd-bootstrap@0.2.23 / hd-windows-bootstrap@0.2.8) and adom-wiki runs install.sh
+# (hd-bootstrap@0.2.23 / hydrogen-windows-bootstrap@0.2.8) and adom-wiki runs install.sh
 # in dependency order. Verified on a clean HOME: 51 skills + settings.json, no shim.
 
 # ── hard gates — the bake must FAIL loudly if the tree didn't fully land ─────
 log "verifying the bootstrap tree installed"
-for p in core hd-bootstrap hd-windows-bootstrap adom-desktop adom-wiki-cli hook; do
+for p in core hd-bootstrap hydrogen-windows-bootstrap adom-desktop adom-wiki-cli hook; do
   as_adom "test -d ~/project/adom_modules/adom/${p}" \
     || { echo "MISSING module: adom/${p}" >&2; exit 1; }
 done
@@ -65,7 +65,7 @@ as_adom 'test -f ~/.claude/skills/adom/SKILL.md' || { echo "adom skills hub not 
 SKILLS="$(as_adom 'ls -d ~/.claude/skills/hd-* 2>/dev/null | wc -l')"
 log "hd-* skills deployed: ${SKILLS}"
 [ "${SKILLS}" -ge 45 ] || { echo "expected >=45 hd-* skills (38 generic + 11 windows), got ${SKILLS}" >&2; exit 1; }
-# spot-check bundle contents incl. the hd-workspace-updater → hd-staying-current rename
+# spot-check bundle contents incl. the hydrogen-workspace-updater → hd-staying-current rename
 for s in hd-webview hd-pup hd-golden-image hd-staying-current; do
   as_adom "test -f ~/.claude/skills/${s}/SKILL.md" || { echo "MISSING skill: ${s}" >&2; exit 1; }
 done

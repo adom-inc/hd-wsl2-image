@@ -15,7 +15,7 @@ is additive; lower layers are pulled unmodified, never forked or curated.
 ```
                     adom/core              ← universal base; every layer deps it
                    /     |      \
-          adom/hd-bootstrap  ntx/bootstrap  cosmiic/bootstrap
+          adom/hydrogen-bootstrap  ntx/bootstrap  cosmiic/bootstrap
                                               ← peers; each adds its own packages
    (a customer wanting "HD + NTX" installs both; core resolves ONCE via semver)
 ```
@@ -37,7 +37,7 @@ runtime (a tab integration, a bridge).
 - `ntx/bootstrap`, `cosmiic/bootstrap` — a vendor org owns its whole
   namespace, so the brand is the namespace and `bootstrap` alone is
   unambiguous. "I use Cosmiic" → AI finds `cosmiic/bootstrap`.
-- `adom/hd-bootstrap` — HD is an Adom **product**, not a third-party org, so
+- `adom/hydrogen-bootstrap` — HD is an Adom **product**, not a third-party org, so
   it ships under `adom/` alongside `core` and **must** carry the `hd-`
   qualifier (`adom/bootstrap` would be ambiguous — which Adom bootstrap?).
 
@@ -54,11 +54,11 @@ The bootstrap is identical regardless of how it reaches a machine; only the
   the Cosmiic ecosystem, am I set up?" → AI recognizes it names a bootstrap,
   finds `cosmiic/bootstrap`, diffs vs installed, converges. Pull-based.
 - **Adom HD: eager, build-time, pre-baked.** We own the environment, so we
-  run the *same* `adompkg install adom/hd-bootstrap` at bake time and ship
+  run the *same* `adompkg install adom/hydrogen-bootstrap` at bake time and ship
   the WSL2 image already-converged. No discovery — first boot is set up.
 
 **The bake is an optimization of the runtime flow, not a different
-mechanism.** Two properties this forces on `adom/hd-bootstrap`:
+mechanism.** Two properties this forces on `adom/hydrogen-bootstrap`:
 
 1. **Installable live** — it must converge correctly from a cold
    `adompkg install` on an already-running workspace, never assume it was
@@ -76,7 +76,7 @@ mechanism.** Two properties this forces on `adom/hd-bootstrap`:
   tools exist") → lives in the lowest layer that owns it, i.e. **`core`**.
   True everywhere.
 - **HD runtime + HD orchestration of that capability** ("auto-open the quote
-  in HD's second tab, run the watch→reload loop") → **`adom/hd-bootstrap`**.
+  in HD's second tab, run the watch→reload loop") → **`adom/hydrogen-bootstrap`**.
 - **Rule:** an HD-layer skill may *orchestrate* an ecosystem capability but
   must **defer to the core skill for the knowledge, never embed/duplicate
   it.** If an `hd-*` skill teaches *what InstaPCB is*, it's in the wrong
@@ -85,19 +85,19 @@ mechanism.** Two properties this forces on `adom/hd-bootstrap`:
 Audit (2026-06-18): ~41 of 44 `hd-*` skills are genuinely HD-runtime-specific
 and correctly placed. Three are "onboarding playbooks that wrap an ecosystem
 capability" and need thinning (orchestration stays in HD, knowledge moves to
-core): **hd-instapcb** (clear), **hd-eda-discovery** (clear), **hd-captions**
+core): **hydrogen-instapcb** (clear), **hydrogen-eda-discovery** (clear), **hydrogen-captions**
 (soft — may be genuinely HD's caption surface; inspect before touching).
 
-## `adom/hd-bootstrap` = composition + the bake collapses
+## `adom/hydrogen-bootstrap` = composition + the bake collapses
 
 The golden image collapses to two things:
 1. **Dockerfile = the "hardware"** — apt baseline, code-server, systemd, the
    user/linger/pam fixes. The OS the bootstrap runs *on*.
-2. **`adompkg install adom/hd-bootstrap` = the "config"** — everything
-   `bake-hd-setup.sh` does by hand today (gallia install.mjs, the 44-skill
+2. **`adompkg install adom/hydrogen-bootstrap` = the "config"** — everything
+   `bake-hydrogen-setup.sh` does by hand today (gallia install.mjs, the 44-skill
    copy, the 8 CLI installs) becomes ONE declarative manifest John owns.
 
-`adom/hd-bootstrap` = deps (`adom/core` + the HD-runtime skills + the
+`adom/hydrogen-bootstrap` = deps (`adom/core` + the HD-runtime skills + the
 workspace-updater + any HD-only CLI) **plus a thin install hook** for the HD
 environment config that isn't a package: VS Code `settings.json`, the
 `workbench.html` trusted-domains/activity-bar patches, code-server config,
@@ -109,7 +109,7 @@ systemd daemon wiring. So it's not a pure meta-package — it has a small body.
 
 This also **dissolves the "curate gallia for HD" approach**: gallia's two
 jobs split — its ecosystem skills become `core`'s job (shared with web
-Hydrogen), its HD config/settings-deploy becomes `adom/hd-bootstrap`'s hook.
+Hydrogen), its HD config/settings-deploy becomes `adom/hydrogen-bootstrap`'s hook.
 Nothing gets HD-flavored on the way in.
 
 Public repo / reference design: **public, but no source code for now** — a
@@ -131,7 +131,7 @@ reality falls short, tell Colby what `core` needs. None are permission-asks.
 3. **Hook ordering** — adompkg must run layered install hooks deepest-first
    and deterministically (core → hd → vendor), so hooks don't race.
 4. **Core semver stability** — a stable major downstream layers can pin
-   (`adom/hd-bootstrap` deps `core ^N`); else the diamond won't resolve.
+   (`adom/hydrogen-bootstrap` deps `core ^N`); else the diamond won't resolve.
 
 Open (Colby-side gap to flag, not block on): is there a `core` skill doing
 utterance→bootstrap discovery + convergence, so vendors only publish a
@@ -140,9 +140,9 @@ well-formed bootstrap?
 ## Sequence (v14 paused until this is agreed + core contract green)
 
 1. Verify the `core` contract (above) — the long pole.
-2. Define `adom/hd-bootstrap` = `core` + `hd-skills` + workspace-updater +
+2. Define `adom/hydrogen-bootstrap` = `core` + `hd-skills` + workspace-updater +
    install hook for the VS Code/workbench config.
-3. Rewrite the bake to literally `adompkg install adom/hd-bootstrap`.
+3. Rewrite the bake to literally `adompkg install adom/hydrogen-bootstrap`.
 
 Open sub-decision: are the ~41 HD skills **one `adom/hd-skills` tarball** or
 **individual packages**? Lean individual (the updater converges per-package,

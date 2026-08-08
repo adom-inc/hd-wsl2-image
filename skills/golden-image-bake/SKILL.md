@@ -1,6 +1,6 @@
 ---
 name: golden-image-bake
-description: "Rebuild + release the Hydrogen Desktop golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says \"bake the golden image\", \"rebuild the wsl2 image\", \"new golden image\", \"cut a new hd-wsl2-image version\", or when registry drift (bootstraps / CLIs / extensions) makes the shipped image stale. Registry-native: the whole image is ONE `adom-wiki pkg install adom/hd-windows-bootstrap`. Built WSL2-NATIVE on John's laptop via adom-desktop — never docker, never in the cloud container. EMPLOYEE-ONLY — never publish this skill to the wiki or into the public image."
+description: "Rebuild + release the Hydrogen Desktop golden WSL2 rootfs image (adom-inc/hd-wsl2-image). Use when the user says \"bake the golden image\", \"rebuild the wsl2 image\", \"new golden image\", \"cut a new hd-wsl2-image version\", or when registry drift (bootstraps / CLIs / extensions) makes the shipped image stale. Registry-native: the whole image is ONE `adom-wiki pkg install adom/hydrogen-windows-bootstrap`. Built WSL2-NATIVE on John's laptop via adom-desktop — never docker, never in the cloud container. EMPLOYEE-ONLY — never publish this skill to the wiki or into the public image."
 ---
 
 # Golden image bake — adom-inc/hd-wsl2-image
@@ -32,13 +32,13 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
      that popup by disabling auto-forward or via `autoForwardPortsFallback`.
 2. **Clean first-load editor:** opens to an empty workbench — no Explorer sidebar, no
    bottom panel, no tabs, no welcome page (just the 48px activity-bar rail). Seeded
-   per-workspace in hd-windows-bootstrap's workbench.html + `startupEditor:none`.
+   per-workspace in hydrogen-windows-bootstrap's workbench.html + `startupEditor:none`.
 3. **No C/C++ build toolchain** — the runtime image runs PRE-BUILT binaries; nothing
    compiles at runtime (there is no rustc). The toolchain was ~246 MB of dead weight in
    v1–v14. Keep code-server, node, gh, git, python3.
 4. **Built from signed wiki.adom.inc packages via the `adom-wiki` CLI, NOT gallia and
    NOT adompkg (both retired here).** ONE declarative install:
-   `adom-wiki pkg install adom/hd-windows-bootstrap` → core + hd-bootstrap + WSL2 layer
+   `adom-wiki pkg install adom/hydrogen-windows-bootstrap` → core + hd-bootstrap + WSL2 layer
    + adom-desktop. No gallia clone / install.mjs / GALLIA_TOKEN anywhere in the image.
 5. **WSL2-native bake, NEVER docker** (see [[feedback_golden_image_wsl2_never_docker]]).
 6. **WORKSPACE ROOT (W) = `/home/adom/project` — LOCKED (John 2026-07-26: "we can
@@ -67,7 +67,7 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
    working script at all. John's ruling: the postinstall/install split is pointless
    because dependency-ordered install already runs a dependent's `install.sh` after its
    deps. **Colby lifted the server validation; we migrated
-   `adom/hd-bootstrap@0.2.23` + `adom/hd-windows-bootstrap@0.2.8` to
+   `adom/hydrogen-bootstrap@0.2.23` + `adom/hydrogen-windows-bootstrap@0.2.8` to
    `scripts.install`** — verified clean-HOME: 51 skills + settings.json, dependency
    ordered, no shim. `scripts.postinstall` is deprecated (publish warns
    `POSTINSTALL_DEPRECATED`; hard-reject is staged, gated on all three HD bootstraps
@@ -126,7 +126,7 @@ throwaway `wsl --import`ed ubuntu-base distro on the laptop).
 `image/bake-via-bootstrap.sh` is the docker/CI translation — keep them in lockstep.
 `image/Dockerfile` + `.github/workflows/build.yml` are the CI path (also registry-native
 now; CI stages only the `adom-wiki` binary, no private clones).
-Legacy/retired: `bake-hd-setup.sh`, `scripts/build-rootfs.sh` (gallia+chroot era),
+Legacy/retired: `bake-hydrogen-setup.sh`, `scripts/build-rootfs.sh` (gallia+chroot era),
 `image/public-scrub.sh` (existed only to strip gallia's check-updates hook — the
 registry-native bake never creates it), `image/adompkg/` (adompkg is deprecated).
 
@@ -209,7 +209,7 @@ have re-installed the retired daemon into a clean image).
 - **Version compares:** use `printf '%s\n%s\n' "$MIN" "$V" | sort -V -C`, and TEST it
   across the boundary (0.5.11 fail / 0.5.12 pass) so the gate is a real discriminator.
 - **Platform-specific packages need `?platform=` on the tarball API.**
-  `/api/v1/packages/hd-windows-bootstrap/0.2.7/tarball` 404s;
+  `/api/v1/packages/hydrogen-windows-bootstrap/0.2.7/tarball` 404s;
   `…/tarball?platform=linux` works. A 404 reads like "version missing" — it isn't.
 - **Never rebuild a publish dir by extracting the published tarball.** The hero is
   deliberately excluded from tarballs via `files[]` (it is a PAGE asset), so the publish
@@ -237,8 +237,8 @@ have re-installed the retired daemon into a clean image).
 | v16 | clean first-load editor (per-workspace sidebar-collapse seed, no welcome/tabs/panel) |
 | v17 | Web Hydrogen port parity: `autoForwardPortsSource: hybrid` (kills the >20-ports popup) |
 | v18 | REGISTRY-NATIVE: `adom-wiki pkg install` replaces adompkg/gallia; workspace-updater + hd-skillpack RETIRED; tree sudo-free |
-| v21 (next) | CONTAINER-MANAGED SERVICES: code-server + adom-relay (`adom-desktop serve`) + adom-shotlog baked as enabled systemd units (HD stops holding wsl.exe children; its unit-writer stays as legacy self-heal, drop-ins `*.service.d/hd-env.conf` remain HD-written); adom-shotlog registry-tracked via hd-windows-bootstrap@0.2.9 dependency (Colby's `pkg update` sweep now covers it); cron asserted enabled; smoke gates for all units + shotlog module/binary/alias; theme system baked license-safe (`ADOM_THEME_SKIP_SATOSHI=1`, invariant 9) |
-| v20 | python parity libs baked (`python3-{requests,yaml,bs4,lxml,pil}` via apt — Web Hydrogen parity; NO numpy); `definitions` skill litmus (core@4.13.4 depends on adom/definitions — guard it); adom-cli source-overlay REMOVED (registry adom/adom-cli@4.0.5 now ships 0.5.12); PEP-668 install guidance added to the hd-container skill |
+| v21 (next) | CONTAINER-MANAGED SERVICES: code-server + adom-relay (`adom-desktop serve`) + adom-shotlog baked as enabled systemd units (HD stops holding wsl.exe children; its unit-writer stays as legacy self-heal, drop-ins `*.service.d/hd-env.conf` remain HD-written); adom-shotlog registry-tracked via hydrogen-windows-bootstrap@0.2.9 dependency (Colby's `pkg update` sweep now covers it); cron asserted enabled; smoke gates for all units + shotlog module/binary/alias; theme system baked license-safe (`ADOM_THEME_SKIP_SATOSHI=1`, invariant 9) |
+| v20 | python parity libs baked (`python3-{requests,yaml,bs4,lxml,pil}` via apt — Web Hydrogen parity; NO numpy); `definitions` skill litmus (core@4.13.4 depends on adom/definitions — guard it); adom-cli source-overlay REMOVED (registry adom/adom-cli@4.0.5 now ships 0.5.12); PEP-668 install guidance added to the hydrogen-container skill |
 | v19 | adom-cli 0.5.12 overlay (`~/.adom/hd-proxy-url` fallback for env-less shells); bake fetches adom-wiki fresh; postinstall shim removed (bootstraps now `scripts.install`). **Shipped in HD 0.1.170** (pin 4c3f159b); virgin fresh-install PASSED 20/20 cascade, and the fix was proven in the ACTUAL failure condition — `env -u ADOM_CARBON_URL -u ADOM_HYDROGEN_URL adom-cli hydrogen webview open-or-refresh` returned `created` instead of 404ing against carbon. HD also hardened its `test-adom-cli` setup gate to cover the AI-shell (code-server systemd env) channel, so this class of regression now HALTS setup. |
 
 **Verification lesson (v19):** a version string is not proof a bug is fixed. Reproduce the
@@ -263,7 +263,7 @@ a bake-only assertion when the failure is runtime-shaped (env, sessions, network
   claude-code-extension version growth.
 
 **DEPENDENCY DIRECTION (get this right):** the bake installs the LEAF
-`adom-wiki pkg install adom/hd-windows-bootstrap`, which pulls hd-bootstrap → core down
+`adom-wiki pkg install adom/hydrogen-windows-bootstrap`, which pulls hd-bootstrap → core down
 as DEPS. Installing `adom/core` alone gets you NONE of the HD layers (core is the base;
 it doesn't know they exist). "Removed from core's deps" ≠ "removed from the image."
 
@@ -272,7 +272,7 @@ it doesn't know they exist). "Removed from core's deps" ≠ "removed from the im
 `core@4.13` (v20) DROPPED all four, so the image silently lost them. digikey/jlcpcb/
 mouser survived but were RENAMED (`digikey`→`adom-digikey`) + reparented under
 `adom-parts-search`. LESSON: anything HD genuinely needs should be an EXPLICIT dep of
-`adom/hd-bootstrap` (which we own), not left to `core`'s churn — and the smoke test
+`adom/hydrogen-bootstrap` (which we own), not left to `core`'s churn — and the smoke test
 should carry an "expected apps present" litmus so a dropped package FAILS the bake.
 v20 registry set (24 pkgs): apps = adom-cli, adom-desktop, adom-digikey, adom-jlcpcb,
 adom-mouser, adom-parts-search, adom-vscode, adom-wiki-cli, hook, prose-lint, step2glb;
@@ -287,7 +287,7 @@ by the claude-code extension). **numpy is the one remaining parity gap and the O
 expensive one** (~150 MB extracted / ~40 MB compressed with BLAS/LAPACK — those binary
 libs don't compress like text) — keep it OUT unless there's real demand. Do not
 speculatively pile on "popular" libs; the parity set + the PEP-668 escape-hatch in the
-hd-container skill (apt python3-<lib> / pip --break-system-packages / venv) covers the
+hydrogen-container skill (apt python3-<lib> / pip --break-system-packages / venv) covers the
 long tail without image growth.
 
 ## Leanness policy: bake the parity core, serve the long tail ON-DEMAND
@@ -306,7 +306,7 @@ runtime. Three worked examples (all John's calls):
 - **Fusion skills — NOT baked.** `adom-wiki discover` works well: the umbrella
   `adom/fusion` skill ("Adom for Fusion 360") carries discovery_triggers + a discovery_pitch,
   so a fusion query surfaces it and the AI installs the right fusion skills on demand.
-  Do NOT bake `fusion-export-for-hydrogen` / `fusion-update-libraries`. (`hd-eda-discovery`
+  Do NOT bake `fusion-export-for-hydrogen` / `fusion-update-libraries`. (`hydrogen-eda-discovery`
   is baked and points the AI at EDA discovery.)
 - **Python libs — parity set baked, rest on-demand** via the PEP-668 escape-hatch
   (apt python3-<lib> / pip --break-system-packages), see the Python section.

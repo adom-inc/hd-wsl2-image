@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "slug": "hydrogen-windows-bootstrap",
+  "type": "bootstrap",
+  "title": "Adom Hydrogen (Windows / WSL2)",
+  "brief": "The Windows (WSL2) platform layer for Hydrogen Desktop.",
+  "version": "0.3.0",
+  "description": "The Windows platform layer for Hydrogen Desktop, where the workspace runs in a WSL2 Ubuntu distro. Depends on adom/hd-bootstrap (the platform-generic HD layer, which bundles the generic hd-* skills) and adds everything specific to the WSL2 runtime: the WSL2/networking/lifecycle hd-* skills (BUNDLED here by design, John+Kyle 2026-07-16) and the WSL2 code-server workbench seed. Sibling adom/hd-mac-bootstrap carries the parallel mac skills. This is the package the golden WSL2 image installs.",
+  "org": "adom",
+  "platform": "linux",
+  "tags": [
+    "bootstrap",
+    "hydrogen-desktop",
+    "hd",
+    "windows",
+    "wsl2"
+  ],
+  "needs_sudo": false,
+  "scripts": {
+    "install": "./install.sh"
+  },
+  "dependencies": {
+    "adom/hydrogen-bootstrap": "^0.3.0",
+    "adom/adom-shotlog": "^0.24.0"
+  },
+  "files": [
+    "package.json",
+    "install.sh",
+    "README.md",
+    "skills/**"
+  ],
+  "hero": {
+    "path": "docs/hero.png"
+  }
+}

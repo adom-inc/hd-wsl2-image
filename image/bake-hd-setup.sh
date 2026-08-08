@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bake-hd-setup.sh — pre-run HD's setup cascade at IMAGE BUILD time.
+# bake-hydrogen-setup.sh — pre-run HD's setup cascade at IMAGE BUILD time.
 #
 # Run as root inside the rootfs (chroot or docker RUN). Each section names
 # the setup step it subsumes in
@@ -17,7 +17,7 @@
 # unauthenticated and fall back to wiki URLs by design.
 
 set -euo pipefail
-log() { echo "[bake-hd-setup] $*"; }
+log() { echo "[bake-hydrogen-setup] $*"; }
 as_adom() { runuser -u adom -- bash -lc "$1"; }
 
 WIKI_BASE="${WIKI_BASE:-https://wiki-ufypy5dpx93o.adom.cloud}"

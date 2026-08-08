@@ -142,7 +142,7 @@ sudo mkdir -p "${ROOT}/tmp/hd-skills"
 sudo cp -r "${HD_SKILLS_SRC}/shared" "${HD_SKILLS_SRC}/wsl2" "${ROOT}/tmp/hd-skills/"
 
 # HD workspace-updater daemon (HD auto-update Part B) — staged for the daemon
-# step in bake-hd-setup.sh. GUARDED: only present once feature/hd-auto-update
+# step in bake-hydrogen-setup.sh. GUARDED: only present once feature/hd-auto-update
 # is merged to hydrogen-desktop main (path absent pre-merge → bake skips).
 HD_UPDATER_SRC="${HD_UPDATER_SRC:-${HOME}/project/hydrogen-desktop/src-tauri/crates/hd-app/resources/workspace-updater}"
 if [[ -f "${HD_UPDATER_SRC}/adom-workspace-updater.sh" ]]; then
@@ -158,18 +158,18 @@ else
 fi
 
 # adompkg (the Adom package manager) — staged for the adompkg step in
-# bake-hd-setup.sh. Snapshot lives in the repo at image/adompkg/.
+# bake-hydrogen-setup.sh. Snapshot lives in the repo at image/adompkg/.
 log "staging adompkg"
 sudo rm -rf "${ROOT}/tmp/adompkg"
 sudo mkdir -p "${ROOT}/tmp/adompkg"
 sudo cp image/adompkg/adompkg image/adompkg/adompkg.mjs "${ROOT}/tmp/adompkg/"
 
-# bake-hd-setup.sh pre-runs the HD setup cascade (gallia install.mjs,
+# bake-hydrogen-setup.sh pre-runs the HD setup cascade (gallia install.mjs,
 # claude CLI, Claude Code + adom-vscode extensions, VS Code settings,
 # trusted domains, HD skills, adom-desktop CLI) — shared with Dockerfile.
 log "bake HD setup steps"
-sudo install -m 0755 image/bake-hd-setup.sh "${ROOT}/tmp/bake-hd-setup.sh"
-in_root "bash /tmp/bake-hd-setup.sh && rm -f /tmp/bake-hd-setup.sh"
+sudo install -m 0755 image/bake-hydrogen-setup.sh "${ROOT}/tmp/bake-hydrogen-setup.sh"
+in_root "bash /tmp/bake-hydrogen-setup.sh && rm -f /tmp/bake-hydrogen-setup.sh"
 
 # ── 7e. functional claude verification (proot, host side) ─────────────────
 # The bun-based claude binary needs /proc, which the chroot lacks — verify
@@ -252,7 +252,7 @@ in_root "set -e; code-server --version; node --version; git --version; \
   grep -q adom.activityBarSeeded /usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.html \
       || { echo 'MISSING trusted-domains patch'; exit 1; }; \
   ls /home/adom/.claude/skills/ | grep -q '^hd-' || { echo 'MISSING hd skills'; exit 1; }; \
-  for s in hd-instapcb hd-eda-discovery; do \
+  for s in hydrogen-instapcb hydrogen-eda-discovery; do \
       test -f /home/adom/.claude/skills/\$s/SKILL.md || { echo \"MISSING required HD skill: \$s\"; exit 1; }; \
   done; \
   test -x /usr/local/bin/adom-desktop || { echo 'MISSING adom-desktop CLI'; exit 1; }; \

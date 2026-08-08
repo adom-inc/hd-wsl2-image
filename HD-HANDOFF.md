@@ -59,7 +59,7 @@ Two fixes — DO BOTH:
 
 ## Cascade disposition (vs the CURRENT 21 StepDefs in setup_steps_wsl.rs)
 
-(Step ids, not numbers — the public hd-setup-steps skill still says "18
+(Step ids, not numbers — the public hydrogen-setup-steps skill still says "18
 steps" and is stale. The distro import itself lives in
 `WslDistroRuntime::setup_and_start`, before the cascade: it keeps
 download+sha+`wsl --import`+start, loses user-creation and Phase A. Default

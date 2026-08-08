@@ -9,9 +9,9 @@
 # Derived from scripts/build-rootfs.sh (the proven recipe) but REGISTRY-NATIVE
 # (v18+): ONE declarative install via the `adom-wiki` CLI (adompkg is DEPRECATED,
 # gallia is never invoked — adom/core is the new gallia):
-#   adom-wiki pkg install adom/hd-windows-bootstrap
+#   adom-wiki pkg install adom/hydrogen-windows-bootstrap
 # pulls adom/core (ecosystem incl. adom-wiki-cli + adom/hook auto-updater) +
-# adom/hd-bootstrap (38 generic hd-* skills + editor config) + the WSL2 layer
+# adom/hydrogen-bootstrap (38 generic hd-* skills + editor config) + the WSL2 layer
 # (11 WSL2 hd-* skills + workbench seed) + adom-desktop. The workspace-updater
 # daemon is RETIRED (auto-update = adom/hook → `adom-wiki pkg update`), so the
 # tree is sudo-free — no --allow-sudo anywhere.
@@ -140,11 +140,11 @@ log "adom-wiki CLI = $(runuser -u adom -- /home/adom/.local/bin/adom-wiki --vers
 
 # ── 6. THE BOOTSTRAP INSTALL — pulls core + hd-bootstrap + WSL2 layer ─────────
 # Real distro → /proc exists → postinstalls (settings, extensions, seeds) run fine.
-# ONE declarative install: core@^4.13 ← hd-bootstrap@0.2.10 ← hd-windows-bootstrap@0.2.6
+# ONE declarative install: core@^4.13 ← hd-bootstrap@0.2.10 ← hydrogen-windows-bootstrap@0.2.6
 # (+ adom-desktop). NO --allow-sudo: the updater is retired, the whole tree is
 # sudo-free — if a needs_sudo package ever sneaks back in, this install FAILS,
 # which is exactly the guard we want.
-log "adom-wiki pkg install adom/hd-windows-bootstrap"
+log "adom-wiki pkg install adom/hydrogen-windows-bootstrap"
 chown -R adom:adom /home/adom
 # ADOM_THEME_SKIP_SATOSHI=1 must cover the WHOLE install: as of hd-bootstrap@0.2.32 the
 # theme system is a DEPENDENCY (so "Adom Studio" is the package default and the pack that
@@ -152,10 +152,10 @@ chown -R adom:adom /home/adom
 # Satoshi faces from Fontshare — legal on a user's machine, a license violation in a
 # public release tarball. The flag is bake-only; user installs still get Satoshi.
 runuser -u adom -- bash -lc \
-    "ADOM_THEME_SKIP_SATOSHI=1 /home/adom/.local/bin/adom-wiki pkg install adom/hd-windows-bootstrap"
+    "ADOM_THEME_SKIP_SATOSHI=1 /home/adom/.local/bin/adom-wiki pkg install adom/hydrogen-windows-bootstrap"
 
 # ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
-# declare scripts.install (hd-bootstrap@0.2.23, hd-windows-bootstrap@0.2.8) and
+# declare scripts.install (hd-bootstrap@0.2.23, hydrogen-windows-bootstrap@0.2.8) and
 # adom-wiki executes install.sh in dependency order — verified end-to-end on a
 # clean HOME: 51 hd-* skills + settings.json with no intervention.
 
@@ -178,8 +178,8 @@ runuser -u adom -- bash -lc \
 # the AD relay (adom-desktop serve), and adom-shotlog are all plain units, enabled at
 # bake. HD's launch-time unit writer stays as the self-heal for legacy distros and
 # writes only the tiny *.service.d/hd-env.conf drop-ins (machine ports/env) here.
-# Binaries come from the ONE registry install above: adom-desktop via adom/hd-bootstrap,
-# adom-shotlog via adom/hd-windows-bootstrap@0.2.9 — both `adom-wiki pkg update`-able.
+# Binaries come from the ONE registry install above: adom-desktop via adom/hydrogen-bootstrap,
+# adom-shotlog via adom/hydrogen-windows-bootstrap@0.2.9 — both `adom-wiki pkg update`-able.
 # ExecStart uses a login shell so services see the same env/PATH as a user shell
 # (~/.local/bin, /etc/profile.d/hd-env.sh), matching how code-server children behave.
 # WorkingDirectory is explicit: a service with no cwd once resolved shotlog's relative
@@ -326,7 +326,7 @@ runuser -u adom -- bash -lc \
     "ADOM_THEME_SKIP_SATOSHI=1 /home/adom/.local/bin/adom-wiki pkg install adom/adom-theme"
 
 # Editor default theme = "Adom Studio" (theme-system contract default, slug `studio`;
-# what HD's name guards expect). NOTE: the published adom/hd-bootstrap currently seeds
+# what HD's name guards expect). NOTE: the published adom/hydrogen-bootstrap currently seeds
 # "Default Dark Modern", so we set it here at image level — a later `adom-wiki pkg update`
 # that rewrites settings.json could revert it until hd-bootstrap seeds Studio itself.
 SETTINGS=/home/adom/.local/share/code-server/User/settings.json
@@ -360,7 +360,7 @@ test -x /home/adom/.local/bin/adom-wiki || { echo "MISSING adom-wiki CLI"; exit 
 runuser -u adom -- /home/adom/.local/bin/adom-wiki --version >/dev/null || { echo "adom-wiki --version failed"; exit 1; }
 ! test -e /home/adom/.local/bin/adompkg || { echo "STALE adompkg still present"; exit 1; }
 # module tree: updater is RETIRED — assert present set AND absent set
-for p in core hd-bootstrap hd-windows-bootstrap adom-desktop adom-wiki-cli hook; do
+for p in core hd-bootstrap hydrogen-windows-bootstrap adom-desktop adom-wiki-cli hook; do
     test -d "/home/adom/project/adom_modules/adom/${p}" || { echo "MISSING module adom/${p}"; exit 1; }
 done
 for p in adom-workspace-updater hd-skillpack; do
@@ -383,11 +383,11 @@ done
 echo "python parity libs: requests+yaml+bs4+lxml+PIL all import ✓"
 N=$(ls -d /home/adom/.claude/skills/hd-* 2>/dev/null | wc -l); echo "hd-* skills deployed: ${N}"
 [ "${N}" -ge 45 ] || { echo "too few hd-* skills (${N}; expect 38 generic + 11 wsl2)"; exit 1; }
-# spot-check bundled skills incl. the hd-workspace-updater→hd-staying-current rename
+# spot-check bundled skills incl. the hydrogen-workspace-updater→hd-staying-current rename
 for s in hd-webview hd-pup hd-golden-image hd-staying-current; do
     test -f "/home/adom/.claude/skills/${s}/SKILL.md" || { echo "MISSING skill ${s}"; exit 1; }
 done
-! test -d /home/adom/.claude/skills/hd-workspace-updater || { echo "STALE hd-workspace-updater skill (renamed hd-staying-current)"; exit 1; }
+! test -d /home/adom/.claude/skills/hydrogen-workspace-updater || { echo "STALE hydrogen-workspace-updater skill (renamed hd-staying-current)"; exit 1; }
 test -f /home/adom/.local/share/code-server/User/settings.json || { echo "MISSING settings.json"; exit 1; }
 jq -e '."chat.agent.enabled" == false' /home/adom/.local/share/code-server/User/settings.json >/dev/null || { echo "MISSING chat-agent disable"; exit 1; }
 # v16: CLEAN-LAYOUT litmus — the golden image must open to an empty editor.
@@ -428,7 +428,7 @@ for u in code-server adom-relay adom-shotlog; do
 done
 dpkg -l cron 2>/dev/null | grep -q '^ii' || { echo "MISSING cron package"; exit 1; }
 test -x /usr/bin/crontab || { echo "MISSING crontab"; exit 1; }
-# adom-shotlog: registry-tracked (hd-windows-bootstrap>=0.2.9 dependency), binary + alias.
+# adom-shotlog: registry-tracked (hydrogen-windows-bootstrap>=0.2.9 dependency), binary + alias.
 test -d /home/adom/project/adom_modules/adom/adom-shotlog || { echo "MISSING module adom/adom-shotlog (bootstrap dep not resolved?)"; exit 1; }
 test -x /home/adom/.local/bin/adom-shotlog || { echo "MISSING adom-shotlog binary"; exit 1; }
 test -e /home/adom/.local/bin/shotlog || { echo "MISSING shotlog alias"; exit 1; }
