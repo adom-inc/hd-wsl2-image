@@ -59,7 +59,7 @@ Conceptually the steps fall into these phases:
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
 These are NOT setup steps anymore — they are baked at image-build time and
-must not be listed or "run": `install-gallia`, `install-hydrogen-skills`,
+must not be listed or "run": `install-gallia`, `install-hd-skills`,
 `verify-adom-bridge-cli`, `install-claude-cli`, `install-claude-ext`,
 `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. gallia, the
 Adom CLIs, the claude CLI + Code extension, code-server, settings, and all

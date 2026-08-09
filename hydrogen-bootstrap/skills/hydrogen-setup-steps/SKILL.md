@@ -48,7 +48,7 @@ auto-retry. The exact steps and ordering are platform-specific — see
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
 These are NOT setup steps anymore — they are baked at image-build time:
-`install-gallia`, `install-hydrogen-skills`, `verify-adom-bridge-cli`,
+`install-gallia`, `install-hd-skills`, `verify-adom-bridge-cli`,
 `install-claude-cli`, `install-claude-ext`, `write-vscode-settings`,
 `set-trusted-domains`, `clean-layout`. If a user asks "what installed gallia /
 the Claude extension / my skills / VS Code settings", the answer is: **baked

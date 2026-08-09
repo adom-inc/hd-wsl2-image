@@ -60,7 +60,7 @@ Adom-Workspace`.
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
 These are NOT setup steps anymore — they are baked at image-build time and
-must not be listed or "run": `install-gallia`, `install-hydrogen-skills`,
+must not be listed or "run": `install-gallia`, `install-hd-skills`,
 `verify-adom-bridge-cli`, `install-claude-ext`,
 `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. gallia, the 8
 Adom CLIs, the Claude Code VS Code extension (the claude CLI is runtime step 12, NOT baked), code-server, settings, and all

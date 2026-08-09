@@ -49,7 +49,7 @@ Steps 18–26 (the AI threads) each open a FRESH Claude conversation and human-t
 
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
-These are NOT setup steps anymore — they are baked at image-build time: `install-gallia`, `install-hydrogen-skills`, `verify-adom-bridge-cli`, `install-claude-ext`, `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. If a user asks "what installed gallia / the Claude extension / my skills / VS Code settings", the answer is: **baked into the golden image at build time, not a setup step.** (Note: `install-claude-cli` is NOT in this list — the `claude` CLI IS a live setup step, since its self-setup needs a live session.) See `hydrogen-golden-image`.
+These are NOT setup steps anymore — they are baked at image-build time: `install-gallia`, `install-hd-skills`, `verify-adom-bridge-cli`, `install-claude-ext`, `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. If a user asks "what installed gallia / the Claude extension / my skills / VS Code settings", the answer is: **baked into the golden image at build time, not a setup step.** (Note: `install-claude-cli` is NOT in this list — the `claude` CLI IS a live setup step, since its self-setup needs a live session.) See `hydrogen-golden-image`.
 
 ## Common user questions
 
