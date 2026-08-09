@@ -1,11 +1,11 @@
 ---
 name: hydrogen-topology
 description: >
-  MUST READ before ANY HD work. Explains the three-layer topology: cloud
-  Docker (where Claude runs), Windows machine (where HD + Adom Bridge run),
-  and the HD local WSL2 workspace (the Adom-Workspace distro). Every command
+  MUST READ before ANY Hydrogen work. Explains the three-layer topology: cloud
+  Docker (where Claude runs), Windows machine (where Hydrogen + Adom Bridge run),
+  and the Hydrogen local WSL2 workspace (the Adom-Workspace distro). Every command
   you run goes through the relay to Windows. You CANNOT directly access the
-  WSL2 distro — you must shell through Windows. Trigger words — HD topology,
+  WSL2 distro — you must shell through Windows. Trigger words — Hydrogen topology,
   cloud vs local, wsl exec, where am I, which workspace, adom-bridge-cli
   relay, test from container, three tiers, architecture, windows machine.
 ---
@@ -23,7 +23,7 @@ CLI relay. There are THREE separate environments:
 ### 1. Cloud Docker (where you run)
 - Your shell, your filesystem, your git repos
 - `adom-bridge-cli` CLI connects to Adom Bridge on Windows via relay
-- This container has NOTHING to do with HD's local WSL2 workspace
+- This container has NOTHING to do with Hydrogen's local WSL2 workspace
 - Restarting the WSL2 distro on Windows does NOT affect you
 - You can freely `git push`, edit code, run builds here
 
@@ -34,7 +34,7 @@ CLI relay. There are THREE separate environments:
 - You reach this via `adom-bridge-cli shell_execute '{"command":"..."}'`
 - Commands run in `cmd.exe` on Windows
 
-### 3. HD Local WSL2 Workspace (the `Adom-Workspace` distro)
+### 3. Hydrogen Local WSL2 Workspace (the `Adom-Workspace` distro)
 - Distro name: `Adom-Workspace` (fixed — no random suffix, no container name)
 - Runs code-server, adom-bridge-cli CLI, relay server
 - You reach this via: `adom-bridge-cli shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- <cmd>"}'`
@@ -47,7 +47,7 @@ CLI relay. There are THREE separate environments:
 adom-bridge-cli shell_execute '{"command":"dir C:\\Github"}'
 ```
 
-### Run something in the HD local WSL2 workspace
+### Run something in the Hydrogen local WSL2 workspace
 ```bash
 adom-bridge-cli shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- ls /home/adom"}'
 ```
@@ -58,7 +58,7 @@ adom-bridge-cli shell_execute '{"command":"wsl -d Adom-Workspace -u adom -- adom
 ```
 This tests the FULL chain: distro → local relay → Adom Bridge on Windows.
 
-### Screenshot HD window
+### Screenshot Hydrogen window
 ```bash
 adom-bridge-cli desktop_screenshot_window '{"hwnd":HWND}'
 ```
@@ -90,7 +90,7 @@ Cloud adom-bridge-cli CLI
             → back through relay to your CLI
 ```
 
-For the HD local WSL2 workspace, there's a SECOND relay:
+For the Hydrogen local WSL2 workspace, there's a SECOND relay:
 ```
 Workspace's adom-bridge-cli CLI
   → local relay (distro :8765)
@@ -100,9 +100,9 @@ Workspace's adom-bridge-cli CLI
           → returns through same chain
 ```
 
-## Critical Setup Steps for the HD Local WSL2 Workspace
+## Critical Setup Steps for the Hydrogen Local WSL2 Workspace
 
-The HD install flow MUST verify this chain works:
+The Hydrogen install flow MUST verify this chain works:
 
 1. **Verify Adom Bridge running on Windows** — probe port 8770
    If not running: tell user to install from wiki and launch it
@@ -115,7 +115,7 @@ The HD install flow MUST verify this chain works:
 
 ## NEVER Do These
 
-1. **NEVER confuse your cloud Docker with the HD local WSL2 workspace.**
+1. **NEVER confuse your cloud Docker with the Hydrogen local WSL2 workspace.**
    `curl http://127.0.0.1:8766/health` hits YOUR relay, not the workspace's.
 2. **NEVER try to `wsl -d Adom-Workspace` from your shell.**
    The distro lives on Windows WSL2, not here.

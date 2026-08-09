@@ -3,7 +3,7 @@ name: hydrogen-instapcb
 description: >
   The playbook a (second, background) Claude conversation runs after setup to wire up the user's
   InstaPCB quoting workflow inside Hydrogen: find any InstaPCB quotes they uploaded
-  earlier, bring one up in the InstaPCB quoting engine in HD, and — if they want — set up a
+  earlier, bring one up in the InstaPCB quoting engine in Hydrogen, and — if they want — set up a
   live loop so KiCad design changes auto-import and the quote re-quotes on-the-fly with zero
   manual steps. Detect + report + offer first; build the watch→reload loop only on a yes. READ
   + RUN this when a thread is asked about InstaPCB quotes / "bring up my instapcb quote" / "auto
@@ -21,8 +21,8 @@ quote → offer the live loop → build it only on a yes.** Don't change anythin
 
 ## 1. Discover (report, don't assume)
 
-The InstaPCB quoting engine is the **`instapcb-quote` app** (Ray's app), surfaced inside HD as a
-webview/app — it is **NOT** part of HD itself, so locate it rather than guess:
+The InstaPCB quoting engine is the **`instapcb-quote` app** (Ray's app), surfaced inside Hydrogen as a
+webview/app — it is **NOT** part of Hydrogen itself, so locate it rather than guess:
 
 ```bash
 # Is the quoting app running / reachable? (check the running webviews + workspace tabs)
@@ -68,8 +68,8 @@ every InstaPCB user gets the live loop (see [hydrogen-eda-discovery](../hydrogen
 - **Verify the engine + quotes exist before claiming anything** ("I found 2 quotes: …" or "I
   can't find the InstaPCB app — where is it?"). Never report a false negative.
 - Keep the loop **observable + debounced**; let the user pause/stop it.
-- InstaPCB is **Ray's `instapcb-quote` app**, not an HD feature — file quirks/bugs to the
-  instapcb-quote feedback list, not as HD bugs.
+- InstaPCB is **Ray's `instapcb-quote` app**, not an Hydrogen feature — file quirks/bugs to the
+  instapcb-quote feedback list, not as Hydrogen bugs.
 
 ## Related skills
 - [hydrogen-eda-discovery](../hydrogen-eda-discovery/SKILL.md) — the sibling post-setup discovery tab (EDA tools); same detect→offer pattern + the AI-first/Adom-wiki frame

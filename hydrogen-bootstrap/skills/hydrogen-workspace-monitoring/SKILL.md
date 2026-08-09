@@ -12,16 +12,16 @@ description: >
   workspace running.
 ---
 
-# HD Workspace Monitoring
+# Hydrogen Workspace Monitoring
 
-This is the platform-generic reference for how HD monitors workspace health.
+This is the platform-generic reference for how Hydrogen monitors workspace health.
 The host-platform specifics (the runtime-unavailable floaty wording, the stop
 command, the exact code-server reachability port, and the no-daemon framing)
 live in the companion [[hydrogen-workspace-monitoring-windows]] skill.
 
 ## Architecture
 
-The workspace is HD's local code-server-backed dev environment. HD monitors
+The workspace is Hydrogen's local code-server-backed dev environment. Hydrogen monitors
 workspace health at two levels:
 
 1. **Runtime available** — is the workspace runtime itself installed and
@@ -30,8 +30,8 @@ workspace health at two levels:
    code-server reachable on its host port?
 
 The second level is a real reachability check, not just "is the workspace
-present." A resume reality-check (after sleep, or after an HD rebuild/relaunch)
-requires code-server to actually answer before HD trusts the workspace as
+present." A resume reality-check (after sleep, or after an Hydrogen rebuild/relaunch)
+requires code-server to actually answer before Hydrogen trusts the workspace as
 healthy — a workspace can be Running while code-server is dead.
 
 The VS Code panel (`PanelVisualStudioCode.svelte`) polls workspace state every
@@ -66,7 +66,7 @@ etc.) remains fully interactive.
 ### 1. Runtime Not Available (red dot)
 - **When**: the workspace runtime itself is not installed / not responding
   (level-1 health fails)
-- **Action**: "Run Setup Steps" button → dispatches `hd-show-setup` event
+- **Action**: "Run Setup Steps" button → dispatches `hydrogen-show-setup` event
   (which walks the user through enabling the runtime)
 - **Color**: Red dot in header
 
@@ -93,11 +93,11 @@ the active runtime's `setup_and_start`:
 - If the workspace is present but code-server is down, it just (re-)starts
   code-server.
 
-Importantly, code-server runs as an **HD-owned child process** (not a detached
-`nohup`) — it dies with HD. So HD also **re-ensures code-server on every
+Importantly, code-server runs as an **Hydrogen-owned child process** (not a detached
+`nohup`) — it dies with Hydrogen. So Hydrogen also **re-ensures code-server on every
 launch** (look for `re-ensured code-server on launch` in the log). Without
-that, a freshly relaunched HD would show the workspace Running but the editor
-stuck on "Starting AI Environment" forever, because the previous HD's
+that, a freshly relaunched Hydrogen would show the workspace Running but the editor
+stuck on "Starting AI Environment" forever, because the previous Hydrogen's
 code-server child was orphaned. See `hydrogen-workspace-lifecycle` for the full
 lifecycle detail.
 

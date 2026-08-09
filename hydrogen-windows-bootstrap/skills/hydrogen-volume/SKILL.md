@@ -1,9 +1,9 @@
 ---
 name: hydrogen-volume
-description: How HD's WSL2 workspace storage is laid out — what's persistent, what's ephemeral, where your work lives, what survives a workspace restart vs a virgin reset, and how to access your workspace files from your Windows host. Use when the user asks "where are my files", "did I lose my work", "how do I copy a file out of the workspace", or "what happens to my code if I virgin reset". Trigger words — wsl filesystem, hd volume, where are my files, workspace files, persistent storage, lost my work, /home/adom/project, distro filesystem, wsl export, copy file out of workspace, where is my code, workspace backup, wsl unregister.
+description: How Hydrogen's WSL2 workspace storage is laid out — what's persistent, what's ephemeral, where your work lives, what survives a workspace restart vs a virgin reset, and how to access your workspace files from your Windows host. Use when the user asks "where are my files", "did I lose my work", "how do I copy a file out of the workspace", or "what happens to my code if I virgin reset". Trigger words — wsl filesystem, hd volume, where are my files, workspace files, persistent storage, lost my work, /home/adom/project, distro filesystem, wsl export, copy file out of workspace, where is my code, workspace backup, wsl unregister.
 ---
 
-# HD Workspace Storage — what persists, what doesn't
+# Hydrogen Workspace Storage — what persists, what doesn't
 
 WSL2-runtime version (default). Legacy Docker container runtime (`HD_RUNTIME=docker`) is in the docker/ bucket.
 
@@ -17,7 +17,7 @@ Your work lives in the `Adom-Workspace` WSL2 distro at `/home/adom/project`. The
 | Your work path | `/home/adom/project` (plain directory in the distro's ext4 fs) |
 | Backing store | The distro's virtual disk (`ext4.vhdx`) inside the WSL2 LxssManager store on Windows |
 | On-disk location (Windows) | Under `%LOCALAPPDATA%\...\Adom-Workspace\` — but you don't poke at the vhdx directly; use `\\wsl$\Adom-Workspace\...` (see below) |
-| Persistence | Survives workspace restart, HD restart, and Windows reboot. Persists as long as the distro is **registered** with WSL. |
+| Persistence | Survives workspace restart, Hydrogen restart, and Windows reboot. Persists as long as the distro is **registered** with WSL. |
 
 There is **no named volume to delete separately** — the project files and the OS image are one and the same ext4 filesystem. The only thing that wipes `/home/adom/project` is unregistering the distro.
 
@@ -25,10 +25,10 @@ There is **no named volume to delete separately** — the project files and the 
 
 | Path inside the distro | Persists across a tarball re-import? | Notes |
 |------------------------|---------------------------------------|-------|
-| `/home/adom/project/` | **Yes** — HD exports `/home/adom` before re-importing the golden image on a version bump, then restores it | This is your code. Put everything important here. |
+| `/home/adom/project/` | **Yes** — Hydrogen exports `/home/adom` before re-importing the golden image on a version bump, then restores it | This is your code. Put everything important here. |
 | `~/.local/share/code-server/extensions/` | **Yes** within the distro — BAKED into the golden image, restored on tarball re-import | Not a setup step; baked at image-build time |
 | `~/.local/share/code-server/User/settings.json` | **Yes** within the distro — BAKED into the golden image | Not a setup step; baked at image-build time |
-| `~/.claude/` (skills, credentials) | Skills are BAKED into the golden image (restored on re-import); credentials are restored by the `claude-auth` setup step from a host-side backup | HD skills are baked FLAT into `~/.claude/skills/<name>/` |
+| `~/.claude/` (skills, credentials) | Skills are BAKED into the golden image (restored on re-import); credentials are restored by the `claude-auth` setup step from a host-side backup | Hydrogen skills are baked FLAT into `~/.claude/skills/<name>/` |
 | `/tmp/` | **No** | Ephemeral |
 | `/etc/`, `/usr/`, system stuff | Lives in the same ext4 fs, but is overwritten on a tarball version bump | Treat as part of the workspace image |
 
@@ -36,7 +36,7 @@ There is **no named volume to delete separately** — the project files and the 
 
 ## What survives each virgin-reset choice
 
-When you open Virgin Reset (HD setup panel), the checkbox toggles control which artifacts get deleted:
+When you open Virgin Reset (Hydrogen setup panel), the checkbox toggles control which artifacts get deleted:
 
 | Toggle ON means: | Result |
 |------------------|--------|
@@ -95,16 +95,16 @@ wsl --export Adom-Workspace C:\Users\john\Downloads\adom-workspace-backup.tar
 wsl --import Adom-Workspace C:\WSL\Adom-Workspace C:\Users\john\Downloads\adom-workspace-backup.tar
 ```
 
-This is exactly the mechanism HD's own tarball-migration uses: on a tarball version bump it `wsl --export`s `/home/adom` first, then re-imports the new base and restores your work.
+This is exactly the mechanism Hydrogen's own tarball-migration uses: on a tarball version bump it `wsl --export`s `/home/adom` first, then re-imports the new base and restores your work.
 
 Or, for just a few files, copy them out first via `\\wsl$\Adom-Workspace\...` or `/mnt/c/...`.
 
 ## Why a distro filesystem (no named volume, no bind mount)?
 
-HD keeps your work directly inside the `Adom-Workspace` ext4 filesystem rather than a Docker named volume or a bind mount of a Windows path. This:
+Hydrogen keeps your work directly inside the `Adom-Workspace` ext4 filesystem rather than a Docker named volume or a bind mount of a Windows path. This:
 - Gives native Linux ext4 I/O — much faster than crossing the Windows ↔ WSL2 filesystem boundary
 - Avoids line-ending and permission issues that bind mounts of Windows paths often have
-- Lets HD wipe + re-import the base image (on a tarball bump) without losing your code — it `wsl --export`s `/home/adom` first
+- Lets Hydrogen wipe + re-import the base image (on a tarball bump) without losing your code — it `wsl --export`s `/home/adom` first
 
 The bonus over the legacy Docker runtime: you **can** open the files directly in Windows Explorer at `\\wsl$\Adom-Workspace\...`.
 
@@ -112,4 +112,4 @@ The bonus over the legacy Docker runtime: you **can** open the files directly in
 
 - `hydrogen-container` — the `Adom-Workspace` distro whose filesystem holds your work
 - `hydrogen-topology` — the three-tier topology; tier 3 is this WSL2 distro
-- `hd-golden-image` — what's baked into `adom-golden.tar.gz` (extensions, settings, skills) vs. what setup does
+- `hydrogen-golden-image` — what's baked into `adom-golden.tar.gz` (extensions, settings, skills) vs. what setup does

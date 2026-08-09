@@ -1,7 +1,7 @@
 ---
 name: hydrogen-setup
 description: >
-  HD setup panel: 27 install steps, Run All, Rollback All, Virgin Reset with
+  Hydrogen setup panel: 27 install steps, Run All, Rollback All, Virgin Reset with
   toggles, and automated testing patterns. MUST READ before running setup,
   testing steps, or doing virgin resets. Covers the step list, the virgin
   reset toggle panel, how to keep auth during resets, and how Run All handles
@@ -16,13 +16,13 @@ WSL2-runtime version (default). The legacy 24-step Docker cascade
 
 ## Zero-Click Goal
 
-The HD setup process targets ZERO manual clicks for the user. The heavy
+The Hydrogen setup process targets ZERO manual clicks for the user. The heavy
 lifting is already done at image-build time: the `Adom-Workspace` golden
 image ships with code-server, gallia, the 8 Adom CLIs, the claude CLI + Code
 extension, VS Code settings, and all `hd-*` skills BAKED IN. Setup just
 imports that image, injects the user's session, wires up the relay, and walks
-the single human auth gate. If something is missing, HD downloads it — never
-tell the user to install something manually. See the `hd-golden-image` skill
+the single human auth gate. If something is missing, Hydrogen downloads it — never
+tell the user to install something manually. See the `hydrogen-golden-image` skill
 for the baked-image model.
 
 ## The 27 Install Steps
@@ -55,17 +55,17 @@ Adom-Workspace`.
 | 16 | welcome | Opens Claude Code, authenticates if needed, human-types the first prompt | ✗ |
 | 17-25 | thread-* (9) | Nine FRESH Claude conversations, one at a time: parts-search, kicad, fusion360, altium, pup, native-browser, google, chip-fetcher, adom-tsci. Replaced the old eda-discovery + instapcb-quote steps | ✗ |
 | 26 | verify-setup | GATE (catch-all): independently re-verifies the whole workspace end-to-end; HALTS naming any missing artifact | ✗ |
-| 27 | open-welcome | GATE (final): opens welcome.html in HD's right pane; hard-fails if the Welcome tab doesn't appear | ✗ |
+| 27 | open-welcome | GATE (final): opens welcome.html in Hydrogen's right pane; hard-fails if the Welcome tab doesn't appear | ✗ |
 
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
 These are NOT setup steps anymore — they are baked at image-build time and
-must not be listed or "run": `install-gallia`, `install-hd-skills`,
+must not be listed or "run": `install-gallia`, `install-hydrogen-skills`,
 `verify-adom-bridge-cli`, `install-claude-ext`,
 `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. gallia, the 8
 Adom CLIs, the Claude Code VS Code extension (the claude CLI is runtime step 12, NOT baked), code-server, settings, and all
 `hd-*` skills are baked into the golden image. See
-`hd-golden-image`.
+`hydrogen-golden-image`.
 
 ## Panel Buttons
 
@@ -95,8 +95,8 @@ live status badge showing the current state. The ONLY programmatic trigger is
 | Install step state (`install_state`) | Resets all 28 steps to pending (`setup-steps-wsl.json`) | CLEAN / EXISTS |
 | WSL2 distro (`container`) | PRISTINE `wsl --unregister Adom-Workspace` + reimport (ONLY that distro) | GONE / RUNNING / EXISTS |
 | Distro tarball (`tarball`, legacy `image`) | Deletes cached `adom-golden.tar.gz` (full image re-download) | CACHED / GONE |
-| Webview storage (`webview_storage`) | Queued wipe, flushed at next HD launch (restart_required) | CLEAN / EXISTS |
-| VS Code state (`vscode_state`) | Queued wipe, flushed at next HD launch (restart_required) | CLEAN / EXISTS |
+| Webview storage (`webview_storage`) | Queued wipe, flushed at next Hydrogen launch (restart_required) | CLEAN / EXISTS |
+| VS Code state (`vscode_state`) | Queued wipe, flushed at next Hydrogen launch (restart_required) | CLEAN / EXISTS |
 | Adom session token (`adom_token`) | Deletes `hydrogen-session.txt` | CLEAN / EXISTS |
 | Claude credentials (`claude_token`) | Deletes the host-side Claude creds backup | CLEAN / EXISTS |
 
@@ -105,7 +105,7 @@ Selected"** at the bottom executes the reset for all checked toggles.
 
 The distro reset is a PRISTINE `wsl --unregister` + reimport — it backs up
 Claude creds first UNLESS `claude_token` is checked. The `webview_storage` /
-`vscode_state` wipes are queued and flushed at the next HD launch
+`vscode_state` wipes are queued and flushed at the next Hydrogen launch
 (restart_required), NOT immediate; there is no reboot for the wipe.
 
 CRITICAL — the WSL virgin reset only ever touches `Adom-Workspace`. It runs
@@ -182,12 +182,12 @@ via the native browser Browser Picker. Runs LAST before the payoff steps.
 `ensure-sse` confirms the editor browser SSE session is connected (so the
 Welcome webview-open doesn't 409); `verify-workspace` confirms the proxy holds
 a real layout; `welcome` opens Claude Code and sends the first prompt; the
-final `open-welcome` gate opens welcome.html in HD's right pane and HARD-FAILS
+final `open-welcome` gate opens welcome.html in Hydrogen's right pane and HARD-FAILS
 if the Welcome tab doesn't appear.
 
 > Note: gallia, the Adom CLIs, the claude CLI + Code extension, VS Code
 > settings, and `hd-*` skills are NOT setup steps — they are baked into
-> `adom-golden.tar.gz`. See `hd-golden-image`.
+> `adom-golden.tar.gz`. See `hydrogen-golden-image`.
 
 ## Distro Recreation
 

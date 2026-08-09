@@ -1,7 +1,7 @@
 ---
 name: hydrogen-setup
 description: >
-  HD setup panel: the install-step cascade, Run All, Rollback All, Virgin Reset
+  Hydrogen setup panel: the install-step cascade, Run All, Rollback All, Virgin Reset
   with toggles, and automated testing patterns. MUST READ before running setup,
   testing steps, or doing virgin resets. Covers the step list, the virgin
   reset toggle panel, how to keep auth during resets, and how Run All handles
@@ -11,27 +11,27 @@ description: >
 
 # Hydrogen -- Setup Panel & Virgin Reset
 
-This is the platform-generic reference for the HD setup panel and virgin
+This is the platform-generic reference for the Hydrogen setup panel and virgin
 reset. The host-platform specifics (the exact install cascade on Windows/WSL2,
 distro import/unregister mechanics, the per-platform step list and state file)
 live in the companion [[hydrogen-setup-windows]] skill.
 
 ## Zero-Click Goal
 
-The HD setup process targets ZERO manual clicks for the user. The heavy
+The Hydrogen setup process targets ZERO manual clicks for the user. The heavy
 lifting is already done at image-build time: the golden workspace image ships
 with code-server, gallia, the Adom CLIs, the claude CLI + Code extension, VS
 Code settings, and all `hd-*` skills BAKED IN. Setup just provisions that
 image, injects the user's session, wires up the relay, and walks the single
-human auth gate. If something is missing, HD downloads it — never tell the
-user to install something manually. See the `hd-golden-image` skill for the
+human auth gate. If something is missing, Hydrogen downloads it — never tell the
+user to install something manually. See the `hydrogen-golden-image` skill for the
 baked-image model.
 
 ## The Install Steps
 
 The setup cascade is a halt-on-failure, resume-not-restart sequence with
 per-step 3x auto-retry. State is tracked per-step (status pending / running /
-done / failed, output text, percent complete) and HD reads it on launch to
+done / failed, output text, percent complete) and Hydrogen reads it on launch to
 decide whether the setup panel auto-opens. The exact step list, ordering, and
 state-file name are platform-specific — see [[hydrogen-setup-windows]].
 
@@ -53,17 +53,17 @@ Conceptually the steps fall into these phases:
 5. **Gates + payoff** — gate on adom-cli reachability (carbon +
    hydrogen-proxy), walk the single Claude auth gate, confirm the editor SSE
    session, verify the proxy holds a real layout, open Claude Code and send the
-   first prompt, and finally open welcome.html in HD's right pane (hard-fails
+   first prompt, and finally open welcome.html in Hydrogen's right pane (hard-fails
    if the Welcome tab doesn't appear).
 
 ### Steps that NO LONGER EXIST (baked into the golden image)
 
 These are NOT setup steps anymore — they are baked at image-build time and
-must not be listed or "run": `install-gallia`, `install-hd-skills`,
+must not be listed or "run": `install-gallia`, `install-hydrogen-skills`,
 `verify-adom-bridge-cli`, `install-claude-cli`, `install-claude-ext`,
 `write-vscode-settings`, `set-trusted-domains`, `clean-layout`. gallia, the
 Adom CLIs, the claude CLI + Code extension, code-server, settings, and all
-`hd-*` skills are baked into the golden image. See `hd-golden-image`.
+`hd-*` skills are baked into the golden image. See `hydrogen-golden-image`.
 
 ## Panel Buttons
 
@@ -91,10 +91,10 @@ live status badge showing the current state. The ONLY programmatic trigger is
 | Toggle (option key) | What it wipes | Status badges |
 |---|---|---|
 | Install step state (`install_state`) | Resets all steps to pending | CLEAN / EXISTS |
-| Workspace (`container`) | PRISTINE wipe + re-provision of the workspace (ONLY HD's own workspace) | GONE / RUNNING / EXISTS |
+| Workspace (`container`) | PRISTINE wipe + re-provision of the workspace (ONLY Hydrogen's own workspace) | GONE / RUNNING / EXISTS |
 | Image tarball (`tarball`, legacy `image`) | Deletes the cached golden image (full re-download) | CACHED / GONE |
-| Webview storage (`webview_storage`) | Queued wipe, flushed at next HD launch (restart_required) | CLEAN / EXISTS |
-| VS Code state (`vscode_state`) | Queued wipe, flushed at next HD launch (restart_required) | CLEAN / EXISTS |
+| Webview storage (`webview_storage`) | Queued wipe, flushed at next Hydrogen launch (restart_required) | CLEAN / EXISTS |
+| VS Code state (`vscode_state`) | Queued wipe, flushed at next Hydrogen launch (restart_required) | CLEAN / EXISTS |
 | Adom session token (`adom_token`) | Deletes `hydrogen-session.txt` | CLEAN / EXISTS |
 | Claude credentials (`claude_token`) | Deletes the host-side Claude creds backup | CLEAN / EXISTS |
 
@@ -103,10 +103,10 @@ Selected"** at the bottom executes the reset for all checked toggles.
 
 The workspace reset is a PRISTINE wipe + re-provision — it backs up Claude
 creds first UNLESS `claude_token` is checked. The `webview_storage` /
-`vscode_state` wipes are queued and flushed at the next HD launch
+`vscode_state` wipes are queued and flushed at the next Hydrogen launch
 (restart_required), NOT immediate; there is no reboot for the wipe.
 
-CRITICAL — the virgin reset only ever touches HD's OWN workspace. It NEVER
+CRITICAL — the virgin reset only ever touches Hydrogen's OWN workspace. It NEVER
 touches other workspaces, distros, or runtimes the user may have on the
 machine. The platform-specific commands (and the never-touch-global rule)
 are in [[hydrogen-setup-windows]].
@@ -176,12 +176,12 @@ via the native browser Browser Picker. Runs LAST before the payoff steps.
 `ensure-sse` confirms the editor browser SSE session is connected (so the
 Welcome webview-open doesn't 409); `verify-workspace` confirms the proxy holds
 a real layout; `welcome` opens Claude Code and sends the first prompt; the
-final `open-welcome` gate opens welcome.html in HD's right pane and HARD-FAILS
+final `open-welcome` gate opens welcome.html in Hydrogen's right pane and HARD-FAILS
 if the Welcome tab doesn't appear.
 
 > Note: gallia, the Adom CLIs, the claude CLI + Code extension, VS Code
 > settings, and `hd-*` skills are NOT setup steps — they are baked into the
-> golden image. See `hd-golden-image`.
+> golden image. See `hydrogen-golden-image`.
 
 ## Workspace Recreation
 

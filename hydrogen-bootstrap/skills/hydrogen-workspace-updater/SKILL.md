@@ -24,7 +24,7 @@ adom-workspace-updater --once
 It converges this workspace to a wiki **desired-state manifest**: SHA-verified, never
 downgrades, and **surgical** — it only touches the specific named tooling, never your files or
 anything you installed yourself.
-- Installed skill-bundle version: `cat ~/.claude/skills/.hd-skills-version`
+- Installed skill-bundle version: `cat ~/.claude/skills/.hydrogen-skills-version`
 - Last run + what changed:        `cat ~/.adom/workspace-updater-status.json`
 
 (code-server and the Claude Code extension are **baked fundamentals** that self-update — the
@@ -36,7 +36,7 @@ daemon does *not* manage them; it just notices a change and offers the reload.)
    ```
    scripts/publish-tooling.sh publish-skills
    ```
-   (bundles every public hd-* skill, pushes it to the `hd-workspace-tooling` wiki page, bumps the version.)
+   (bundles every public hd-* skill, pushes it to the `hydrogen-workspace-tooling` wiki page, bumps the version.)
 3. That's it — every workspace's daemon picks it up on its next tick and extracts it into `~/.claude/skills/`.
 
 To distribute an **extension** or a **CLI** instead, add a manifest entry then publish:
@@ -50,7 +50,7 @@ skill in the hydrogen-desktop repo.
 
 ## The reload banner
 When a new version is on disk but not yet active (a daemon-installed extension, or one the
-editor auto-updated), HD shows **"<Tool> is ready / has an update — click to reload"** at the
+editor auto-updated), Hydrogen shows **"<Tool> is ready / has an update — click to reload"** at the
 top of the editor; clicking reloads it to activate the new code. **Skills need no reload** —
 Claude re-reads them itself.
 

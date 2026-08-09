@@ -5,7 +5,7 @@ description: >
   change — theme, vim mode, launch-on-login, console-on-startup, 3D control style,
   font, line numbers, schematic nudge, the embedded Adom Bridge options, and
   more. READ THIS when the user asks "how do I turn on vim mode", "change the
-  theme", "make HD launch at startup", "stop Adom Bridge's window popping up",
+  theme", "make Hydrogen launch at startup", "stop Adom Bridge's window popping up",
   "switch to blender/solidworks orbit controls", "hide line numbers", "show the
   console on startup", "make the UI compact", or "where are the settings". Opened
   from the Adom logo menu → Settings. Trigger words — settings, preferences,
@@ -17,7 +17,7 @@ description: >
   off, change setting, how do I configure.
 ---
 
-# HD Settings — the preference tree
+# Hydrogen Settings — the preference tree
 
 Open it from the **Adom logo menu** (upper-left teal logo) → **Settings** (see
 [hydrogen-adom-menu](../hydrogen-adom-menu/SKILL.md)). The dialog is
@@ -49,18 +49,18 @@ override. Keys are dotted (`section.subsection.name`).
 ### desktop  *(Hydrogen app itself)*
 | Key | Default | What it does |
 |---|---|---|
-| `desktop.show_console_on_startup` | `false` | Show the debug console window when HD starts (→ "show the console on startup") |
-| `desktop.launch_on_boot` | `true` | Auto-launch HD on login / at startup (→ "make HD launch at startup" / "stop HD launching on login" = set false) |
+| `desktop.show_console_on_startup` | `false` | Show the debug console window when Hydrogen starts (→ "show the console on startup") |
+| `desktop.launch_on_boot` | `true` | Auto-launch Hydrogen on login / at startup (→ "make Hydrogen launch at startup" / "stop Hydrogen launching on login" = set false) |
 
-### adom_desktop  *(the embedded Adom Bridge / AD that HD runs)*
-When HD is running it takes over AD, so AD's options live here. See
-[hydrogen-adom-desktop](../hydrogen-adom-desktop/SKILL.md) for the HD↔AD relationship.
+### adom_desktop  *(the embedded Adom Bridge / ab that Hydrogen runs)*
+When Hydrogen is running it takes over ab, so ab's options live here. See
+[hydrogen-adom-desktop](../hydrogen-adom-desktop/SKILL.md) for the Hydrogen↔ab relationship.
 | Key | Type / default | What it does |
 |---|---|---|
-| `adom_desktop.open` | action button | "Open Adom Bridge" — brings the AD window to the foreground (persists nothing) |
-| `adom_desktop.auto_approve_when_running` | bool, `true` | While HD runs, keep AD in permanent auto-approve mode (auto-accept AD permission prompts) |
-| `adom_desktop.show_window_on_launch` | bool, `true` | Show AD's window + taskbar icon when HD launches, so you can see it's running (→ "stop AD's window popping up" = set false) |
-| `adom_desktop.foreground_hd_on_launch` | bool, `true` | Bring HD to the front on launch; AD still shows in the taskbar but stays behind HD |
+| `adom_desktop.open` | action button | "Open Adom Bridge" — brings the ab window to the foreground (persists nothing) |
+| `adom_desktop.auto_approve_when_running` | bool, `true` | While Hydrogen runs, keep ab in permanent auto-approve mode (auto-accept ab permission prompts) |
+| `adom_desktop.show_window_on_launch` | bool, `true` | Show ab's window + taskbar icon when Hydrogen launches, so you can see it's running (→ "stop ab's window popping up" = set false) |
+| `adom_desktop.foreground_hd_on_launch` | bool, `true` | Bring Hydrogen to the front on launch; ab still shows in the taskbar but stays behind Hydrogen |
 
 ### schematic  *(Schematic Workspace)*
 | Key | Default | What it does |
@@ -97,14 +97,14 @@ extension-specific settings).
 
 - **"Turn on vim mode"** → `code.vim_emulation_mode` = true
 - **"Change the theme / dark mode / high contrast"** → `general.appearance.theme`
-- **"Make HD launch on login / at startup"** / "don't launch on login" → `desktop.launch_on_boot`
+- **"Make Hydrogen launch on login / at startup"** / "don't launch on login" → `desktop.launch_on_boot`
 - **"Stop Adom Bridge's window popping up"** → `adom_desktop.show_window_on_launch` = false
 - **"Blender / SolidWorks orbit controls"** → `3d.control_style`
 - **"Hide line numbers / change code font"** → `code.line_numbers.enabled` / `code.appearance.font.family`
-- **"Show the console when HD starts"** → `desktop.show_console_on_startup`
+- **"Show the console when Hydrogen starts"** → `desktop.show_console_on_startup`
 - **"Make the UI compact"** → `general.appearance.user_interface_style` = compact
 
 ## Related skills
 - [hydrogen-adom-menu](../hydrogen-adom-menu/SKILL.md) — the logo menu that opens Settings (and Ports, API Explorer, etc.)
-- [hydrogen-ui](../hydrogen-ui/SKILL.md) — the broader HD UI / panel layout this dialog sits in
-- [hydrogen-adom-desktop](../hydrogen-adom-desktop/SKILL.md) — what the `adom_desktop.*` prefs control (the embedded AD)
+- [hydrogen-ui](../hydrogen-ui/SKILL.md) — the broader Hydrogen UI / panel layout this dialog sits in
+- [hydrogen-adom-desktop](../hydrogen-adom-desktop/SKILL.md) — what the `adom_desktop.*` prefs control (the embedded ab)

@@ -2,7 +2,7 @@
 name: hydrogen-port-watcher
 description: >
   Port reachability in Hydrogen — and why you do NOT need to set up
-  port forwarding. Under WSL2 networkingMode=mirrored (HD's default, which the
+  port forwarding. Under WSL2 networkingMode=mirrored (Hydrogen's default, which the
   setup cascade hard-targets), the distro SHARES the Windows loopback, so every
   port a service binds in the workspace — including `127.0.0.1`-only OAuth
   callback servers from VS Code extensions (Codex, Copilot, GitLens) — is
@@ -14,9 +14,9 @@ description: >
   I reach my port.
 ---
 
-# HD Port Watcher — you don't port-watch anymore (mirrored networking does it)
+# Hydrogen Port Watcher — you don't port-watch anymore (mirrored networking does it)
 
-> **TL;DR for the AI: do NOT try to set up port forwarding in HD.** Under the
+> **TL;DR for the AI: do NOT try to set up port forwarding in Hydrogen.** Under the
 > default WSL2 `networkingMode=mirrored`, ports just work. If a `localhost:<port>`
 > from the workspace isn't reachable on Windows, the fix is almost never "forward
 > the port" — it's "confirm mirrored is on" (see below), or the service didn't
@@ -24,10 +24,10 @@ description: >
 
 ## Why there's nothing to do (mirrored networking)
 
-HD's setup cascade hard-targets `networkingMode=mirrored` in `.wslconfig`. Under
+Hydrogen's setup cascade hard-targets `networkingMode=mirrored` in `.wslconfig`. Under
 mirrored, the WSL2 distro shares the Windows loopback interface, so **any** listener
 in the distro — `0.0.0.0:<port>` AND `127.0.0.1:<port>` — is reachable at the same
-`localhost:<port>` on Windows with zero setup. This is why HD's own OAuth host-proxy
+`localhost:<port>` on Windows with zero setup. This is why Hydrogen's own OAuth host-proxy
 is explicitly **skipped** under mirrored (`lib.rs`: *"under WSL2 mirrored it's
 redundant… host proxy not needed"*).
 
@@ -35,7 +35,7 @@ redundant… host proxy not needed"*).
 
 The `port-watcher` daemon below existed for the pre-mirroring world: the Docker/NAT
 runtime, where the distro could NOT reach Windows loopback, so a daemon watched
-`/proc/net/tcp` for new listeners and HD spun up host-side TCP proxies. It closed
+`/proc/net/tcp` for new listeners and Hydrogen spun up host-side TCP proxies. It closed
 two gaps that DO NOT EXIST under mirrored:
 
 1. **`127.0.0.1`-only listeners.** NAT-mode WSL2 did NOT forward loopback-only
@@ -43,16 +43,16 @@ two gaps that DO NOT EXIST under mirrored:
    servers that frequently bind `127.0.0.1`; without mirroring the browser redirect
    to `localhost:{port}/auth/callback?code=...` hit a port that didn't exist on Windows.
 2. **Auto-forward lag / wedge.** WSL2 localhost-forwarding can lag or break
-   even for `0.0.0.0` listeners (a real HD-logged failure mode:
+   even for `0.0.0.0` listeners (a real Hydrogen-logged failure mode:
    "code-server alive in distro but Windows can't reach 127.0.0.1:7380"). The
-   watcher gives HD a reliable host-side proxy that doesn't depend on WSL2's
+   watcher gives Hydrogen a reliable host-side proxy that doesn't depend on WSL2's
    forwarder.
 
 ## The Solution
 
 A lightweight daemon inside the distro monitors `/proc/net/tcp` for new
 listening ports. When one appears (that wasn't there at boot and isn't a known
-service), it notifies HD's control API. HD creates a host-side TCP proxy on
+service), it notifies Hydrogen's control API. Hydrogen creates a host-side TCP proxy on
 that same port, forwarding through code-server's `/proxy/{port}` to reach the
 distro. The browser redirect just works — even for loopback-only callback
 servers WSL2 wouldn't have forwarded.
@@ -62,7 +62,7 @@ servers WSL2 wouldn't have forwarded.
 ```
 WSL2 distro (Adom-Workspace):       Windows Host:
 ┌─────────────────────┐            ┌──────────────────────┐
-│ Codex creates server │           │ HD Control API       │
+│ Codex creates server │           │ Hydrogen Control API       │
 │ on 127.0.0.1:1455    │           │ (:47084)             │
 │ (WSL2 won't forward) │           │                      │
 │ port-watcher.sh      │──POST──→ │ /port-forward        │
@@ -128,10 +128,10 @@ No boot snapshot — the whitelist is the sole source of truth. Services
 like shotlog can start at any time (days/weeks later) and will never
 get a host proxy as long as their port is in the whitelist.
 
-The watcher reaches HD at `127.0.0.1:<control>/port-forward` — WSL2 mirrored
+The watcher reaches Hydrogen at `127.0.0.1:<control>/port-forward` — WSL2 mirrored
 networking shares loopback with the Windows host, so `127.0.0.1` from inside the
-distro reaches HD's host listener. The control port is dynamic per launch; the
-live control URL is in `~/.adom/hd-control-url`.
+distro reaches Hydrogen's host listener. The control port is dynamic per launch; the
+live control URL is in `~/.adom/hydrogen-control-url`.
 
 ## Installation
 
@@ -153,7 +153,7 @@ The script parses `/proc/net/tcp` directly in `awk` — it filters listener rows
 
 ## UI: Toast + Port Mappings Dialog
 
-**Toast notification:** When a port is forwarded, HD shows an info toast:
+**Toast notification:** When a port is forwarded, Hydrogen shows an info toast:
 "Port 1455 forwarded to workspace". When removed: "Port 1455 forwarding stopped".
 Powered by the `port-forward-changed` Tauri event.
 
@@ -179,13 +179,13 @@ Hydrogen.
 
 There are TWO distinct forwarding mechanisms. The `/proc/net/tcp` watcher above
 is **Layer 2**. Layer 1 is a completely separate path — the OAuth-callback
-**localhost proxy** baked into HD itself — and it's why VS Code extension logins
+**localhost proxy** baked into Hydrogen itself — and it's why VS Code extension logins
 "just work" without any watcher round-trip.
 
 ### Layer 1 — the OAuth-callback localhost proxy (zero-latency, the primary path)
 
-HD intercepts top-level WebView2 navigations via
-`setup_frame_navigation_interception()` (`hd-app/src/lib.rs:75`). On every
+Hydrogen intercepts top-level WebView2 navigations via
+`setup_frame_navigation_interception()` (`hydrogen-app/src/lib.rs:75`). On every
 navigation it runs `extract_oauth_callback_port()` (`lib.rs:384`), which
 **triple-URL-decodes** the target URL (`urlencoding::decode` x3) and scans each
 decode layer — plus the raw and the percent-encoded
@@ -194,7 +194,7 @@ decode layer — plus the raw and the percent-encoded
 `start_oauth_callback_proxy(port)` (`lib.rs:411`), which **pre-binds**
 `127.0.0.1:<port>` on the Windows host (via `hd_control::reuse_bind_tcp`) and
 waits up to ~5 min for one inbound request. When the browser redirects to
-`localhost:<port>/callback?code=…`, HD's pre-bound listener accepts it and
+`localhost:<port>/callback?code=…`, Hydrogen's pre-bound listener accepts it and
 forwards the full path into the distro via code-server:
 `http://localhost:<code_server_port>/proxy/<port>/<path>` (`lib.rs:454`), then
 streams code-server's response back to the browser.
@@ -203,19 +203,19 @@ So the callback port is bound the *instant* the OAuth URL is seen leaving the
 WebView — before the provider ever redirects — which is why Codex / Copilot
 OAuth completes with zero manual setup and zero watcher latency.
 
-**Control / callback endpoints** (HD control API, port 47084):
+**Control / callback endpoints** (Hydrogen control API, port 47084):
 - `POST /start-oauth-proxy` — manually pre-bind a callback port (same effect as
   the navigation interceptor; used by the manual fallback).
-- `GET /oauth/callback` — HD's own built-in callback receiver (used by the
+- `GET /oauth/callback` — Hydrogen's own built-in callback receiver (used by the
   Claude Code PKCE flow); do not call directly.
 
 **Failure mode the AI may see:** if the proxy binds but code-server can't be
-reached, HD returns a styled **502 Bad Gateway** page (dark `#0d1117`
-background, teal `#00b8b0` "OAuth callback proxy" heading) reading roughly *"HD
+reached, Hydrogen returns a styled **502 Bad Gateway** page (dark `#0d1117`
+background, teal `#00b8b0` "OAuth callback proxy" heading) reading roughly *"Hydrogen
 tried to forward this OAuth callback to the container via code-server proxy
 (port …/proxy/…), but it failed. The extension that started this OAuth flow may
 need its callback port (…) mapped to the host."* Seeing that page in a browser
-means Layer 1 fired but the distro-side proxy hop failed — check the HD log for
+means Layer 1 fired but the distro-side proxy hop failed — check the Hydrogen log for
 `[oauth-proxy]` lines and that code-server is alive.
 
 ### Layer 2 — the port watcher (`/proc/net/tcp` daemon, the safety net)
@@ -225,7 +225,7 @@ URLs through mechanisms that bypass top-level WebView navigations, AND the only
 thing that surfaces `127.0.0.1`-only callback servers WSL2 silently won't
 forward. Note: when an app has already registered its port via the
 adom-port-hints protocol, the watcher skips it (it only owns the fallback for
-third-party extensions that don't know HD exists).
+third-party extensions that don't know Hydrogen exists).
 
 ### Layer 3 — manual
 
@@ -236,21 +236,21 @@ third-party extensions that don't know HD exists).
 
 If the host port is already taken by another Windows app, the forwarding
 fails silently. The OAuth callback will break. Mitigation: extensions
-typically pick a different random port on retry. HD logs the conflict.
+typically pick a different random port on retry. Hydrogen logs the conflict.
 
 ## How OAuth Callbacks Work End-to-End
 
 1. Extension (Codex) starts HTTP server on `127.0.0.1:1455` inside the distro
 2. port-watcher.sh detects port 1455 (not in boot snapshot, not known) —
    note WSL2 would NOT have auto-forwarded this loopback-only listener
-3. Watcher POSTs `{"port":1455,"action":"open"}` to HD
-4. HD creates TCP proxy: `localhost:1455` → code-server `/proxy/1455/`
+3. Watcher POSTs `{"port":1455,"action":"open"}` to Hydrogen
+4. Hydrogen creates TCP proxy: `localhost:1455` → code-server `/proxy/1455/`
 5. Extension opens browser with `redirect_uri=http://localhost:1455/callback`
 6. User authenticates, browser redirects to `localhost:1455/callback?code=...`
-7. HD's proxy receives the request, forwards into the distro via code-server
+7. Hydrogen's proxy receives the request, forwards into the distro via code-server
 8. Extension receives callback, completes auth
 9. Extension closes its server, port 1455 disappears
-10. Watcher POSTs `{"port":1455,"action":"close"}`, HD removes proxy
+10. Watcher POSTs `{"port":1455,"action":"close"}`, Hydrogen removes proxy
 
 ## Debugging
 
@@ -264,7 +264,7 @@ wsl -d Adom-Workspace -u adom -- bash -c "cat /proc/net/tcp | awk '\$4 == \"0A\"
 # Check the watcher's own log
 wsl -d Adom-Workspace -u adom -- cat /tmp/port-watcher.log
 
-# Check what HD has forwarded (from Windows host)
+# Check what Hydrogen has forwarded (from Windows host)
 curl -sf http://127.0.0.1:47084/port-forward
 
 # Manually forward a port (for testing, from Windows host)
@@ -272,7 +272,7 @@ curl -sf -X POST http://127.0.0.1:47084/port-forward \
   -H Content-Type:application/json \
   -d '{"port":1455,"action":"open"}'
 
-# Check HD log for port-fwd events
+# Check Hydrogen log for port-fwd events
 # Look for [port-fwd] entries
 ```
 

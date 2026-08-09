@@ -4,7 +4,7 @@
   "type": "bootstrap",
   "title": "Adom Hydrogen (platform base)",
   "brief": "Layer Hydrogen's workspace onto a standard Adom workstation.",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Hydrogen's PLATFORM-GENERIC workspace layer on top of adom/core. Installs adom/core for the full Adom ecosystem, then adds everything common to running inside Hydrogen on ANY platform: the runtime-neutral hydrogen-* skills and the generic editor configuration (Claude Code CLI + extension, VS Code settings, trusted domains). Platform-specific layers depend on THIS: adom/hydrogen-windows-bootstrap (WSL2), adom/hydrogen-mac-bootstrap, adom/hydrogen-ubuntu-bootstrap. The reference design other orgs copy to build their own bootstrap on adom/core.",
   "org": "adom",
   "platform": "any",

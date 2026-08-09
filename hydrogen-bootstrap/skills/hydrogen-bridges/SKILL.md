@@ -1,7 +1,7 @@
 ---
 name: hydrogen-bridges
 description: >
-  Complete reference for the HD bridge ecosystem: the built-in KiCad, Fusion 360,
+  Complete reference for the Hydrogen bridge ecosystem: the built-in KiCad, Fusion 360,
   and Puppeteer bridges, plus the extensible wiki bridge catalog (e.g. Blender)
   and the full set of Adom Bridge capabilities. How they connect through adom-bridge-cli, the Bridge Manager
   dialog, bridge status polling, and all bridge CLI commands. Use when the AI
@@ -14,14 +14,14 @@ description: >
 
 # Hydrogen -- Bridge Ecosystem
 
-HD is the bridge between your Docker container and the user's Windows desktop.
+Hydrogen is the bridge between your Docker container and the user's Windows desktop.
 All commands go through the relay at ws://localhost:8765/.
 
 ---
 
 ## Bridge Architecture
 
-HD launches external bridge processes **on demand**. This is an **extensible**
+Hydrogen launches external bridge processes **on demand**. This is an **extensible**
 ecosystem, not a fixed list — new bridges ship via the wiki catalog (see
 "Extensible bridge catalog" below). The core/first-party bridges:
 
@@ -33,12 +33,12 @@ ecosystem, not a fixed list — new bridges ship via the wiki catalog (see
 
 **Bridge ports have conventional defaults** (KiCad **8771**, Fusion **8773**, Pup **8851**), but adom-bridge-cli registers the **live** port at bridge launch and may pick a different one if a default is taken. To find the actual live port, run `adom-bridge-cli status` and look at `desktop.apps.<bridge>.bridgePort` (or `adom-bridge-cli bridge_list`). In practice you don't need the port directly — use the `adom-bridge-cli <verb>` CLI which routes to the right bridge automatically.
 
-Bridges are launched on demand by HD. They are NOT always running. The Bridge
+Bridges are launched on demand by Hydrogen. They are NOT always running. The Bridge
 Manager polls status every 15 seconds via Tauri `invoke('get_bridge_status')`.
 
 ### What Adom Bridge can do (live capability list)
 
-Bridges are only part of AD. Query the **authoritative, machine-specific** list:
+Bridges are only part of ab. Query the **authoritative, machine-specific** list:
 
 ```bash
 adom-bridge-cli status   # → .capabilities  and  .desktop.apps
@@ -52,7 +52,7 @@ Mapping to where each is documented:
 |---|---|---|
 | `kicad` / `fusion360` / `browser` | the three built-in app bridges | this skill |
 | `screenshot` / `record` / `caption` | OS screenshots, screen/tab recording, recording captions | this skill (screenshots/recording); `caption` is recording-caption support |
-| `files` | send_files / pull_file | **hd-file-transfer**, **hydrogen-adom-desktop** |
+| `files` | send_files / pull_file | **hydrogen-file-transfer**, **hydrogen-adom-desktop** |
 | `notify` | desktop toast notifications | this skill |
 | `shell` | run a command on the user's PC (approval-gated) | **hydrogen-adom-desktop** |
 | `usb` | USB passthrough to the workspace (e.g. workcell hardware over USBIP) | not yet covered — query `adom-bridge-cli status`; future skill |
@@ -99,7 +99,7 @@ each bridge's status. Auto-refreshes every 15 seconds.
 ### Features
 - Status badges with color-coded icons
 - Per-bridge install links when the target app is missing
-- "Browse Bridge Catalog" button linking to the wiki (`/apps?tag=hd-bridge`)
+- "Browse Bridge Catalog" button linking to the wiki (`/apps?tag=hydrogen-bridge`)
 - Polls `invoke('get_bridge_status')` on mount and every 15 seconds
 
 > **App missing? You can auto-install it.** When the target app isn't installed,
@@ -158,8 +158,8 @@ setTimeout(function() {
 
 ## Prerequisites
 
-Check connection: `adom-bridge-cli ping` -- returns "pong" if HD is connected.
-If not connected, the user needs to launch HD on their Windows machine.
+Check connection: `adom-bridge-cli ping` -- returns "pong" if Hydrogen is connected.
+If not connected, the user needs to launch Hydrogen on their Windows machine.
 
 ---
 
@@ -279,10 +279,10 @@ bridge catalog** and installed on demand — for example the **Blender bridge**
 (`adom-blender-bridge`), which is NOT built in (it won't appear in `adom-bridge-cli
 status` until installed). To use a catalog bridge:
 
-- **Discover:** Bridge Manager → "Browse Bridge Catalog" → wiki `/apps?tag=hd-bridge`.
+- **Discover:** Bridge Manager → "Browse Bridge Catalog" → wiki `/apps?tag=hydrogen-bridge`.
 - **Reserved ports:** the `8900-8999` range is set aside for 3rd-party bridges.
 - **Enumerate what's actually live:** `adom-bridge-cli status` → `desktop.apps.*` lists
-  every bridge AD currently knows about, with `bridgePort`, `status`, and whether
+  every bridge ab currently knows about, with `bridgePort`, `status`, and whether
   the target app was detected. **Treat that as the source of truth** for "what
   bridges exist right now" — this skill's table lists the core ones, but new
   catalog bridges will appear in `status` without being in this table.
@@ -326,12 +326,12 @@ adom-bridge-cli shell_execute '{"command": "dir C:\\Github"}'
 
 ## Screen Recording
 
-> **Served by the embedded AD process, NOT HD's built-in bridge.** The
+> **Served by the embedded ab process, NOT Hydrogen's built-in bridge.** The
 > `desktop_record_*` / `desktop_recorder_*` verbs only exist when the standalone
-> AD (spawned `--embedded`) is connected. Verify before using:
+> ab (spawned `--embedded`) is connected. Verify before using:
 > `adom-bridge-cli status` → `.capabilities` must include `record`. If it's absent,
-> only HD's built-in bridge is up and these verbs return "unknown desktop
-> command". See **hd-recording** for full details.
+> only Hydrogen's built-in bridge is up and these verbs return "unknown desktop
+> command". See **hydrogen-recording** for full details.
 
 > **Tab-vs-desktop footgun.** `desktop_record_start` records the **whole screen**
 > and requires an explicit `confirmDesktopNotTabRecording:true` guard so you don't
@@ -340,7 +340,7 @@ adom-bridge-cli shell_execute '{"command": "dir C:\\Github"}'
 > the Puppeteer bridge, no whole-screen capture).
 
 ```bash
-# Record entire desktop (AD-served; needs the confirm guard, zero dialogs)
+# Record entire desktop (ab-served; needs the confirm guard, zero dialogs)
 adom-bridge-cli desktop_record_start '{"reason": "Demo recording", "confirmDesktopNotTabRecording": true}'
 adom-bridge-cli desktop_record_stop
 
@@ -367,7 +367,7 @@ adom-bridge-cli desktop_screenshot_screen '{"maxWidth": 1500}'
 
 ## Browser Profiles
 
-HD can detect all browser profiles installed on the user's machine and open
+Hydrogen can detect all browser profiles installed on the user's machine and open
 URLs in specific browsers/profiles.
 
 **Control API endpoints**:
@@ -384,7 +384,7 @@ URLs in specific browsers/profiles.
 - **hydrogen-ui** -- Adom menu layout where Bridge Manager lives
 - **hydrogen-networking** -- port architecture (conventional bridge ports + dynamic registration)
 - **hydrogen-adom-menu** -- the API Explorer (has bridge-related endpoints)
-- **hydrogen-settings** -- HD settings surface
+- **hydrogen-settings** -- Hydrogen settings surface
 - **hydrogen-self-screenshot** -- host screenshots, window control, and the ralph loop
 - **kicad-interaction** -- foundational KiCad desktop interaction rules
 - **pup** -- Puppeteer browser control via pup CLI

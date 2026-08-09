@@ -32,7 +32,7 @@ Watch the Hydrogen workspace in real-time using Claude Code's Monitor tool + Hyd
 ## Lighter than SSE for point-in-time checks
 
 The proxy SSE stream below is for *reacting continuously*. If you just need a
-snapshot of current state, the **control port** (`$(cat ~/.adom/hd-control-url)`,
+snapshot of current state, the **control port** (`$(cat ~/.adom/hydrogen-control-url)`,
 i.e. `http://127.0.0.1:<dynamic>` — same loopback from the workspace and the host
 via WSL2 mirrored networking) has cheaper reads:
 
@@ -60,9 +60,9 @@ The events don't include details about *what* changed — query `workspace tabs`
 
 ```bash
 # Monitor tool script — reports tab changes in real-time.
-# Inside an HD workspace, talk to the LOCAL HD workspace API, not cloud hostnames:
+# Inside an Hydrogen workspace, talk to the LOCAL Hydrogen workspace API, not cloud hostnames:
 # derive the base from ADOM_CARBON_URL / ADOM_HYDROGEN_URL (they point at
-# http://127.0.0.1:<proxy>). The HD-local slug is always `hdlocal`.
+# http://127.0.0.1:<proxy>). The Hydrogen-local slug is always `hdlocal`.
 API_KEY=$(cat /var/run/adom/api-key)
 CARBON="${ADOM_CARBON_URL:-http://127.0.0.1:47083}"
 HYDROGEN="${ADOM_HYDROGEN_URL:-$CARBON}"

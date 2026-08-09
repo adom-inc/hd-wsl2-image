@@ -1,18 +1,18 @@
 ---
 name: hydrogen-container-stats
-description: HD's workspace stats indicator in the top-right of the title bar — two thin progress bars (CPU + RAM) labelled "Container" plus an info tooltip on hover that shows the workspace name, CPU vs total cores, RAM usage vs limit, disk usage, image/distro, ID, and creation date. Polls once per second when running, every 5 seconds when stopped. Status badges show stopped / starting / restarting / restart-needed states. Use this skill when the user asks about CPU/RAM usage, the resource bars in HD's title bar, workspace disk usage, the "restart needed" badge, why bars are red/yellow, or what's in the tooltip. Trigger words — container stats, workspace stats, container cpu, container ram, container disk, resource bars, cpu bar, ram bar, container tooltip, container indicator, top bar stats, restart needed badge, container stopped badge, container starting, workspace_stats, distro stats, wsl stats.
+description: Hydrogen's workspace stats indicator in the top-right of the title bar — two thin progress bars (CPU + RAM) labelled "Container" plus an info tooltip on hover that shows the workspace name, CPU vs total cores, RAM usage vs limit, disk usage, image/distro, ID, and creation date. Polls once per second when running, every 5 seconds when stopped. Status badges show stopped / starting / restarting / restart-needed states. Use this skill when the user asks about CPU/RAM usage, the resource bars in Hydrogen's title bar, workspace disk usage, the "restart needed" badge, why bars are red/yellow, or what's in the tooltip. Trigger words — container stats, workspace stats, container cpu, container ram, container disk, resource bars, cpu bar, ram bar, container tooltip, container indicator, top bar stats, restart needed badge, container stopped badge, container starting, workspace_stats, distro stats, wsl stats.
 ---
 
-# HD Workspace Stats Indicator
+# Hydrogen Workspace Stats Indicator
 
 > This is the WSL2-runtime version (default). The legacy Docker equivalent
 > (`HD_RUNTIME=docker`) is in the docker/ bucket.
 
-The top-right of HD's title bar (next to the audio/video icons and your profile avatar) shows a tiny `Container` block with two horizontal progress bars — CPU% and RAM% — that animate in real-time. Hovering brings up a tooltip with the full workspace details. Under the WSL2 runtime these numbers now reflect the **`Adom-Workspace` distro**, not a Docker container — but the UI is unchanged, so the header still reads "Container".
+The top-right of Hydrogen's title bar (next to the audio/video icons and your profile avatar) shows a tiny `Container` block with two horizontal progress bars — CPU% and RAM% — that animate in real-time. Hovering brings up a tooltip with the full workspace details. Under the WSL2 runtime these numbers now reflect the **`Adom-Workspace` distro**, not a Docker container — but the UI is unchanged, so the header still reads "Container".
 
 ## How often it polls
 
-There's an active polling loop in HD's title bar that asks the runtime for fresh stats on a timer:
+There's an active polling loop in Hydrogen's title bar that asks the runtime for fresh stats on a timer:
 
 - **Every 1 second** when the workspace is `running` — for live, smooth bar animation
 - **Every 5 seconds** when it's `stopped`, `starting`, `restarting`, or `restart needed` — saves cycles when nothing's changing
@@ -58,8 +58,8 @@ The `Container` text in the section header gets an inline status badge depending
 |-------|---------|-------|
 | (no badge) | Running normally | normal |
 | `stopped` | Distro registered but not running | red |
-| `starting` | HD is starting the distro / code-server | yellow |
-| `restarting` | HD is restarting the distro | yellow |
+| `starting` | Hydrogen is starting the distro / code-server | yellow |
+| `restarting` | Hydrogen is restarting the distro | yellow |
 | `restart needed` | The distro or code-server is unreachable (usually a WSL2 hiccup after Windows wake) | red |
 
 When `restart needed` shows, open the Adom menu → Restart Workspace (see the `hydrogen-ui` skill for the Adom menu). A "Restart" here is `wsl --terminate Adom-Workspace` + re-ensure code-server — NOT `docker restart`.
@@ -73,13 +73,13 @@ When `restart needed` shows, open the Adom menu → Restart Workspace (see the `
 
 ### The benign `[docker] unhealthy` log line
 
-You will sometimes see this in HD's log even on the WSL2 path:
+You will sometimes see this in Hydrogen's log even on the WSL2 path:
 
 ```
 [docker] Container runtime unhealthy — exec failed, needs restart
 ```
 
-**Under WSL this is BENIGN NOISE.** It's a leftover hd-docker heartbeat with no container bound to it — there is no Docker container in WSL mode, so "exec failed" is expected and meaningless. It does NOT mean your workspace is broken.
+**Under WSL this is BENIGN NOISE.** It's a leftover hydrogen-docker heartbeat with no container bound to it — there is no Docker container in WSL mode, so "exec failed" is expected and meaningless. It does NOT mean your workspace is broken.
 
 The real WSL health signal to watch for is:
 
@@ -95,10 +95,10 @@ If you want the same stats data your AI can hit directly via the control API:
 
 ```bash
 # From inside the distro — query the control API on the host
-curl -s "$(cat ~/.adom/hd-control-url)/container-stats"
+curl -s "$(cat ~/.adom/hydrogen-control-url)/container-stats"
 ```
 
-(Reach the control API at `127.0.0.1` — WSL2 mirrored networking shares loopback with the Windows host. The port is **dynamic per launch**; read the live URL from `~/.adom/hd-control-url` rather than hardcoding it.)
+(Reach the control API at `127.0.0.1` — WSL2 mirrored networking shares loopback with the Windows host. The port is **dynamic per launch**; read the live URL from `~/.adom/hydrogen-control-url` rather than hardcoding it.)
 
 Returns JSON like:
 ```json
@@ -141,7 +141,7 @@ Or if the workspace is in a broken state:
 
 **"Why does RAM stay constant at ~4% even when I'm doing nothing?"** Code-server, the relay, gallia, the adom-vscode HTTP API, etc. all run in the distro all the time. ~700 MB baseline is normal.
 
-**"The 'restart needed' badge appeared — what happened?"** Almost always a WSL2 hiccup after Windows wake/sleep, leaving the distro or code-server unreachable. Click Restart Workspace in the Adom menu (top-left). HD will `wsl --terminate Adom-Workspace`, re-ensure code-server, and the badge clears.
+**"The 'restart needed' badge appeared — what happened?"** Almost always a WSL2 hiccup after Windows wake/sleep, leaving the distro or code-server unreachable. Click Restart Workspace in the Adom menu (top-left). Hydrogen will `wsl --terminate Adom-Workspace`, re-ensure code-server, and the badge clears.
 
 **"The log says `[docker] … unhealthy` — is my workspace broken?"** No. Under WSL that line is a benign leftover heartbeat with no container bound. Look at `[wsl] Workspace unhealthy …` for the real signal. See "The benign `[docker] unhealthy` log line" above.
 

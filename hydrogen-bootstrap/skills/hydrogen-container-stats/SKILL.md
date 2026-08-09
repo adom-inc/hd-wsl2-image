@@ -1,17 +1,17 @@
 ---
 name: hydrogen-container-stats
-description: HD's workspace stats indicator in the top-right of the title bar — two thin progress bars (CPU + RAM) labelled "Container" plus an info tooltip on hover that shows the workspace name, CPU vs total cores, RAM usage vs limit, disk usage, image, ID, and creation date. Polls once per second when running, every 5 seconds when stopped. Status badges show stopped / starting / restarting / restart-needed states. Use this skill when the user asks about CPU/RAM usage, the resource bars in HD's title bar, workspace disk usage, the "restart needed" badge, why bars are red/yellow, or what's in the tooltip. Trigger words — container stats, workspace stats, container cpu, container ram, container disk, resource bars, cpu bar, ram bar, container tooltip, container indicator, top bar stats, restart needed badge, container stopped badge, container starting, workspace_stats, workspace stats.
+description: Hydrogen's workspace stats indicator in the top-right of the title bar — two thin progress bars (CPU + RAM) labelled "Container" plus an info tooltip on hover that shows the workspace name, CPU vs total cores, RAM usage vs limit, disk usage, image, ID, and creation date. Polls once per second when running, every 5 seconds when stopped. Status badges show stopped / starting / restarting / restart-needed states. Use this skill when the user asks about CPU/RAM usage, the resource bars in Hydrogen's title bar, workspace disk usage, the "restart needed" badge, why bars are red/yellow, or what's in the tooltip. Trigger words — container stats, workspace stats, container cpu, container ram, container disk, resource bars, cpu bar, ram bar, container tooltip, container indicator, top bar stats, restart needed badge, container stopped badge, container starting, workspace_stats, workspace stats.
 ---
 
-# HD Workspace Stats Indicator
+# Hydrogen Workspace Stats Indicator
 
-The top-right of HD's title bar (next to the audio/video icons and your profile avatar) shows a tiny `Container` block with two horizontal progress bars — CPU% and RAM% — that animate in real-time. Hovering brings up a tooltip with the full workspace details. The numbers reflect your **local HD workspace**; the header reads "Container" on all platforms.
+The top-right of Hydrogen's title bar (next to the audio/video icons and your profile avatar) shows a tiny `Container` block with two horizontal progress bars — CPU% and RAM% — that animate in real-time. Hovering brings up a tooltip with the full workspace details. The numbers reflect your **local Hydrogen workspace**; the header reads "Container" on all platforms.
 
 > Platform layers add a `*-windows` companion ([[hydrogen-container-stats-windows]]) with the host-specific probe — the WSL `workspace_stats()` health check, `wsl --terminate` restart, the benign `[docker]` log line, and distro disk semantics.
 
 ## How often it polls
 
-There's an active polling loop in HD's title bar that asks the runtime for fresh stats on a timer:
+There's an active polling loop in Hydrogen's title bar that asks the runtime for fresh stats on a timer:
 
 - **Every 1 second** when the workspace is `running` — for live, smooth bar animation
 - **Every 5 seconds** when it's `stopped`, `starting`, `restarting`, or `restart needed` — saves cycles when nothing's changing
@@ -57,8 +57,8 @@ The `Container` text in the section header gets an inline status badge depending
 |-------|---------|-------|
 | (no badge) | Running normally | normal |
 | `stopped` | Workspace registered but not running | red |
-| `starting` | HD is starting the workspace / code-server | yellow |
-| `restarting` | HD is restarting the workspace | yellow |
+| `starting` | Hydrogen is starting the workspace / code-server | yellow |
+| `restarting` | Hydrogen is restarting the workspace | yellow |
 | `restart needed` | The workspace or code-server is unreachable (usually a hiccup after the host wakes from sleep) | red |
 
 When `restart needed` shows, open the Adom menu → Restart Workspace (see the `[[hydrogen-ui]]` skill for the Adom menu). A "Restart" here terminates and re-ensures the workspace + code-server.
@@ -78,10 +78,10 @@ If you want the same stats data your AI can hit directly via the control API:
 
 ```bash
 # From inside the workspace — query the control API on the host
-curl -s "$(cat ~/.adom/hd-control-url)/container-stats"
+curl -s "$(cat ~/.adom/hydrogen-control-url)/container-stats"
 ```
 
-(Read the live URL from `~/.adom/hd-control-url` rather than hardcoding it — the port is **dynamic per launch**.)
+(Read the live URL from `~/.adom/hydrogen-control-url` rather than hardcoding it — the port is **dynamic per launch**.)
 
 Returns JSON like:
 ```json
@@ -124,7 +124,7 @@ Or if the workspace is in a broken state:
 
 **"Why does RAM stay constant at ~4% even when I'm doing nothing?"** Code-server, the relay, gallia, the adom-vscode HTTP API, etc. all run in the workspace all the time. ~700 MB baseline is normal.
 
-**"The 'restart needed' badge appeared — what happened?"** Almost always a hiccup after the host woke from sleep/hibernate, leaving the workspace or code-server unreachable. Click Restart Workspace in the Adom menu (top-left); HD restarts the workspace, re-ensures code-server, and the badge clears.
+**"The 'restart needed' badge appeared — what happened?"** Almost always a hiccup after the host woke from sleep/hibernate, leaving the workspace or code-server unreachable. Click Restart Workspace in the Adom menu (top-left); Hydrogen restarts the workspace, re-ensures code-server, and the badge clears.
 
 **"Disk is 1.3 GB — does that include my project files?"** Yes — `/home/adom/project` lives inside the workspace, so the `Disk:` figure includes your project.
 

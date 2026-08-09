@@ -1,11 +1,11 @@
 ---
 name: hydrogen-desktop-sse
-description: How HD's local workspace API + SSE works (a.k.a. the workspace API) — replaces Carbon for workspace commands so the workspace's adom-cli controls HD, not cloud Hydrogen. Covers the full pipeline, routing, env vars, field format differences, port discovery, and hard-won lessons. Trigger words — HD SSE, workspace API, local API, adom-cli workspace, add-tab, move-tab, webview tab, EventSource, workspace_updated, ADOM_CARBON_URL, ADOM_HYDROGEN_URL, discovery port.
+description: How Hydrogen's local workspace API + SSE works (a.k.a. the workspace API) — replaces Carbon for workspace commands so the workspace's adom-cli controls Hydrogen, not cloud Hydrogen. Covers the full pipeline, routing, env vars, field format differences, port discovery, and hard-won lessons. Trigger words — Hydrogen SSE, workspace API, local API, adom-cli workspace, add-tab, move-tab, webview tab, EventSource, workspace_updated, ADOM_CARBON_URL, ADOM_HYDROGEN_URL, discovery port.
 ---
 
 # Hydrogen — Local Workspace API + SSE
 
-> Platform note: HD runs the same local workspace API on every platform (Windows/WSL2,
+> Platform note: Hydrogen runs the same local workspace API on every platform (Windows/WSL2,
 > macOS, Linux). For the WSL2-specific networking details (mirrored loopback,
 > `%APPDATA%\hydrogen-desktop\ports.json`, the `HD_RUNTIME=docker` runtime, relay
 > same-port behavior), see **[[hydrogen-desktop-sse-windows]]**.
@@ -14,17 +14,17 @@ description: How HD's local workspace API + SSE works (a.k.a. the workspace API)
 
 ```
 Workspace adom-cli (the local workspace)
-    → http://127.0.0.1:47083 (HD's proxy)
-    → HD handles workspace commands locally + broadcasts SSE
-    → HD frontend receives SSE, re-fetches workspace, renders
+    → http://127.0.0.1:47083 (Hydrogen's proxy)
+    → Hydrogen handles workspace commands locally + broadcasts SSE
+    → Hydrogen frontend receives SSE, re-fetches workspace, renders
 
 Cloud adom-cli (unchanged)
     → carbon.adom.inc → Hydrogen web
 ```
 
-HD runs its own workspace API on port 47083 (reverse proxy, default — see PortConfig) so the workspace's adom-cli controls HD's UI, not cloud Hydrogen. No cross-talk between environments. The workspace reaches HD at `127.0.0.1:47083`.
+Hydrogen runs its own workspace API on port 47083 (reverse proxy, default — see PortConfig) so the workspace's adom-cli controls Hydrogen's UI, not cloud Hydrogen. No cross-talk between environments. The workspace reaches Hydrogen at `127.0.0.1:47083`.
 
-## Port 47083 routing (the hd-proxy / reverse-proxy)
+## Port 47083 routing (the hydrogen-proxy / reverse-proxy)
 
 All requests hit port 47083 (reverse proxy, default — see PortConfig). The router in `handle_request()` decides:
 
@@ -42,7 +42,7 @@ The dev file server on port 1420 forwards `/api/*` directly to `handle_request()
 
 **Endpoint:** `GET /api/workspaces/editor/{owner}/{repo}/current/events`
 
-Uses `tokio::sync::broadcast` channel. On connect sends `{"type":"connected","connectionId":"hd-local"}`. Workspace mutations broadcast `{"type":"workspace_updated"}`.
+Uses `tokio::sync::broadcast` channel. On connect sends `{"type":"connected","connectionId":"hydrogen-local"}`. Workspace mutations broadcast `{"type":"workspace_updated"}`.
 
 **Frontend connects** in `PanelWorkspaceComponent.svelte` → `setupSSE()`. In Tauri mode, `$page.params` may be empty (adapter-static), so it falls back to `owner=local, repo=workspace`.
 
@@ -72,12 +72,12 @@ Set when the workspace is created:
 
 | Var | Value | Why |
 |---|---|---|
-| `VSCODE_PROXY_URI` | `http://hd-hdlocal/proxy/{{port}}/` | Slug = `hdlocal` (last segment after `-`) |
+| `VSCODE_PROXY_URI` | `http://hydrogen-hdlocal/proxy/{{port}}/` | Slug = `hdlocal` (last segment after `-`) |
 | `ADOM_CARBON_URL` | `http://127.0.0.1:47083` | Container discovery + non-workspace API |
 | `ADOM_HYDROGEN_URL` | `http://127.0.0.1:47083` | Workspace mutations (adom-cli sends these HERE, not to Carbon) |
 | `ADOM_DESKTOP_MODE` | `local` | Tells adom-cli it's a local environment |
 
-`127.0.0.1` reaches HD on the host from inside the workspace. The canonical code-server port HD exposes on the host is 7380.
+`127.0.0.1` reaches Hydrogen on the host from inside the workspace. The canonical code-server port Hydrogen exposes on the host is 7380.
 
 **Also set in adom-cli config** (persists across sessions):
 ```bash
@@ -86,7 +86,7 @@ adom-cli config set-token <session-token>
 ```
 Plus manually write `hydrogen_url` to `~/.config/adom-cli/config.json` (no CLI command for it).
 
-**API key** injected at `/var/run/adom/api-key` by bootstrap via `GET "$(cat ~/.adom/hd-control-url)/auth-token"` (the control URL is `http://127.0.0.1:<dynamic>`).
+**API key** injected at `/var/run/adom/api-key` by bootstrap via `GET "$(cat ~/.adom/hydrogen-control-url)/auth-token"` (the control URL is `http://127.0.0.1:<dynamic>`).
 
 ## Workspace Tree Format
 
@@ -104,11 +104,11 @@ The frontend serializes splits with `first`/`second`, NOT `children`:
 
 All tree traversal functions (`find_leaf_path`, `find_split_path`, `resolve_path`) must handle BOTH `children` array and `first`/`second` keys.
 
-## REST Endpoint Field Names (adom-cli vs HD)
+## REST Endpoint Field Names (adom-cli vs Hydrogen)
 
 adom-cli sends different field names than you might expect:
 
-| Endpoint | adom-cli sends | HD must read |
+| Endpoint | adom-cli sends | Hydrogen must read |
 |---|---|---|
 | POST /tabs | `{panelId, panelType, displayName, initialState}` | Construct tab with UUID, merge initialState into panelState |
 | POST /moves | `{sourcePanelId, tabId, targetPanelId}` | NOT `sourcePanel`/`targetPanel` |
@@ -153,10 +153,10 @@ The `onopen` handler PUTs workspace state → broadcasts `workspace_updated` →
 Three stacked issues:
 1. `VSCODE_PROXY_URI` was `http://localhost:8080/...` → slug parsed as `8080` → called `/containers/8080` → Carbon 404
 2. Container info response had flat `{"owner": "..."}` but adom-cli reads `container["repository"]["owner"]["name"]`
-3. `ADOM_HYDROGEN_URL` wasn't set → workspace commands went to `hydrogen.adom.inc` instead of HD
+3. `ADOM_HYDROGEN_URL` wasn't set → workspace commands went to `hydrogen.adom.inc` instead of Hydrogen
 
 ### add-tab returned "Missing 'tab' in body"
-HD expected `{"panelId", "tab": {id, panelType, panelState}}` but adom-cli sends `{"panelId", "panelType", "displayName", "initialState"}` — flat format. **Fix:** accept both, construct tab with UUID for the flat format.
+Hydrogen expected `{"panelId", "tab": {id, panelType, panelState}}` but adom-cli sends `{"panelId", "panelType", "displayName", "initialState"}` — flat format. **Fix:** accept both, construct tab with UUID for the flat format.
 
 ### move-tab returned "Source/target panel not found"
 Two issues:
@@ -167,11 +167,11 @@ Two issues:
 `add_FrameNavigationStarting` was blocking ALL external URLs in child iframes, including legitimate webview panel content. **Fix:** stop blocking frame navigations entirely — webview panels need external URLs. URL interception for window.open still works via `on_new_window`.
 
 ### Google showed "blocked" icon
-Not an HD bug. Google sends `X-Frame-Options: SAMEORIGIN` which prevents iframe embedding. Sites that allow embedding (adom.inc, wiki) load fine.
+Not an Hydrogen bug. Google sends `X-Frame-Options: SAMEORIGIN` which prevents iframe embedding. Sites that allow embedding (adom.inc, wiki) load fine.
 
-## Port Discovery — How Any Client Finds HD
+## Port Discovery — How Any Client Finds Hydrogen
 
-All HD ports are dynamic (configurable via `ports.json`). The ONE constant is the **discovery port: 47080**. It never changes.
+All Hydrogen ports are dynamic (configurable via `ports.json`). The ONE constant is the **discovery port: 47080**. It never changes.
 
 ```
 GET http://127.0.0.1:47080/discover
@@ -200,11 +200,11 @@ Returns:
 | adom-bridge-cli relay | Control API port (was hardcoded 9001) | `curl :47080/discover` → use `control` field |
 | adom-cli in the workspace | Proxy + Hydrogen URL | Already set via `ADOM_CARBON_URL` env var at workspace creation |
 | External tools / diagnostics | Any port | Hit discovery, get the full map |
-| Cloud Docker (this container) | All HD ports | `curl http://<desktop-ip>:47080/discover` via relay |
+| Cloud Docker (this container) | All Hydrogen ports | `curl http://<desktop-ip>:47080/discover` via relay |
 
 ### Implementation
 
-Tiny `std::net::TcpListener` on port 47080 in `hd-app/src/lib.rs`. Runs on a plain OS thread (no tokio). Reads `get_runtime_ports()` on each request. Returns raw HTTP response with JSON body.
+Tiny `std::net::TcpListener` on port 47080 in `hydrogen-app/src/lib.rs`. Runs on a plain OS thread (no tokio). Reads `get_runtime_ports()` on each request. Returns raw HTTP response with JSON body.
 
 ```rust
 std::thread::spawn(move || {
@@ -235,11 +235,11 @@ On first launch, defaults are written without scanning. Workspace-side ports (80
 
 | File | What |
 |---|---|
-| `src-tauri/crates/hd-proxy/src/lib.rs` | Workspace API, SSE, Carbon proxy, tree mutations (~1500 lines) |
-| `src-tauri/crates/hd-docker/src/lib.rs` | Container env vars (CARBON_URL, HYDROGEN_URL, VSCODE_PROXY_URI) |
-| `src-tauri/crates/hd-control/src/lib.rs` | `/auth-token` endpoint, `/ports` endpoint, `/setup/*` routes |
-| `src-tauri/crates/hd-control/src/ports.rs` | PortConfig struct, load/save/resolve, DISCOVERY_PORT constant |
-| `src-tauri/crates/hd-app/src/lib.rs` | Discovery server on :47080, port resolution at startup |
+| `src-tauri/crates/hydrogen-proxy/src/lib.rs` | Workspace API, SSE, Carbon proxy, tree mutations (~1500 lines) |
+| `src-tauri/crates/hydrogen-docker/src/lib.rs` | Container env vars (CARBON_URL, HYDROGEN_URL, VSCODE_PROXY_URI) |
+| `src-tauri/crates/hydrogen-control/src/lib.rs` | `/auth-token` endpoint, `/ports` endpoint, `/setup/*` routes |
+| `src-tauri/crates/hydrogen-control/src/ports.rs` | PortConfig struct, load/save/resolve, DISCOVERY_PORT constant |
+| `src-tauri/crates/hydrogen-app/src/lib.rs` | Discovery server on :47080, port resolution at startup |
 | `src/lib/stores/portStore.ts` | Frontend Svelte store, `initPorts()`, `controlUrl()`, `codeServerUrl()` |
 | `src/lib/components/editor/workspaces/PanelWorkspaceComponent.svelte` | Frontend SSE setup, autosave, workspace re-fetch |
 | `scripts/hydrogen-bootstrap.sh` | Sets adom-cli config, injects API key, uses `HD_CONTROL_PORT` env var |

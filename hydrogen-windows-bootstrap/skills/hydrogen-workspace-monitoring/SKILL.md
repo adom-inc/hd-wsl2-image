@@ -12,7 +12,7 @@ description: >
   reachable, lifecycle dialog, workspace state, Adom-Workspace running.
 ---
 
-# HD Workspace Monitoring
+# Hydrogen Workspace Monitoring
 
 > This is the WSL2-runtime version (default). The legacy Docker equivalent
 > (`HD_RUNTIME=docker`) is in the docker/ bucket.
@@ -20,15 +20,15 @@ description: >
 ## Architecture
 
 Under the WSL2 runtime the workspace is the **`Adom-Workspace` distro** (imported via
-`wsl --import`), not a Docker container. HD monitors workspace health at two levels:
+`wsl --import`), not a Docker container. Hydrogen monitors workspace health at two levels:
 
 1. **WSL2 available** — is WSL2 itself installed and responding on this machine?
 2. **Workspace healthy** — is `Adom-Workspace` registered AND Running AND is
    code-server reachable on host port **7380**?
 
 The second level is a real reachability check, not just "is the distro registered."
-A resume reality-check (after sleep, or after an HD rebuild/relaunch) requires
-code-server to actually answer before HD trusts the workspace as healthy — a distro
+A resume reality-check (after sleep, or after an Hydrogen rebuild/relaunch) requires
+code-server to actually answer before Hydrogen trusts the workspace as healthy — a distro
 can be `Running` while code-server is dead.
 
 The VS Code panel (`PanelVisualStudioCode.svelte`) polls workspace state every 15s
@@ -64,7 +64,7 @@ running") become WSL/distro states under this runtime.
 ### 1. WSL2 Not Available (red dot)
 - **When**: WSL2 itself is not installed / not responding (level-1 health fails)
 - **Message**: "WSL2 is required but not available."
-- **Action**: "Run Setup Steps" button → dispatches `hd-show-setup` event (which walks
+- **Action**: "Run Setup Steps" button → dispatches `hydrogen-show-setup` event (which walks
   the user through enabling WSL2)
 - **Color**: Red dot in header
 
@@ -90,11 +90,11 @@ delegates to `WslDistroRuntime::setup_and_start`:
   Adom-Workspace` + start code-server.
 - If the distro is present but code-server is down, it just (re-)starts code-server.
 
-Importantly, code-server runs as an **HD-owned child process** (not a detached
-`nohup`) — it dies with HD. So HD also **re-ensures code-server on every launch**
+Importantly, code-server runs as an **Hydrogen-owned child process** (not a detached
+`nohup`) — it dies with Hydrogen. So Hydrogen also **re-ensures code-server on every launch**
 (look for `[wsl-startup] re-ensured code-server on launch` in the log). Without that,
-a freshly relaunched HD would show the distro Running but the editor stuck on
-"Starting AI Environment" forever, because the previous HD's code-server child was
+a freshly relaunched Hydrogen would show the distro Running but the editor stuck on
+"Starting AI Environment" forever, because the previous Hydrogen's code-server child was
 orphaned. See [hydrogen-workspace-lifecycle](../hydrogen-workspace-lifecycle/SKILL.md) for the
 full lifecycle detail.
 

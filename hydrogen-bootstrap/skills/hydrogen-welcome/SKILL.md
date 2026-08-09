@@ -1,18 +1,18 @@
 ---
 name: hydrogen-welcome
 description: >
-  The HD welcome page — shown after setup steps complete. Served from
+  The Hydrogen welcome page — shown after setup steps complete. Served from
   static/welcome.html at http://localhost:1420/welcome.html. Shows Adom
   branding, "Build and test electronics in the cloud", and an "Open Claude
   Code" button. This is NOT the adom.inc homepage — it's a local static page
-  bundled with HD. Trigger words: welcome page, welcome tab, show welcome,
+  bundled with Hydrogen. Trigger words: welcome page, welcome tab, show welcome,
   onboarding page, setup complete page, first launch page.
 ---
 
-# HD Welcome Page
+# Hydrogen Welcome Page
 
-The welcome page is a static HTML page bundled with HD at `static/welcome.html`.
-It's served locally at `http://localhost:1420/welcome.html` by HD's dev file server.
+The welcome page is a static HTML page bundled with Hydrogen at `static/welcome.html`.
+It's served locally at `http://localhost:1420/welcome.html` by Hydrogen's dev file server.
 
 ## What it shows
 
@@ -41,11 +41,11 @@ adom-cli hydrogen webview open-or-refresh \
   --panel-id desktop-pane-right
 ```
 
-`localhost:1420` is HD's dev file server running on the host (where HD itself runs),
-NOT anything inside the workspace. HD's webview renders the URL against the host, so the
-page resolves on whatever platform HD is running on.
+`localhost:1420` is Hydrogen's dev file server running on the host (where Hydrogen itself runs),
+NOT anything inside the workspace. Hydrogen's webview renders the URL against the host, so the
+page resolves on whatever platform Hydrogen is running on.
 
-### From outside (via HD control API)
+### From outside (via Hydrogen control API)
 
 The workspace tabs API doesn't reliably store the URL in panelState when
 creating tabs. The reliable method is to navigate an existing webview iframe:
@@ -71,9 +71,9 @@ curl -X POST http://127.0.0.1:47083/api/workspaces/editor/{owner}/{repo}/current
 - NOT the VS Code welcome tab inside code-server
 
 It is a LOCAL static page at `http://localhost:1420/welcome.html`, bundled
-in `static/welcome.html` in the HD repo.
+in `static/welcome.html` in the Hydrogen repo.
 
 ## Panel type
 
-Webview tabs in HD use panel type `adom/a1b2c3d4-0031-4000-a000-000000000031`.
+Webview tabs in Hydrogen use panel type `adom/a1b2c3d4-0031-4000-a000-000000000031`.
 Do NOT use `panelType: "webview"` — that shows "Unknown panel type" error.

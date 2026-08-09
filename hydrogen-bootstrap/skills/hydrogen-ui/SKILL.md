@@ -1,22 +1,22 @@
 ---
 name: hydrogen-ui
 description: >
-  HD's user interface: menus, dialogs, panels, login/logout, profile menu,
+  Hydrogen's user interface: menus, dialogs, panels, login/logout, profile menu,
   workspace layout, setup panel — and how to DRIVE them from the workspace via
   the UI command bus (GET /ui/actions → POST /ui/invoke), the first-class way to
-  open/close/toggle any HD menu or dialog (no CDP clicking). READ when the user
-  asks you to open/close a dialog or menu, operate HD's UI, or you need to know
-  where a UI element is. Trigger words — HD menu, HD dialog, HD panel, open
+  open/close/toggle any Hydrogen menu or dialog (no CDP clicking). READ when the user
+  asks you to open/close a dialog or menu, operate Hydrogen's UI, or you need to know
+  where a UI element is. Trigger words — Hydrogen menu, Hydrogen dialog, Hydrogen panel, open
   dialog, open menu, close dialog, drive UI, ui/actions, ui/invoke, command bus,
   ports.open, settings.open, about dialog, profile menu, login, logout, settings,
-  setup panel, Adom menu, HD UI.
+  setup panel, Adom menu, Hydrogen UI.
 ---
 
 # Hydrogen — UI Reference
 
 ## Window Layout
 
-HD's window has these regions (top to bottom, left to right):
+Hydrogen's window has these regions (top to bottom, left to right):
 
 ### Title Bar
 - **Left**: "jlauer12 / Hydrogen" — shows user + app name
@@ -47,11 +47,11 @@ The main menu, opened by clicking the Adom logo at the top-left. Items are group
 - **Ports...** — opens the port configuration dialog (see hydrogen-ports)
 - **API Explorer...** — opens the control-API endpoint explorer dialog
 
-**DESKTOP** (Tauri-only — won't appear in browser-served HD; in order)
+**DESKTOP** (Tauri-only — won't appear in browser-served Hydrogen; in order)
 - **Adom Bridge** — brings the embedded Adom Bridge window to the foreground (taskbar); bus id `adom-bridge-cli.open`
 - **Zoom** — webview zoom controls (− %  +) with persistence across launches
 - **Fullscreen** — toggle fullscreen
-- **Console** — show/hide the HD debug console window
+- **Console** — show/hide the Hydrogen debug console window
 - **Developer Tools** — open the webview developer tools
 - **Dev Toolbar** — show/hide the Adom Dev Toolbar window (eval-in / shot / Claude control endpoints); bus id `dev-toolbar.toggle`
 
@@ -64,7 +64,7 @@ The main menu, opened by clicking the Adom logo at the top-left. Items are group
 **ADMIN**
 - **Setup Steps** — opens the setup panel (the setup cascade for the active runtime); see hydrogen-setup-steps
 - **Virgin Reset** — opens the virgin reset section of the setup panel; see hydrogen-volume for what each toggle deletes
-- **Browser Picker Manager** — configure per-domain default browser/profile prefs; see hd-browser-picker
+- **Browser Picker Manager** — configure per-domain default browser/profile prefs; see hydrogen-browser-picker
 
 ### Profile Menu (top-right avatar)
 Click the user avatar (circular photo) in the top-right corner.
@@ -95,17 +95,17 @@ Appears when clicking external links. Shows detected browser profiles
 
 ## Driving the UI — the command bus (PREFERRED, first-class)
 
-⭐ **Every menu / dialog / panel HD has wired is a first-class action you drive over the control
-API — no CDP, no `.click()`, no selector guessing.** This is how you operate HD's UI when the
+⭐ **Every menu / dialog / panel Hydrogen has wired is a first-class action you drive over the control
+API — no CDP, no `.click()`, no selector guessing.** This is how you operate Hydrogen's UI when the
 user says "open the Ports dialog", "open About", "show settings", etc.
 
-**Get the control URL from the discovery file** `~/.adom/hd-control-url` (HD rewrites it with
+**Get the control URL from the discovery file** `~/.adom/hydrogen-control-url` (Hydrogen rewrites it with
 the live, dynamic control port every launch; it's the host loopback, reachable from the
 workspace). Read it from a file, not an env var — your Bash tool runs non-interactive shells
 that don't source `.bashrc`/`profile.d`:
 
 ```bash
-CTRL="$(cat ~/.adom/hd-control-url)"
+CTRL="$(cat ~/.adom/hydrogen-control-url)"
 ```
 
 **Always do this in order:**
@@ -147,7 +147,7 @@ item-level treatment over time.
 > `setup-panel.hide` action is on the wishlist.
 
 ### Open a surface, then screenshot it (the killer combo)
-Combine the bus with HD's canonical capture endpoint to grab any menu/dialog/panel with
+Combine the bus with Hydrogen's canonical capture endpoint to grab any menu/dialog/panel with
 **no screen-clicking**: `POST /ui/invoke {id:"<x>.open"}` → `POST /screenshot
 {target:"shell", selector:"<open-state selector>"}` → `POST /ui/invoke {id:"<x>.close"}`.
 The `/screenshot` region-flash lands on that selector. Resolved selectors (verified live):
@@ -155,14 +155,14 @@ The `/screenshot` region-flash lands on that selector. Resolved selectors (verif
 `.setup-panel`; **API Explorer** → `.dialog`. Full `/screenshot` reference (target/selector/
 b64/silent) is in **[hydrogen-self-screenshot](../hydrogen-self-screenshot/SKILL.md)**.
 
-> **This is HD-desktop-only and SEPARATE from `adom-cli`.** `adom-cli` drives *web-hydrogen's*
-> UI via the SSE bridge (`ADOM_HYDROGEN_URL`) and is unchanged. For HD desktop's far richer UI
+> **This is Hydrogen-desktop-only and SEPARATE from `adom-cli`.** `adom-cli` drives *web-hydrogen's*
+> UI via the SSE bridge (`ADOM_HYDROGEN_URL`) and is unchanged. For Hydrogen desktop's far richer UI
 > control, use the command bus above — never `adom-cli` for this.
 
 ## Legacy: raw CDP clicking (deprecated fallback — the command bus above is canonical)
 
-⚠ The command bus (`/ui/actions` → `/ui/invoke`) is the canonical way to drive HD's UI. Before
-it existed, UI was driven by CDP `.click()` on CSS selectors via the HD CDP eval channel. This
+⚠ The command bus (`/ui/actions` → `/ui/invoke`) is the canonical way to drive Hydrogen's UI. Before
+it existed, UI was driven by CDP `.click()` on CSS selectors via the Hydrogen CDP eval channel. This
 is brittle (selectors drift; multiple `localhost:1420` CDP targets) and the selectors below may
 be stale. Reach for CDP ONLY for an element not yet on the bus — and the better fix is to
 register it. Eval JS against the CDP endpoint (its port comes from `/discover` as `cdp`).

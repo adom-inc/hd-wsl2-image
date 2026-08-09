@@ -3,12 +3,12 @@ name: hydrogen-open-url
 description: >
   The decision guide for "open a URL / open a website" inside Hydrogen.
   When the user says "open ti.com" / "pull up the datasheet page" / "show me
-  that site", HD has SIX distinct ways to do it — a Hydrogen webview tab, an HD
+  that site", Hydrogen has SIX distinct ways to do it — a Hydrogen webview tab, an Hydrogen
   browser window, Pup (AI-drivable Chrome), a native desktop browser profile,
   the Browser Picker chooser, or headless curl/fetch — each with different
   trade-offs. READ THIS to pick the right one and to explain the options back to
   the user instead of silently guessing. For the interception/plumbing behind the
-  picker see hd-browser-picker; to drive Pup see pup; for webview tabs see
+  picker see hydrogen-browser-picker; to drive Pup see pup; for webview tabs see
   adom-workspace-control. Trigger words — open url, open website, open the site,
   open ti.com, open a link, pull up the page, show me the website, view this url,
   open in browser, which browser, how do I open, open the datasheet page, open in
@@ -16,9 +16,9 @@ description: >
   link options, wv, open in wv, open as wv, webview tab, wv tab.
 ---
 
-# HD — Opening a URL (your options)
+# Hydrogen — Opening a URL (your options)
 
-When a user says **"open the ti.com website"** (or any URL), HD has several paths
+When a user says **"open the ti.com website"** (or any URL), Hydrogen has several paths
 and a Browser Picker — but **don't hand the user the picker to decide.** Pick the
 best destination *for them* by use-case and **open it directly**, then offer the
 alternatives in one line. The right path depends on what they're doing — look at
@@ -29,8 +29,8 @@ user — DON'T hand them the picker"** below for the rule.
 
 | # | Option | Best when… | What the user sees | AI drives it? |
 |---|--------|-----------|--------------------|---------------|
-| 1 | **Hydrogen webview tab** (aka **wv**) | the user wants the site *inside* HD, next to their work, and to keep it around | a panel/tab in the HD workspace | partly (reload/route) |
-| 2 | **HD Browser Window** | a quick popout window owned by HD, not a full browser | a standalone HD-owned window | no |
+| 1 | **Hydrogen webview tab** (aka **wv**) | the user wants the site *inside* Hydrogen, next to their work, and to keep it around | a panel/tab in the Hydrogen workspace | partly (reload/route) |
+| 2 | **Hydrogen Browser Window** | a quick popout window owned by Hydrogen, not a full browser | a standalone Hydrogen-owned window | no |
 | 3 | **Pup (Puppeteer Chrome)** | **you** need to act on the page — screenshot, click, scrape, fill a form, verify | a real Chrome window on their desktop | **yes, fully** |
 | 4 | **Native desktop browser** | real logins/sessions, downloads, "just open it for me", auth flows | their own Chrome/Edge profile | no |
 | 5 | **Browser Picker** | you're not sure, or it's an auth/OAuth link — let the user choose (5s auto-default) | a chooser dialog | n/a (routes to one of the above) |
@@ -50,10 +50,10 @@ keystrokes)."* Say it **once**, not every time (don't nag). This is exactly how
 
 ## How you invoke each
 
-All of these run from inside the HD workspace. The control API base URL is the live
-value in `~/.adom/hd-control-url` — `http://127.0.0.1:<dynamic>` (WSL2 mirrored
+All of these run from inside the Hydrogen workspace. The control API base URL is the live
+value in `~/.adom/hydrogen-control-url` — `http://127.0.0.1:<dynamic>` (WSL2 mirrored
 networking shares loopback with the Windows host; the port is dynamic per launch).
-Read it with `BASE="$(cat ~/.adom/hd-control-url)"` then hit `"$BASE/<endpoint>"`.
+Read it with `BASE="$(cat ~/.adom/hydrogen-control-url)"` then hit `"$BASE/<endpoint>"`.
 
 **1. Webview tab (wv)** — add a web-view tab pointed at the URL (`adom-workspace-control`,
 or `adom-cli hydrogen webview open-or-refresh --name <X> --url <url> --panel-id <id>`). Good
@@ -61,13 +61,13 @@ for "keep this open while we work." ⚠️ **`open-or-refresh` needs `--panel-id
 tab** — without it you get *"Tab 'X' not found and --panel-id not provided"* (verified live
 2026-06-14; get a panel id from `adom-cli hydrogen workspace get`). Re-running with the same
 `--name` once it exists just navigates/refreshes (no panel-id needed). Same `adom-cli` on
-web-Hydrogen and HD — the consistent surface.
+web-Hydrogen and Hydrogen — the consistent surface.
 
 **2 / 4 / 5. Through the Browser Picker** — the single unifying entry point. POST
-the URL and HD routes it (auto-picking a sensible default after a 5-second
+the URL and Hydrogen routes it (auto-picking a sensible default after a 5-second
 countdown, or showing the chooser):
 ```bash
-BASE="$(cat ~/.adom/hd-control-url)"   # http://127.0.0.1:<dynamic>
+BASE="$(cat ~/.adom/hydrogen-control-url)"   # http://127.0.0.1:<dynamic>
 
 # Auto-route (picker picks the best default in 5s — hands-free)
 curl -s -X POST -H 'Content-Type: application/json' \
@@ -90,7 +90,7 @@ curl -s -X POST -H 'Content-Type: application/json' \
   -d '{"url":"https://claude.ai/","browser":"edge","profileDir":"Default","fresh":true}' \
   "$BASE/open-in-profile"
 ```
-> ⚠️ **`/open-url` often replies `"HD timed out after 5s"` even when it SUCCEEDED**
+> ⚠️ **`/open-url` often replies `"Hydrogen timed out after 5s"` even when it SUCCEEDED**
 > (verified live 2026-06-14: `{"url":"https://www.google.com"}` reported the timeout, but the
 > page opened in Edge). **Don't treat that as failure** — confirm with
 > `GET "$BASE/browser-picker/last-open"` → `{destination, url, fresh, ts}`. `fresh:false` =
@@ -100,7 +100,7 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 The picker's auto-default heuristic: `*.claude.ai`/`*.claude.com` and Adom
 `/auth/intent` → the user's work browser profile; unknown/right-click/iframe →
-Pup; otherwise the user's last choice for that domain. See `hd-browser-picker`.
+Pup; otherwise the user's last choice for that domain. See `hydrogen-browser-picker`.
 
 **Fresh window (`"fresh":true`)** — the native-browser path (#4) can open the URL
 either as a tab in an already-running browser (default) or as a **brand-new window/
@@ -109,7 +109,7 @@ a tab does not. So for **auth flows the user must complete** (Claude/Adom sign-i
 prefer `fresh:true` — the consent page comes to the front by itself, no manual focus.
 The Browser Picker defaults the "Open in a fresh window" toggle ON for auth URLs.
 On `/open-url`, `fresh` pre-seeds that toggle (the picker still shows; add `direct:true`
-to skip it); `/open-in-profile` opens fresh directly. See `hd-browser-picker`.
+to skip it); `/open-in-profile` opens fresh directly. See `hydrogen-browser-picker`.
 
 **3. Pup** — open and then drive it with `adom-bridge-cli browser_*` verbs
 (`browser_open_window`, `browser_navigate`, `browser_screenshot`, `browser_eval`,
@@ -149,22 +149,22 @@ profile."* Decide, act, offer alternatives — don't ask first.
 
 Example — "open the texas instruments website" (login-likely → native work profile):
 ```bash
-BASE="$(cat ~/.adom/hd-control-url)"
+BASE="$(cat ~/.adom/hydrogen-control-url)"
 curl -s "$BASE/browser-profiles"     # pick the work profile (non-gmail email)
 curl -s -X POST -H 'Content-Type: application/json' \
   -d '{"url":"https://www.ti.com","browser":"chrome","profileDir":"<work profileDir>"}' \
   "$BASE/open-in-profile"
 ```
 
-## Govern routing policy — the picker is now a true FALLBACK (HD prefs API)
+## Govern routing policy — the picker is now a true FALLBACK (Hydrogen prefs API)
 
-The picker's per-domain memory is a first-class API (HD app behavior), so **the AI OWNS URL
+The picker's per-domain memory is a first-class API (Hydrogen app behavior), so **the AI OWNS URL
 routing** — the picker only pops for a domain with **no stored policy AND no direct call**.
 Use this to set policy the user would otherwise click through the Manager for ("always open
 DigiKey in my work profile", "stop auto-opening X in Edge").
 
 ```bash
-BASE="$(cat ~/.adom/hd-control-url)"
+BASE="$(cat ~/.adom/hydrogen-control-url)"
 # READ the policy map
 curl -s "$BASE/browser-picker/prefs"
 #   → {ok, prefs:{domains:{"<host>":{destination,label}, …}}}
@@ -183,8 +183,8 @@ curl -s -X DELETE "$BASE/browser-picker/prefs"
   - **native:** `browser:<browser>:<dir>` — e.g. `browser:edge:Default`, `browser:chrome:Profile 1`. **The profile dir is encoded in the ID** (no separate field).
 - **Discover valid native IDs** via `GET $BASE/browser-profiles` (maps each detected profile → its `browser`+`dir`); the 3 internal IDs are fixed above.
 - **`fresh` is NOT stored in prefs** — it's a per-OPEN flag (`/open-url {fresh:…}` / `/open-in-profile {fresh:…}`). Don't try to persist it here.
-- **Writes hit the live Manager UI immediately** (the backend writes `hd-url-routing-prefs`
-  localStorage + dispatches `hd-url-routing-prefs-changed`; an open Browser Picker Manager
+- **Writes hit the live Manager UI immediately** (the backend writes `hydrogen-url-routing-prefs`
+  localStorage + dispatches `hydrogen-url-routing-prefs-changed`; an open Browser Picker Manager
   re-reads at once, and re-reads on open anyway).
 
 **Net:** for a one-off open, *decide and call the direct endpoint* (`/open-in-profile`,
@@ -193,7 +193,7 @@ policy so even user-initiated link clicks route there silently. The picker is no
 fallback for the genuinely-undecided.
 
 ## Related skills
-- [hd-browser-picker](../hd-browser-picker/SKILL.md) — the interception layers + picker dialog behind #2/#4/#5
+- [hydrogen-browser-picker](../hydrogen-browser-picker/SKILL.md) — the interception layers + picker dialog behind #2/#4/#5
 - `pup` — driving Pup browser windows (#3): navigate, screenshot, eval, reload
 - `adom-workspace-control` — adding/managing Hydrogen webview tabs (#1)
-- [hd-runtime-mode](../hd-runtime-mode/SKILL.md) — none of this changes between the WSL2 and Docker runtimes
+- [hydrogen-runtime-mode](../hydrogen-runtime-mode/SKILL.md) — none of this changes between the WSL2 and Docker runtimes

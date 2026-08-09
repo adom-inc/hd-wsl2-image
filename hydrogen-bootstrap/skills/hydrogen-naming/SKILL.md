@@ -6,8 +6,8 @@ description: >-
   search, Spotlight, app listings, installer filename) says "Adom Hydrogen",
   NEVER bare "Hydrogen" - because a new user types "adom" into taskbar search
   before they have memorized the product name. Also the shorthand table (ah,
-  ab, hc, aw, nb, nbe, hbw, pup) and the dead legacy names (HD, AD, Hydrogen
-  Desktop as external copy, Adom Desktop, hw, hdbw, abe). READ when naming
+  ab, hc, aw, nb, nbe, hbw, pup) and the dead legacy names (hd, ad, "Hydrogen
+  Desktop" in copy, "Adom Desktop", hw, hdbw, abe). READ when naming
   anything user-visible: an installer, a shortcut, a window title, a wiki
   page, marketing copy, or when unsure what to call a product in prose.
   Trigger words - naming, product name, formal name, what do we call it,
@@ -53,10 +53,10 @@ exists as a register.
 
 ## Dead names - never write these
 
-- **HD / Hydrogen Desktop** in any copy (chat, docs, UI, skills). Say
+- **hd / "Hydrogen Desktop"** in any copy (chat, docs, UI, skills). Say
   Hydrogen or ah. (Code identifiers like `hd_*` verbs or `hd-` crate names
   are unrenamed call sites, not license to use the name in prose.)
-- **AD / Adom Desktop** - the product is Bridge (ab). The CLI is
+- **ad / "Adom Desktop"** - the product is Bridge (ab). The CLI is
   `adom-bridge-cli`; the native launcher is `adom-bridge`.
 - **hw** (now hc), **hdbw** (now hbw), **abe** (now nbe), bare single-letter
   shorthands (say ah, ab, aw - never h, b, w).

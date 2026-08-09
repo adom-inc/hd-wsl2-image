@@ -31,15 +31,15 @@ logo = go straight to the Dashboard.) Source: `EditorNav.svelte` → `.logo-butt
 
 | Item | What it does |
 |---|---|
-| **Go to Dashboard** | Navigate HD to your Adom dashboard (`/`) |
+| **Go to Dashboard** | Navigate Hydrogen to your Adom dashboard (`/`) |
 | **Settings** | Opens the Settings dialog (`SettingsDialog.svelte`) |
-| **Ports…** | Configure local host port assignments for HD services (`SettingsPortsDialog`) |
-| **API Explorer…** | Browse + test every HD control-API endpoint (`ApiExplorerDialog`); see **hydrogen-api** |
-| *— Desktop —* | (desktop-only section, shown when running in HD/Tauri; in order) |
+| **Ports…** | Configure local host port assignments for Hydrogen services (`SettingsPortsDialog`) |
+| **API Explorer…** | Browse + test every Hydrogen control-API endpoint (`ApiExplorerDialog`); see **hydrogen-api** |
+| *— Desktop —* | (desktop-only section, shown when running in Hydrogen/Tauri; in order) |
 | **Adom Bridge** | Bring the embedded Adom Bridge window to the foreground (taskbar) — FIRST item in the section |
-| **Zoom** | −/+ zoom the whole HD UI (persisted) |
+| **Zoom** | −/+ zoom the whole Hydrogen UI (persisted) |
 | **Fullscreen** | Toggle fullscreen |
-| **Console** | Show/hide the native HD debug console window |
+| **Console** | Show/hide the native Hydrogen debug console window |
 | **Developer Tools** | Opens WebView2 DevTools (separate window) — see below |
 | **Dev Toolbar** | Show/hide the Adom Dev Toolbar window (eval-in / shot / Claude control endpoints) |
 | *— Container —* | (state shown: running/stopped/…) |
@@ -47,7 +47,7 @@ logo = go straight to the Dashboard.) Source: `EditorNav.svelte` → `.logo-butt
 | *— Admin —* | |
 | **Setup Steps** | Show the setup-steps panel — the setup cascade for the active runtime (16 steps under WSL2); see **hydrogen-setup-steps** / **hydrogen-setup** |
 | **Virgin Reset** | Open the virgin-reset panel — wipe + re-run setup (see **hydrogen-setup**) |
-| **Browser Picker Manager** | Manage saved browser choices per domain (see **hd-browser-picker**) |
+| **Browser Picker Manager** | Manage saved browser choices per domain (see **hydrogen-browser-picker**) |
 
 > **Removed items (do not list):** "Bridge Manager" (was a no-op with no backing
 > panel) and "Port Mappings…" (no such action exists in the code).
@@ -58,8 +58,8 @@ Drive it programmatically with **hydrogen-eval** (`target:"shell"`): click
 ## Developer Tools
 
 The `devtools` capability is compiled into **all** builds (dev and release), so
-"Open Developer Tools" works for end users too — HD is a developer tool. It opens
-WebView2 DevTools as a **separate top-level window** (a window-bounded HD
+"Open Developer Tools" works for end users too — Hydrogen is a developer tool. It opens
+WebView2 DevTools as a **separate top-level window** (a window-bounded Hydrogen
 screenshot will NOT show it). Also reachable from the tray menu and via
 `POST /devtools` (or the `open_devtools` Tauri command). Pair with **hydrogen-eval** to
 inspect/inject into any panel.
@@ -67,15 +67,15 @@ inspect/inject into any panel.
 ## Version readout — title bar + About dialog
 
 **Title bar** (always visible) shows, in order:
-`Hydrogen  v<version> · <dev|release> · <sha>-dirty · <build time> · <signed|unsigned> · AD <ad-version>`
+`Hydrogen  v<version> · <dev|release> · <sha>-dirty · <build time> · <signed|unsigned> · ab <ad-version>`
 — a fast way to confirm which build is running and whether it's signed.
 
 **About dialog** (deep version info) — open it from the **tray menu → "About
 Hydrogen"** (emits the `show-about` event; the dialog is mounted
 app-wide). It shows, for **both** Hydrogen and the embedded **Adom Bridge**:
 - Version, channel (dev/release), signed yes/no, commit SHA (+dirty), build time,
-  install path, and reachability/endpoint (for AD)
-- Links to each app's GitHub repo and **Wiki v1 + Wiki v2** pages (they're git
+  install path, and reachability/endpoint (for ab)
+- Links to each app's GitHub repo and **wiki** pages (they're git
   repos now)
 
 Backed by the `get_about_info` Tauri command.
@@ -84,6 +84,6 @@ Backed by the `get_about_info` Tauri command.
 - **hydrogen-profile-menu** — the upper-RIGHT avatar dropdown (don't confuse the two)
 - **hydrogen-settings** — the settings tree behind the **Settings** item
 - **hydrogen-api** — the control-API surface behind **API Explorer…**
-- **hydrogen-capture-share** / **hd-recording** — the AV capture/record controls (Dev Toolbar)
+- **hydrogen-capture-share** / **hydrogen-recording** — the AV capture/record controls (Dev Toolbar)
 - **hydrogen-setup** / **hydrogen-setup-steps** — what Setup Steps / Virgin Reset do
 - **hydrogen-eval** — drive these menu items / inject UI from the workspace

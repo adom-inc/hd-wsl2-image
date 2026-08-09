@@ -1,24 +1,24 @@
 ---
 name: hydrogen-self-screenshot
 description: >
-  Screenshot HD from inside the workspace — a panel/webview (the welcome page, a
+  Screenshot Hydrogen from inside the workspace — a panel/webview (the welcome page, a
   tab), the whole workspace, OR the whole screen/desktop — using the BUILT-IN
   `adom-cli hydrogen screenshot`. It saves a PNG into the container's
   `screenshots/` folder and prints the path to Read. THE answer for "take a
   screenshot of the welcome page", "screenshot the webview", "screenshot this
   panel", "screenshot the editor", "screenshot my whole screen / the desktop",
-  "show me what HD looks like", or verifying a UI change (ralph loop). Use this
+  "show me what Hydrogen looks like", or verifying a UI change (ralph loop). Use this
   even for "my whole screen / my desktop / my monitor" — that's the `screen`
   scope. You do NOT need any image resizer. For a SPECIFIC element/region (a CPU
   meter, a menu, a dialog, a toolbar) or an inline-b64 PNG, use the canonical
   `POST /screenshot` control endpoint with a CSS `selector` (it ALWAYS region-clips
   to that element) — and combine it with the UI command bus (`hydrogen-ui`: `ui/invoke`
   to open a menu/dialog, then `/screenshot` its selector). Identical across web
-  Hydrogen and HD. Trigger words — screenshot HD, screenshot the welcome page,
+  Hydrogen and Hydrogen. Trigger words — screenshot Hydrogen, screenshot the welcome page,
   screenshot the webview, screenshot a panel, screenshot a tab, screenshot the
   workspace, screenshot the editor, screenshot my screen, screenshot the whole
   screen, screenshot the desktop, capture my monitor, full screen capture,
-  screenshot everything on screen, what does HD look like, adom-cli hydrogen
+  screenshot everything on screen, what does Hydrogen look like, adom-cli hydrogen
   screenshot, capture panel, capture workspace, capture screen, screenshot a region,
   clip to selector, screenshot an element, screenshot a menu, screenshot a dialog,
   region screenshot, b64 screenshot, POST /screenshot, /shot, screenshot without flash,
@@ -26,9 +26,9 @@ description: >
   image resizer, resize screenshot.
 ---
 
-# HD — Screenshot a panel / webview / the workspace / the screen
+# Hydrogen — Screenshot a panel / webview / the workspace / the screen
 
-The built-in way to screenshot anything inside HD is the **`adom-cli hydrogen
+The built-in way to screenshot anything inside Hydrogen is the **`adom-cli hydrogen
 screenshot`** command — the *same* `adom-cli` you already use. It captures the
 real rendered surface, drops a PNG into the container's `screenshots/` folder,
 and prints the path. Just `Read` that path. **No image resizer needed.**
@@ -36,15 +36,15 @@ and prints the path. Just `Read` that path. **No image resizer needed.**
 ## Which screenshot tool? — the priority ladder
 
 What you're capturing (and whether you want the teal flash) picks the tool. Default to
-HD-native:
+Hydrogen-native:
 
-1. **HD content — a panel, the workspace, the editor, a webview, the screen
+1. **Hydrogen content — a panel, the workspace, the editor, a webview, the screen
    (the 99% case): `adom-cli hydrogen screenshot panel|workspace|screen`. THIS IS THE
-   DEFAULT — reach for it first.** It's the *same* command in web Hydrogen and HD (HD is
+   DEFAULT — reach for it first.** It's the *same* command in web Hydrogen and Hydrogen (Hydrogen is
    meant to behave like web Hydrogen, and `adom-cli` is the one surface that's identical on
    both), saves a PNG to your container's `screenshots/`, and you just `Read` it. Don't lead
-   with an HD-only endpoint.
-   - **HD-only enhancement / power path — `POST /screenshot {target, selector, b64, silent}`
+   with an Hydrogen-only endpoint.
+   - **Hydrogen-only enhancement / power path — `POST /screenshot {target, selector, b64, silent}`
      (CDP).** Use ONLY when you need something `adom-cli` doesn't give you: a precise CSS
      `selector` region-clip, an inline-base64 PNG (`b64`), or a `silent` (no-flash) grab — see
      below. It does NOT exist in web Hydrogen, so it's a deliberate step OFF the consistent path.
@@ -54,9 +54,9 @@ HD-native:
 
 ## During a recording (multi-thread) — pick a coexisting method, never blind-retry
 
-Adom users run **multiple AI threads on one HD**, so another thread may be recording the
+Adom users run **multiple AI threads on one Hydrogen**, so another thread may be recording the
 screen while you capture. **Only the `adom-cli` SSE path (`screenshot panel/workspace/screen`)
-is affected** — the CDP path coexists. HD makes this deterministic:
+is affected** — the CDP path coexists. Hydrogen makes this deterministic:
 
 - **Pre-flight `GET /capture/availability`** → reports the recording state plus, per method,
   reliability + whether it coexists with a recording, a `recommended` method, and a `_hint`.
@@ -71,18 +71,18 @@ is affected** — the CDP path coexists. HD makes this deterministic:
   panel/workspace`) returns, the moment a recording is active, `{ok:false, error:"capture_busy",
   retry_after_ms, alternatives:[{method:"cdp"}], _hint}` — never an empty body. **On
   `capture_busy`: read `alternatives` and SWITCH — do NOT blindly retry the SSE path.**
-- Authoritative recording state: `GET /recording/native/status`. See `hd-recording`.
+- Authoritative recording state: `GET /recording/native/status`. See `hydrogen-recording`.
 
 ## Pick the scope — panel / workspace / screen
 
 | You want… | Command | Sub-command |
 |---|---|---|
 | ONE panel or webview tab (the welcome page, a viewer, the editor) | `adom-cli hydrogen screenshot panel …` | `panel` |
-| The whole HD **workspace** (every panel side by side) | `adom-cli hydrogen screenshot workspace` | `workspace` |
+| The whole Hydrogen **workspace** (every panel side by side) | `adom-cli hydrogen screenshot workspace` | `workspace` |
 | The whole **screen** — desktop, taskbar, OTHER apps | `adom-cli hydrogen screenshot screen` | `screen` |
 
 **"My whole screen / my desktop / my monitor / everything"** → `adom-cli hydrogen
-screenshot screen`. The HD `screen` scope captures the real desktop and saves the PNG into
+screenshot screen`. The Hydrogen `screen` scope captures the real desktop and saves the PNG into
 your container, same as the others.
 
 ## Do this — it saves a PNG and prints the path; then Read it
@@ -149,15 +149,15 @@ display **awake** — leaving it active blocks the user's screensaver. After a o
 opened). Tab `panel`/`workspace` sharing doesn't hold the display, so this only matters
 once you've requested the `screen` scope.
 
-## Why this works the same in HD as it does for web Hydrogen
+## Why this works the same in Hydrogen as it does for web Hydrogen
 
-`adom-cli` is **one binary** used by both web Hydrogen and HD — you can test these
-commands anywhere. The difference is purely *where the work runs*: HD intercepts
+`adom-cli` is **one binary** used by both web Hydrogen and Hydrogen — you can test these
+commands anywhere. The difference is purely *where the work runs*: Hydrogen intercepts
 what adom-cli talks to. `adom-cli hydrogen <cmd>` hits `ADOM_HYDROGEN_URL`, which
-in HD points at **HD's local proxy**. HD's proxy pulls out the **local hydrogen/SSE
+in Hydrogen points at **Hydrogen's local proxy**. Hydrogen's proxy pulls out the **local hydrogen/SSE
 commands** (screenshot, webview, caption, notify, recording…) and runs them against
-the HD frontend over SSE, while **carbon/cloud calls pass straight through** to the
-cloud. For a screenshot: `PATCH /current/screenshot` → HD broadcasts an SSE
+the Hydrogen frontend over SSE, while **carbon/cloud calls pass straight through** to the
+cloud. For a screenshot: `PATCH /current/screenshot` → Hydrogen broadcasts an SSE
 `screenshot_request` → the frontend Element-Captures the panel → uploads it into
 **this container's** `screenshots/` folder → the CLI returns the saved path. So the
 command, and the returned path, behave the same — the bytes just land in your local
@@ -175,19 +175,19 @@ container.
 `adom-cli hydrogen screenshot` above is the easy "save a panel/workspace/screen PNG"
 path. For **precise control** — a specific VS Code or webview surface, **any CSS
 region** (a meter, a menu, a dialog, a toolbar), or an inline PNG with no flash — use
-HD's **canonical capture endpoint `POST /screenshot`** (aliases: `/shot`,
+Hydrogen's **canonical capture endpoint `POST /screenshot`** (aliases: `/shot`,
 `/capture/viewport`). Read the control URL from the FILE — it's the dynamic port, and
 your non-login Bash shell won't have the env var:
 
 ```bash
-CTRL="$(cat ~/.adom/hd-control-url)"   # http://127.0.0.1:<dynamic>
+CTRL="$(cat ~/.adom/hydrogen-control-url)"   # http://127.0.0.1:<dynamic>
 curl -s -X POST "$CTRL/screenshot" -H 'Content-Type: application/json' \
   -d '{"target":"full","b64":true}'
 ```
 
 | Field | Meaning |
 |---|---|
-| `target` | the surface — `full`/`window` (whole HD window) · `vscode`/`editor`/`workbench`/`code` (the VS Code panel) · `shell`/`hd` (the Svelte shell: title bar, menus, panels) · a **webview url-substring** (e.g. `wiki`) · **or a TAB DISPLAY NAME** (e.g. `"ScreenA"`, `"VS Code"`) — see by-name note below |
+| `target` | the surface — `full`/`window` (whole Hydrogen window) · `vscode`/`editor`/`workbench`/`code` (the VS Code panel) · `shell`/`hd` (the Svelte shell: title bar, menus, panels) · a **webview url-substring** (e.g. `wiki`) · **or a TAB DISPLAY NAME** (e.g. `"ScreenA"`, `"VS Code"`) — see by-name note below |
 | `selector` | **optional CSS selector — it ALWAYS WINS and region-clips to that element.** e.g. `.resource-bars` (CPU/RAM meter), `iframe[src*='wiki']`, `.setup-panel`, `.dialog`, `.dropdown-content.open` |
 | `b64` | `true` → returns the PNG inline as a `dataUrl` (decode + Read); else saved to a file in `screenshots/` |
 | `silent` | `true` → suppress the capture flash |
@@ -206,15 +206,15 @@ returns ScreenA's pixels and leaves ScreenB active. The `adom-cli` SSE path
 (`screenshot panel --name ScreenA`) also activates + restores. This is the right call for
 "shot tab #2 while #4 is showing."
 
-**The teal zap:** every HD-driven capture flashes a teal (`#00b8b0`) highlight on the
+**The teal zap:** every Hydrogen-driven capture flashes a teal (`#00b8b0`) highlight on the
 captured **region** (just the panel/menu/region; full-window flash only for
-`target:full`). Teal = HD-driven. Pass `silent:true` to suppress it.
+`target:full`). Teal = Hydrogen-driven. Pass `silent:true` to suppress it.
 
 ### Screenshot a menu / dialog / panel — open it, then clip to it
 The killer combo with the UI command bus (see **`hydrogen-ui`**): **open a surface →
 screenshot just that surface → close it** — no screen-clicking, no guessing where it is.
 ```bash
-CTRL="$(cat ~/.adom/hd-control-url)"
+CTRL="$(cat ~/.adom/hydrogen-control-url)"
 curl -s -X POST "$CTRL/ui/invoke"  -H 'Content-Type: application/json' -d '{"id":"adom-menu.open"}'
 curl -s -X POST "$CTRL/screenshot" -H 'Content-Type: application/json' -d '{"target":"shell","selector":".dropdown-content.open","b64":true}'
 curl -s -X POST "$CTRL/ui/invoke"  -H 'Content-Type: application/json' -d '{"id":"adom-menu.close"}'
@@ -232,5 +232,5 @@ repeat. Log shots for the user with `shotlog inject -c hydrogen-ui -d "<desc>" <
 
 ## Related skills
 - [hydrogen-capture-share](../hydrogen-capture-share/SKILL.md) — the sharing/approval UX behind `screenshot`
-- [hd-recording](../hd-recording/SKILL.md) · [hydrogen-captions](../hydrogen-captions/SKILL.md) — sibling `adom-cli hydrogen` AV verbs
+- [hydrogen-recording](../hydrogen-recording/SKILL.md) · [hydrogen-captions](../hydrogen-captions/SKILL.md) — sibling `adom-cli hydrogen` AV verbs
 - `shotlog` — the screenshot log viewer/injector

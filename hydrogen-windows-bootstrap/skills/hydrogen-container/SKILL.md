@@ -7,7 +7,7 @@ description: Context for Claude Code running inside a Hydrogen WSL2 workspace di
 
 WSL2-runtime version (default). Legacy Docker container runtime (`HD_RUNTIME=docker`) is in the docker/ bucket.
 
-You are running inside the **`Adom-Workspace` WSL2 distro** managed by Hydrogen (HD). HD is the flagship Adom desktop app — it manages your WSL2 workspace, bridges to desktop apps, and provides VS Code + Claude Code.
+You are running inside the **`Adom-Workspace` WSL2 distro** managed by Hydrogen (ah). Hydrogen is the flagship Adom desktop app — it manages your WSL2 workspace, bridges to desktop apps, and provides VS Code + Claude Code.
 
 ## The workspace — exact facts (don't guess)
 
@@ -26,17 +26,17 @@ You are running inside the **`Adom-Workspace` WSL2 distro** managed by Hydrogen 
 | Workspace | `/home/adom/project` (lives directly in the distro's ext4 filesystem) |
 | Pre-installed | Node 18 + npm, Python 3.12, git, gh, curl, wget, jq, build-essential, cmake, pkg-config, libssl-dev |
 | Code-server runs as | `code-server --bind-addr 0.0.0.0:7380 --auth none --disable-telemetry /home/adom/project` (WSL2 auto-forwards 7380 to Windows `localhost:7380`) |
-| Runtime source | `hydrogen-desktop/src-tauri/crates/hd-app/src/runtime/wsl.rs` (selector `runtime/mod.rs::select_runtime()`) |
+| Runtime source | `hydrogen-desktop/src-tauri/crates/hydrogen-app/src/runtime/wsl.rs` (selector `runtime/mod.rs::select_runtime()`) |
 
 If you ever need to confirm: `cat /etc/os-release`, `uname -m`, `/usr/lib/code-server/bin/code-server --version`. Don't speculate about alpine/arm64 — Ubuntu 24.04 matches the cloud container.
 
-## Setup is via HD's setup-steps, NOT gallia bootstrap.sh
+## Setup is via Hydrogen's setup-steps, NOT gallia bootstrap.sh
 
-HD provisions this distro through its own **setup-steps** flow (Rust code in `hydrogen-desktop/src-tauri/crates/hd-app/src/setup_steps_wsl.rs`, with the runtime mechanics in `hydrogen-desktop/src-tauri/crates/hd-app/src/runtime/wsl.rs`), shown as the "Install Tools" panel in the HD UI. It is a **different code path** than cloud containers, which run `gallia/scripts/bootstrap.sh`.
+Hydrogen provisions this distro through its own **setup-steps** flow (Rust code in `hydrogen-desktop/src-tauri/crates/hydrogen-app/src/setup_steps_wsl.rs`, with the runtime mechanics in `hydrogen-desktop/src-tauri/crates/hydrogen-app/src/runtime/wsl.rs`), shown as the "Install Tools" panel in the Hydrogen UI. It is a **different code path** than cloud containers, which run `gallia/scripts/bootstrap.sh`.
 
-The WSL cascade is **28 steps** (state file `setup-steps-wsl.json`) vs the legacy Docker flow's 24. Most tooling is NOT installed by a step — it's BAKED into `adom-golden.tar.gz` at image-build time (gallia, the 8 Adom CLIs, the Claude Code extension, code-server, VS Code settings, and all `hd-*` skills). The one exception is the `claude` CLI, which is installed at RUNTIME by step 13 `install-claude-cli` (its self-setup needs a live session). The Docker `pull-image` / `create-container` / `start-container` steps are collapsed into a single step 1, `ensure-workspace`, which runs `wsl --import` of `adom-golden.tar.gz` if the distro isn't already registered. The relay is started by the `start-relay` step. See `hd-golden-image`.
+The WSL cascade is **28 steps** (state file `setup-steps-wsl.json`) vs the legacy Docker flow's 24. Most tooling is NOT installed by a step — it's BAKED into `adom-golden.tar.gz` at image-build time (gallia, the 8 Adom CLIs, the Claude Code extension, code-server, VS Code settings, and all `hd-*` skills). The one exception is the `claude` CLI, which is installed at RUNTIME by step 13 `install-claude-cli` (its self-setup needs a live session). The Docker `pull-image` / `create-container` / `start-container` steps are collapsed into a single step 1, `ensure-workspace`, which runs `wsl --import` of `adom-golden.tar.gz` if the distro isn't already registered. The relay is started by the `start-relay` step. See `hydrogen-golden-image`.
 
-When debugging install issues here, the source of truth is `setup_steps_wsl.rs` (and `runtime/wsl.rs`) — its step IDs (`ensure-workspace`, `install-adom-vscode`, `set-env-vars`, `inject-api-key`, `start-relay`, `claude-auth`, etc.) map 1:1 to what ran on this distro. There is NO `install-claude-ext` / `install-claude-cli` / `install-gallia` / `write-vscode-settings` step anymore — those are baked. Do NOT chase bugs into `bootstrap.sh` first — that script lives in the baked image but HD itself never invokes it. (For the legacy Docker `setup_steps.rs` flow see the docker/ bucket.)
+When debugging install issues here, the source of truth is `setup_steps_wsl.rs` (and `runtime/wsl.rs`) — its step IDs (`ensure-workspace`, `install-adom-vscode`, `set-env-vars`, `inject-api-key`, `start-relay`, `claude-auth`, etc.) map 1:1 to what ran on this distro. There is NO `install-claude-ext` / `install-claude-cli` / `install-gallia` / `write-vscode-settings` step anymore — those are baked. Do NOT chase bugs into `bootstrap.sh` first — that script lives in the baked image but Hydrogen itself never invokes it. (For the legacy Docker `setup_steps.rs` flow see the docker/ bucket.)
 
 ## VS Code extension caveats
 
@@ -46,11 +46,11 @@ When debugging install issues here, the source of truth is `setup_steps_wsl.rs` 
 
 ## adom-cli is authenticated
 
-HD auto-injects the user's session token on every launch. To verify:
+Hydrogen auto-injects the user's session token on every launch. To verify:
 ```bash
 adom-cli carbon user get
 ```
-If this returns user data, all adom-cli commands work (containers, repos, orgs, wiki, etc.). If it fails, the user needs to log in via HD's login page.
+If this returns user data, all adom-cli commands work (containers, repos, orgs, wiki, etc.). If it fails, the user needs to log in via Hydrogen's login page.
 
 ## Relay server is running
 
@@ -59,7 +59,7 @@ The adom-bridge-cli relay runs on ports 8765 (WebSocket) / 8766 (HTTP) inside th
 Check health: `curl -sf http://127.0.0.1:8766/health`
 Check desktop connection: `adom-bridge-cli ping`
 
-The Windows host control API is reachable from inside the distro at `127.0.0.1` — WSL2 mirrored networking shares loopback with the Windows host. The port is dynamic per launch, so read the live URL from `~/.adom/hd-control-url` (`http://127.0.0.1:<dynamic>`): `BASE="$(cat ~/.adom/hd-control-url)"; curl "$BASE/health"`.
+The Windows host control API is reachable from inside the distro at `127.0.0.1` — WSL2 mirrored networking shares loopback with the Windows host. The port is dynamic per launch, so read the live URL from `~/.adom/hydrogen-control-url` (`http://127.0.0.1:<dynamic>`): `BASE="$(cat ~/.adom/hydrogen-control-url)"; curl "$BASE/health"`.
 
 ## Available bridge commands (when desktop is connected)
 
@@ -110,7 +110,7 @@ adom-bridge-cli desktop_open_folder '{"path": "C:\\Users\\john\\project"}'
 
 ## What's different from Adom cloud containers
 
-| Feature | Adom Cloud | HD Local (WSL2) |
+| Feature | Adom Cloud | Hydrogen Local (WSL2) |
 |---------|-----------|-----------------|
 | Workspace provisioning | Adom platform API | `wsl --import` of `adom-golden.tar.gz` on the user's machine |
 | Relay connection | wss:// through Cloudflare | ws://localhost:8765 (direct, no TLS) |
@@ -121,7 +121,7 @@ adom-bridge-cli desktop_open_folder '{"path": "C:\\Users\\john\\project"}'
 
 ## Environment variables
 
-- `ADOM_DESKTOP_MODE=local` — indicates HD local mode
+- `ADOM_DESKTOP_MODE=local` — indicates Hydrogen local mode
 - `HD_RUNTIME=wsl2` — indicates the WSL2 runtime (default); `docker` selects the legacy container runtime
 - `GALLIA_SERVICE=local` — tells gallia this is a local workspace
 - `VSCODE_PROXY_URI=http://localhost:7380/proxy/{{port}}/` — code-server's proxy

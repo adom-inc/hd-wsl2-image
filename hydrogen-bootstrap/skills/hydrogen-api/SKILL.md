@@ -3,18 +3,18 @@ name: hydrogen-api
 description: >
   Complete reference for Hydrogen control API endpoints. The control
   API runs on a dynamic port (find it via port discovery). Use these endpoints
-  to drive HD programmatically: manage the workspace runtime, control Claude
+  to drive Hydrogen programmatically: manage the workspace runtime, control Claude
   Code, manipulate VS Code, manage workspace tabs, run setup steps, trigger
   virgin reset, and more. ~159 endpoints. Two self-documenting sources of truth
   list them live: GET /_manifest (curated grouped list) and GET /test/help
   (the /test/* diagnostics).
-  Trigger words: HD API, control API, HD endpoint, container exec, claude api,
+  Trigger words: Hydrogen API, control API, Hydrogen endpoint, container exec, claude api,
   iframe eval, workspace tabs, setup run-all, runtime status, reload vscode,
   browser profiles, open url, virgin reset api, diagnostics, ad health,
   test window-tree, ai cursor, setup panel, screenshot mode.
 ---
 
-# HD Control API Reference
+# Hydrogen Control API Reference
 
 The control API exposes **~159 endpoints**. Don't trust a static count or list in
 this file to stay exhaustive — the API is **self-documenting**, with two live
@@ -26,7 +26,7 @@ sources of truth you should hit first:
 | `GET /test/help` | Lists the `/test/*` diagnostics (window enumeration, UIA click, dialog classification, cascade reset). Gated behind `HD_TEST_API_ENABLED=1`. | `lib.rs:9723` |
 
 **Base URL:** `http://127.0.0.1:<dynamic>` — the loopback address. The port is
-dynamic per launch; read the live URL from `~/.adom/hd-control-url` — see
+dynamic per launch; read the live URL from `~/.adom/hydrogen-control-url` — see
 "Finding the Control Port" below.
 
 ## Finding the Control Port
@@ -34,21 +34,21 @@ dynamic per launch; read the live URL from `~/.adom/hd-control-url` — see
 The control API port is dynamic (default 47084, auto-resolves conflicts).
 
 ```bash
-# From HD log
+# From Hydrogen log
 adom-bridge-cli hd_log '{"tail":100}' | grep "control="
 
-# From inside the workspace — USE THIS. HD writes its live control URL to a discovery
+# From inside the workspace — USE THIS. Hydrogen writes its live control URL to a discovery
 # file every launch, so you never hunt for the dynamic port:
-CTRL="$(cat ~/.adom/hd-control-url)"; curl -sf "$CTRL/health"
+CTRL="$(cat ~/.adom/hydrogen-control-url)"; curl -sf "$CTRL/health"
 ```
 
-⭐ **From the workspace, read `~/.adom/hd-control-url`** (e.g. `http://127.0.0.1:<control>`) — a
-file, NOT an env var (your non-interactive Bash shells don't source `.bashrc`/`profile.d`). HD
+⭐ **From the workspace, read `~/.adom/hydrogen-control-url`** (e.g. `http://127.0.0.1:<control>`) — a
+file, NOT an env var (your non-interactive Bash shells don't source `.bashrc`/`profile.d`). Hydrogen
 rewrites it with the live dynamic port every launch. This is the channel for the UI command bus,
 the live ports map, Claude control, etc. — distinct from `adom-cli` (`ADOM_HYDROGEN_URL` → SSE),
 which is unchanged for web-hydrogen parity.
 
-> For the host-side ways to discover the port (HD log/`ports.json`) and the
+> For the host-side ways to discover the port (Hydrogen log/`ports.json`) and the
 > host runtime endpoints (`/wsl/*`, `/docker/*`, `/system/reboot`), see the
 > [[hydrogen-api-windows]] companion skill.
 
@@ -56,36 +56,36 @@ which is unchanged for web-hydrogen parity.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/health` | HD alive check — returns `{ok, port, service}` |
+| GET | `/health` | Hydrogen alive check — returns `{ok, port, service}` |
 | GET | `/buildinfo` | Running build git SHA + build metadata (the only trustworthy "did my build ship?" check) |
 | GET | `/ports` | The 4 editable PortConfig ports (proxy, control, cdp, code_server) |
-| GET | `/ports/all` | LIVE full port map — every port HD has bound, with status info |
+| GET | `/ports/all` | LIVE full port map — every port Hydrogen has bound, with status info |
 
-## AD-health diagnostics (`/ad/*`)
+## ab-health diagnostics (`/ad/*`)
 
-These verify the **adom-bridge-cli / relay / embedded-AD** half of HD is alive (the
-bridge that connects this cloud container to HD). All GET, all return `{ok, ...}`.
+These verify the **adom-bridge-cli / relay / embedded-ab** half of Hydrogen is alive (the
+bridge that connects this cloud container to Hydrogen). All GET, all return `{ok, ...}`.
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/ad/health` | Overall embedded-AD health roll-up |
+| GET | `/ad/health` | Overall embedded-ab health roll-up |
 | GET | `/ad/process` | Is the adom-bridge-cli process running |
-| GET | `/ad/embedded` | Embedded-AD module status |
+| GET | `/ad/embedded` | Embedded-ab module status |
 | GET | `/ad/workspace-direct` | ⭐ The **converged** check — direct path to the workspace relay (use this one) |
 | GET | `/ad/relay` | Relay (WS/HTTP) reachability |
 | GET | `/ad/liveness-beacon` | Liveness beacon freshness |
 | GET | `/ad/direct-api` | Direct-API reachability |
 | GET | `/ad/discovery-file` | Discovery file present + parseable |
 
-## Driving HD's UI (command bus)
+## Driving Hydrogen's UI (command bus)
 
-Open/close/toggle any HD menu, dialog, or panel — the first-class alternative to CDP clicking. See the `hydrogen-ui` skill.
+Open/close/toggle any Hydrogen menu, dialog, or panel — the first-class alternative to CDP clicking. See the `hydrogen-ui` skill.
 
 | Method | Path | Body | Description |
 |---|---|---|---|
 | GET | `/ui/actions` | — | List every drivable UI action `{id,label,description,group}` (+ `_hints`) |
 | POST | `/ui/invoke` | `{"id":"ports.open"}` | Run a UI action; returns `{ok,value}` only after the frontend ran it |
-| GET | `/auth-token` | HD session token |
+| GET | `/auth-token` | Hydrogen session token |
 | GET | `/setup-status` | Overall setup completion state |
 | GET | `/diagnostics/all` | Run all diagnostic checks |
 | GET | `/diagnostics/{name}` | Run a single diagnostic check |
@@ -120,7 +120,7 @@ These endpoints manage the active workspace runtime.
 
 | Method | Path | Body | Description |
 |---|---|---|---|
-| POST | `/eval` | `{"js":"..."}` | JS eval in main HD webview |
+| POST | `/eval` | `{"js":"..."}` | JS eval in main Hydrogen webview |
 | POST | `/iframe-eval` | `{"js":"...","contextIndex":N}` | JS eval in a specific iframe context (0-14) |
 | POST | `/cdp-eval` | `{"expression":"..."}` | Direct Chrome DevTools Protocol eval |
 | POST | `/click` | `{"x":N,"y":N}` | Click at coordinates in webview |
@@ -147,7 +147,7 @@ glides it, and can click. Use for demos or when the user should see where the AI
 
 | Method | Path | Body | Description |
 |---|---|---|---|
-| GET | `/capture/viewport` | — | Capture the HD webview viewport (PNG) |
+| GET | `/capture/viewport` | — | Capture the Hydrogen webview viewport (PNG) |
 | POST | `/shot` | `{...}` | Screenshot primitive (see **hydrogen-self-screenshot** for the full workflow) |
 
 ### Port hints
@@ -229,12 +229,12 @@ glides it, and can click. Use for demos or when the user should see where the AI
 | POST | `/setup/countdown` | `{"seconds":N,"message":"..."}` | Show countdown overlay |
 | GET | `/setup/trigger` | — | Read trigger file |
 | DELETE | `/setup/trigger` | — | Delete trigger file |
-| POST | `/config-reset` | — | Reset HD config |
+| POST | `/config-reset` | — | Reset Hydrogen config |
 
 > ⛔ **REFUSED as deprecated** (headless runs with no visible UI):
 > `POST /setup/run-all`, `POST /setup/run-step`, `POST /setup/virgin-reset`.
 > They return a refusal pointing at the UI-visible path.
-> To run steps: use `POST /setup/step/<id>` or relaunch HD to auto-run the cascade.
+> To run steps: use `POST /setup/step/<id>` or relaunch Hydrogen to auto-run the cascade.
 
 ### Setup panel control
 
@@ -263,9 +263,9 @@ glides it, and can click. Use for demos or when the user should see where the AI
 
 | Method | Path | Body | Description |
 |---|---|---|---|
-| POST | `/app/restart` | — | Restart the HD app (kills + respawns the binary) |
-| POST | `/app/relaunch-frontend` | — | Relaunch the HD GUI (kill+respawn) while it is responsive |
-| POST | `/window/foreground` | — | Bring the HD window to the foreground (unminimize + focus) |
+| POST | `/app/restart` | — | Restart the Hydrogen app (kills + respawns the binary) |
+| POST | `/app/relaunch-frontend` | — | Relaunch the Hydrogen GUI (kill+respawn) while it is responsive |
+| POST | `/window/foreground` | — | Bring the Hydrogen window to the foreground (unminimize + focus) |
 
 > Host OS reboot (`/system/*`) is platform-specific — see the
 > [[hydrogen-api-windows]] companion skill.
@@ -280,12 +280,12 @@ disabled" otherwise). `GET /test/help` self-lists the whole cluster.
 |---|---|---|---|
 | GET | `/test/help` | — | Self-lists every `/test/*` endpoint |
 | GET | `/test/window-tree` | — | Enumerate all visible top-level windows |
-| POST | `/test/focus` | `{"window":"..."}` | Focus HD (`self`) or a window by title substring |
+| POST | `/test/focus` | `{"window":"..."}` | Focus Hydrogen (`self`) or a window by title substring |
 | POST | `/test/click-uia` | `{...}` | Poll UIAutomation for a Button by Name; Invoke when found |
 | GET | `/test/setup-steps` | — | Raw setup-steps.json + derived summary (alias: `/test/install-steps`) |
 | POST | `/test/dump-state` | `{...}` | Write a diagnostic bundle (logs, install-steps, runtime state, tasklist, window-tree) |
 | POST | `/test/reset-cascade` | — | Delete install-steps.json + emit setup-reset event |
-| POST | `/test/screenshot-hd-window` | `{...}` | Capture HD's own window to a PNG file |
+| POST | `/test/screenshot-hydrogen-window` | `{...}` | Capture Hydrogen's own window to a PNG file |
 
 > The `/test/probe-dialogs` endpoint (classifies UAC / WSL2-update / MSI /
 > Docker-EULA blocker windows) is Windows-specific — see the

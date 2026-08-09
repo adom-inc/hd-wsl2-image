@@ -5,8 +5,8 @@ description: >
   MUST READ before adding ports, exposing a service to your Windows host,
   referencing host URLs from inside the workspace, or wiring any service
   communication.
-  Trigger words — HD port, HD network, port mapping, proxy, 127.0.0.1, loopback,
-  mirrored networking, hd-control-url,
+  Trigger words — Hydrogen port, Hydrogen network, port mapping, proxy, 127.0.0.1, loopback,
+  mirrored networking, hydrogen-control-url,
   VSCODE_PROXY_URI, relay URL, code-server proxy, container networking,
   ADOM_CARBON_URL, ADOM_HYDROGEN_URL, direct connect, 8770, 7380.
 ---
@@ -18,7 +18,7 @@ description: >
 
 ## Core Principle: WSL2 auto-forwards `0.0.0.0` listeners
 
-The HD workspace is a WSL2 distro (`Adom-Workspace`), not a Docker container.
+The Hydrogen workspace is a WSL2 distro (`Adom-Workspace`), not a Docker container.
 WSL2 has a built-in localhost-forwarding feature: **any service that binds
 `0.0.0.0:<port>` inside the distro is automatically reachable at
 `127.0.0.1:<sameport>` on Windows** — no Docker `-p` mapping, no proxy hop
@@ -48,16 +48,16 @@ All of these are also reachable through code-server's `/proxy/<port>/` URL
 
 ## Host-Side Ports (Tauri app, native Windows listeners)
 
-These ports run on the Windows host inside the HD Tauri process. They are
+These ports run on the Windows host inside the Hydrogen Tauri process. They are
 native TCP listeners on Windows — not inside the distro.
 
 | Port | Service | Notes |
 |------|---------|-------|
 | 1420 | Dev file server | Dev mode only, serves `build/` |
-| 8770 | adom-bridge-cli direct connect | Owned by Adom Bridge, NOT HD |
-| 47080 | HD discovery server | |
-| 47083 | HD reverse proxy | Proxies to code-server |
-| 47084 | HD control API | Health, setup, eval, CDP, `/wsl/status`, `/port-forward` |
+| 8770 | adom-bridge-cli direct connect | Owned by Adom Bridge, NOT Hydrogen |
+| 47080 | Hydrogen discovery server | |
+| 47083 | Hydrogen reverse proxy | Proxies to code-server |
+| 47084 | Hydrogen control API | Health, setup, eval, CDP, `/wsl/status`, `/port-forward` |
 | 47085 | WebView2 CDP | Chrome DevTools Protocol |
 
 These are configurable via `%APPDATA%\hydrogen-desktop\ports.json`.
@@ -66,9 +66,9 @@ These are configurable via `%APPDATA%\hydrogen-desktop\ports.json`.
 **mirrored networking** shares the loopback interface between the distro and the
 Windows host, so a Windows listener on `127.0.0.1:<port>` is reachable at the same
 `127.0.0.1:<port>` from inside the distro — no gateway IP, no firewall rule, no
-`0.0.0.0` requirement on the host side. (`host.docker.internal` is a Docker-ism HD
+`0.0.0.0` requirement on the host side. (`host.docker.internal` is a Docker-ism Hydrogen
 does NOT use under WSL2 — inside the distro it resolves to a *different* interface,
-not where HD listens, so curls to it fail.)
+not where Hydrogen listens, so curls to it fail.)
 
 ## Hostnames — reach the host at `127.0.0.1`
 
@@ -83,11 +83,11 @@ you generally don't need it — use `127.0.0.1`. Used for:
 - `ADOM_CARBON_URL=http://127.0.0.1:{proxy_port}`
 - `ADOM_HYDROGEN_URL=http://127.0.0.1:{proxy_port}`
 - Direct connect probe: `http://127.0.0.1:8770/health`
-- HD control API: the live URL in `~/.adom/hd-control-url` (`http://127.0.0.1:<dynamic>`)
+- Hydrogen control API: the live URL in `~/.adom/hydrogen-control-url` (`http://127.0.0.1:<dynamic>`)
 
-The control port is **dynamic per launch** — read it from `~/.adom/hd-control-url`
+The control port is **dynamic per launch** — read it from `~/.adom/hydrogen-control-url`
 (your non-interactive Bash shells don't source `.bashrc`/`profile.d`, so the env var
-alone is unreliable): `BASE="$(cat ~/.adom/hd-control-url)"`.
+alone is unreliable): `BASE="$(cat ~/.adom/hydrogen-control-url)"`.
 
 ### From the host → distro services (via proxy)
 ```
@@ -122,7 +122,7 @@ code-server proxy. The proxy path is preferred for connection stability:
    API (port 8770):
    ```json
    {
-     "name": "HD Local WSL",
+     "name": "Hydrogen Local WSL",
      "url": "ws://127.0.0.1:7380/proxy/8765/",
      "autoConnect": true
    }
@@ -138,7 +138,7 @@ This matches cloud containers where adom-bridge-cli connects via
 Inside the distro, `VSCODE_PROXY_URI` is set by code-server:
 ```
 https://<slug>.adom.cloud/proxy/{{port}}/     (cloud)
-http://localhost:7380/proxy/{{port}}/          (HD local, approximate)
+http://localhost:7380/proxy/{{port}}/          (Hydrogen local, approximate)
 ```
 
 Tools that build proxy URLs should use `VSCODE_PROXY_URI` when
@@ -159,9 +159,9 @@ wsl -d Adom-Workspace -- su - adom -c '<cmd>'
    Windows. WSL2 won't auto-forward it. Bind `0.0.0.0`, or register it with the
    port-forward registry (see `hydrogen-port-watcher`).
 2. **NEVER use `host.docker.internal` for distro→host** communication — it's a
-   Docker-ism HD doesn't use; inside the distro it resolves to the wrong interface.
+   Docker-ism Hydrogen doesn't use; inside the distro it resolves to the wrong interface.
    Reach the host at `127.0.0.1` (WSL2 mirrored networking shares loopback); read
-   HD's live control URL from `~/.adom/hd-control-url`.
+   Hydrogen's live control URL from `~/.adom/hydrogen-control-url`.
 3. **NEVER assume you need a firewall rule or gateway IP to reach the host.**
    Under WSL2 mirrored networking the host's `127.0.0.1` listeners are shared with
    the distro's loopback — `127.0.0.1:<port>` just works, no firewall allow needed.
@@ -170,6 +170,6 @@ wsl -d Adom-Workspace -- su - adom -c '<cmd>'
 5. **NEVER hardcode port numbers** in distro code. Read from env vars
    (`ADOM_CARBON_URL`, `ADOM_HYDROGEN_URL`) or discover via the direct
    connect API.
-6. **NEVER assume adom-bridge-cli direct connect (8770) is owned by HD.**
-   It's owned by Adom Bridge. HD's direct-api thread binds to 8770
+6. **NEVER assume adom-bridge-cli direct connect (8770) is owned by Hydrogen.**
+   It's owned by Adom Bridge. Hydrogen's direct-api thread binds to 8770
    as a fallback but Adom Bridge takes priority when both are running.

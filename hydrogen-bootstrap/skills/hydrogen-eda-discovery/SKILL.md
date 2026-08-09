@@ -1,7 +1,7 @@
 ---
 name: hydrogen-eda-discovery
 description: >
-  The onboarding playbook a (second, background) Claude conversation runs after HD setup to
+  The onboarding playbook a (second, background) Claude conversation runs after Hydrogen setup to
   discover which EDA / electronics-design tools the user runs — KiCad, Fusion 360, Altium,
   OrCAD/Cadence — and onboard them into the AI-first electronics workflow. If KiCad/Fusion
   (we have bridges): remember their preferred tool in a prefs file, offer to open example
@@ -17,7 +17,7 @@ description: >
 
 # EDA tool discovery & onboarding (run in the background after setup)
 
-You're (likely) a **second Claude conversation** launched after HD setup to quietly figure out
+You're (likely) a **second Claude conversation** launched after Hydrogen setup to quietly figure out
 the user's electronics-design stack and show them what the AI-first Adom workflow unlocks. Be
 **exploratory and opt-in** — detect first, then offer; never auto-install or auto-build. Do the
 detection in the background, then come back with a short, friendly summary + one clear offer.

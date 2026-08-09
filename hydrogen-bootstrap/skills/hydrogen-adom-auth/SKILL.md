@@ -1,51 +1,51 @@
 ---
 name: hydrogen-adom-auth
 description: >
-  Adom auth in HD — how login/logout works (auth intent flow), where the
+  Adom auth in Hydrogen — how login/logout works (auth intent flow), where the
   session token lives, the profile menu, and how the Adom session feeds the
   setup steps. For Claude Code auth specifically, see hydrogen-claude-auth.
   READ when troubleshooting Adom login failures, session token expiry, the
   profile dropdown, or virgin-reset Adom-auth options. Trigger words —
   adom login, login, logout, auth, session token, auth intent, confirmation
   code, profile menu, avatar, sign in, sign out, auth proxy, clear session,
-  HD adom login, Your profile, Your repositories.
+  Hydrogen adom login, Your profile, Your repositories.
 ---
 
 # Hydrogen -- Authentication Reference
 
 ## Auth Flow Overview
 
-HD uses an **auth intent** flow (no email/password entry in the app).
+Hydrogen uses an **auth intent** flow (no email/password entry in the app).
 The backend creates a short-lived intent token on the Carbon API,
 opens the user's default browser to the Adom login page, and polls until
 the user completes sign-in in the browser.
 
 ### Sequence
 
-1. HD calls `invoke('auth_intent_start')` -> backend POSTs to
+1. Hydrogen calls `invoke('auth_intent_start')` -> backend POSTs to
    `https://carbon.adom.inc/auth/intents` with `{"max_age": 7776000}`
    (90-day session).
 2. Carbon returns `{token, confirmation_code, expires_at, auth_url}`.
-3. HD opens the browser to the **`auth_url` Carbon returned**, falling back to
+3. Hydrogen opens the browser to the **`auth_url` Carbon returned**, falling back to
    `https://hydrogen.adom.inc/auth/intent?token={token}` (singular `intent`,
    token as a query param — NOT `/auth/intents/{token}`).
-4. HD displays the confirmation code on screen and shows a spinner.
+4. Hydrogen displays the confirmation code on screen and shows a spinner.
 5. Frontend polls `invoke('auth_intent_poll', {token})` every 2 seconds.
    Backend GETs `https://carbon.adom.inc/auth/intents/{token}/status`.
 6. When the user confirms in the browser, the response includes
    `{state: "authenticated", session_token: "..."}`.
-7. The backend saves the session token to HD's app-data directory on the host
+7. The backend saves the session token to Hydrogen's app-data directory on the host
    (the `hydrogen-session.txt` file) and a replay copy alongside it.
 8. Frontend redirects to the dashboard.
 
 ### Source files
 
 - **Login page**: `src/routes/auth/login/+page.svelte`
-- **Auth backend**: `src-tauri/crates/hd-app/src/lib.rs` (functions
+- **Auth backend**: `src-tauri/crates/hydrogen-app/src/lib.rs` (functions
   `auth_intent_start`, `auth_intent_poll`, `auth_proxy`,
   `check_replay_credentials`, `replay_adom_login`). NOTE: the old
   `src-tauri/src/lib.rs` is a pre-crate-split vestige — the live code is in the
-  `hd-app` crate.
+  `hydrogen-app` crate.
 - **Auth components**: `src/lib/components/auth/` (Header, Form, Footer,
   SubmitButton, Error, Success)
 - **User API**: `src/lib/api/authenticated_user.ts`
@@ -54,7 +54,7 @@ the user completes sign-in in the browser.
 
 ## Session Token
 
-**Location**: HD's app-data directory on the host (the `hydrogen-session.txt`
+**Location**: Hydrogen's app-data directory on the host (the `hydrogen-session.txt`
 file).
 
 A plain-text file containing the Adom session cookie value. Created by either:
@@ -114,16 +114,16 @@ const result = await invoke('auth_proxy', {
 
 ## Credential Replay
 
-On login page mount, HD checks for saved credentials before starting the
+On login page mount, Hydrogen checks for saved credentials before starting the
 full auth intent flow:
 
 1. `invoke('check_replay_credentials')` checks if replay files exist on disk.
-2. If the replay-session file exists (has_adom = true), HD shows a "REPLAY"
+2. If the replay-session file exists (has_adom = true), Hydrogen shows a "REPLAY"
    badge and a 5-second countdown.
 3. `invoke('replay_adom_login')` attempts to authenticate using the saved
    session token.
 4. If replay succeeds, the user is logged in without opening a browser.
-5. If replay fails, HD falls back to the normal auth intent flow.
+5. If replay fails, Hydrogen falls back to the normal auth intent flow.
 
 This makes re-login after a virgin reset instant when the user chose to
 preserve the Adom session token.
@@ -132,7 +132,7 @@ preserve the Adom session token.
 
 ## Claude Credentials
 
-**Location**: HD's app-data directory on the host (the
+**Location**: Hydrogen's app-data directory on the host (the
 `replay-claude-credentials.json` file).
 
 Stores Claude Code OAuth credentials so they can be replayed into the
@@ -234,7 +234,7 @@ avatar ? avatar.alt : 'unknown';
 3. If confirmed (app mode):
    - `invoke('auth_proxy', {path: '/auth/logout', method: 'DELETE'})` -- server-side logout
    - `invoke('auth_proxy', {path: '/auth/clear-local', method: 'POST'})` -- deletes `hydrogen-session.txt`
-   - Clears auth-related domain preferences from `localStorage['hd-url-routing-prefs']`
+   - Clears auth-related domain preferences from `localStorage['hydrogen-url-routing-prefs']`
 4. Redirects to `/auth/login`.
 
 ---
@@ -293,7 +293,7 @@ document.querySelector('.skip-login a')?.click();
 
 The setup/bootstrap process depends on a valid session token:
 
-1. **inject-api-key** -- reads the HD-side `hydrogen-session.txt`, writes the
+1. **inject-api-key** -- reads the Hydrogen-side `hydrogen-session.txt`, writes the
    token into the workspace at `/var/run/adom/api-key` (mode 644) as the Adom
    API key. If the token is missing or expired, this step fails and downstream
    steps (adom-cli, gallia, etc.) cannot authenticate.
