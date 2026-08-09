@@ -42,6 +42,7 @@ for other platforms). The generic skill cross-references its companion.
 | **hydrogen-eval** | Inject JS into any HD surface (shell/workbench/wiki/Claude) via /eval-in — add-ons, overlays, highlights, drive UI. |
 | **hydrogen-instapcb** | InstaPCB integration in HD. |
 | **hydrogen-monitor** | Real-time SSE event stream + Monitor-tool patterns for watching workspace mutations. |
+| **hydrogen-naming** | The naming doctrine: Hydrogen/ah, Bridge/ab, and WHY installers/shortcuts MUST say "Adom Hydrogen" (users search "adom"). |
 | **hydrogen-notifications** | Reach the user outside the window — native OS toasts + emergency taskbar flash via `notify_user`. |
 | **hydrogen-open-url** | The decision guide for "open a website" — the ways (webview tab, HD window, Pup, native browser, picker, headless curl) and when to pick each. |
 | **hydrogen-overview** | This index. |
