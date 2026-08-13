@@ -23,10 +23,18 @@
 set -euo pipefail
 trap 'echo "[bake-in-distro] FAILED at line ${LINENO} (exit $?)" >&2' ERR
 VER="${GOLDEN_VERSION:-v23}"
+# GOLDEN_PROFILE selects what gets baked:
+#   fat  (default) — today's full bake, byte-for-byte the same behavior as before.
+#   thin           — OS baseline + code-server + adom-wiki CLI ONLY. NO Adom packages/
+#                    skills/extensions are baked; the setup cascade installs everything
+#                    later via `adom-wiki pkg install adom/hydrogen-windows-bootstrap`.
+#                    ("Simple golden image; setup steps configure everything.")
+GOLDEN_PROFILE="${GOLDEN_PROFILE:-fat}"
 CSV="${CODE_SERVER_VERSION:-4.124.2}"
 CTX="${CTX:-/tmp/ctx}"
 export DEBIAN_FRONTEND=noninteractive
 log() { echo "[bake-in-distro $(date +%H:%M:%S)] $*"; }
+log "profile: ${GOLDEN_PROFILE}"
 
 # ── 1. apt baseline — RUNTIME image (deliberately leaner than image/Dockerfile) ─
 # The cloud hydrogen-workspace Dockerfile carries build-essential/cmake/pkg-config/
@@ -138,6 +146,10 @@ curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --m
 chmod 0755 /home/adom/.local/bin/adom-wiki && chown adom:adom /home/adom/.local/bin/adom-wiki
 log "adom-wiki CLI = $(runuser -u adom -- /home/adom/.local/bin/adom-wiki --version) (fetched ${AWV})"
 
+# THIN PROFILE: the whole section-6 bootstrap install is skipped — the setup cascade
+# runs the exact same `adom-wiki pkg install adom/hydrogen-windows-bootstrap` on the
+# user's machine after import, so the thin image ships zero Adom packages.
+if [ "$GOLDEN_PROFILE" != "thin" ]; then
 # ── 6. THE BOOTSTRAP INSTALL — pulls core + hd-bootstrap + WSL2 layer ─────────
 # Real distro → /proc exists → postinstalls (settings, extensions, seeds) run fine.
 # ONE declarative install: core@^4.13 ← hd-bootstrap@0.2.10 ← hydrogen-windows-bootstrap@0.2.6
@@ -153,6 +165,7 @@ chown -R adom:adom /home/adom
 # public release tarball. The flag is bake-only; user installs still get Satoshi.
 runuser -u adom -- bash -lc \
     "ADOM_THEME_SKIP_SATOSHI=1 /home/adom/.local/bin/adom-wiki pkg install adom/hydrogen-windows-bootstrap"
+fi  # GOLDEN_PROFILE != thin (section 6 bootstrap install)
 
 # ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
 # declare scripts.install (hd-bootstrap@0.2.23, hydrogen-windows-bootstrap@0.2.8) and
@@ -224,6 +237,9 @@ cat > /etc/systemd/system/adom-relay.service <<'UNIT'
 Description=Adom Desktop relay (adom-desktop serve) - the bridge AD/HD connect back to
 After=network-online.target
 Wants=network-online.target
+# THIN image: adom-desktop is installed by the setup cascade, not baked — until the
+# binary exists, skip quietly instead of burning the start-limit budget before setup.
+ConditionPathExists=/home/adom/.local/bin/adom-desktop
 # 900s window / 4 attempts: the field report (hd-wsl2-image#1) measured a unit
 # restart-looping every ~2 min for 15h (NRestarts=435) — a 60s window never trips
 # when the failure cycle is slower than window/burst. 4 failures inside 15 min
@@ -252,6 +268,9 @@ cat > /etc/systemd/system/adom-shotlog.service <<'UNIT'
 Description=Adom Shotlog (screenshot log viewer, port 8820)
 After=network-online.target
 Wants=network-online.target
+# THIN image: adom-shotlog is installed by the setup cascade, not baked — until the
+# binary exists, skip quietly instead of burning the start-limit budget before setup.
+ConditionPathExists=/home/adom/.local/bin/adom-shotlog
 # 900s window / 4 attempts: the field report (hd-wsl2-image#1) measured a unit
 # restart-looping every ~2 min for 15h (NRestarts=435) — a 60s window never trips
 # when the failure cycle is slower than window/burst. 4 failures inside 15 min
@@ -311,6 +330,9 @@ WantedBy=multi-user.target
 UNIT
 ln -sf /etc/systemd/system/adom-distro-id.service /etc/systemd/system/multi-user.target.wants/adom-distro-id.service
 
+# THIN PROFILE: the theme system rides the setup cascade too (it needs the extensions
+# dir the bootstrap install creates, which thin does not bake) — skip the whole of 6e.
+if [ "$GOLDEN_PROFILE" != "thin" ]; then
 # ── 6e. Adom theme system + editor default theme (v21) ────────────────────────
 # LICENSE-CRITICAL: ADOM_THEME_SKIP_SATOSHI=1. Satoshi's Fontshare EULA forbids
 # distributing the files "in a public server"; this tarball IS a public GitHub release
@@ -332,6 +354,7 @@ runuser -u adom -- bash -lc \
 SETTINGS=/home/adom/.local/share/code-server/User/settings.json
 runuser -u adom -- bash -lc \
     "jq '.\"workbench.colorTheme\" = \"Adom Studio\"' '${SETTINGS}' > /tmp/s.json && mv /tmp/s.json '${SETTINGS}'"
+fi  # GOLDEN_PROFILE != thin (section 6e theme system)
 
 # Headless distro: boot straight to multi-user.target. Ubuntu's default.target symlinks
 # to graphical.target, which Wants= a display-manager that does not exist here; multi-user
@@ -341,7 +364,12 @@ ln -sf /lib/systemd/system/multi-user.target /etc/systemd/system/default.target
 # ── 7. sentinel + version stamp ───────────────────────────────────────────────
 mkdir -p /var/lib/adom-bootstrap
 date -Iseconds > /var/lib/adom-bootstrap/phase-a-done
-echo "${VER}" > /etc/adom-golden-version
+# The thin profile stamps "<ver>-thin" so /etc/adom-golden-version identifies the profile.
+if [ "$GOLDEN_PROFILE" = "thin" ]; then
+    echo "${VER}-thin" > /etc/adom-golden-version
+else
+    echo "${VER}" > /etc/adom-golden-version
+fi
 
 # ── 8. scrub per-install state + ownership sweep ──────────────────────────────
 rm -f /home/adom/.claude.json /home/adom/.claude.json.backup 2>/dev/null || true
@@ -359,6 +387,7 @@ id adom | grep -q uid=1001
 test -x /home/adom/.local/bin/adom-wiki || { echo "MISSING adom-wiki CLI"; exit 1; }
 runuser -u adom -- /home/adom/.local/bin/adom-wiki --version >/dev/null || { echo "adom-wiki --version failed"; exit 1; }
 ! test -e /home/adom/.local/bin/adompkg || { echo "STALE adompkg still present"; exit 1; }
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked module tree
 # module tree: updater is RETIRED — assert present set AND absent set
 for p in core hd-bootstrap hydrogen-windows-bootstrap adom-desktop adom-wiki-cli hook; do
     test -d "/home/adom/project/adom_modules/adom/${p}" || { echo "MISSING module adom/${p}"; exit 1; }
@@ -368,19 +397,23 @@ for p in adom-workspace-updater hd-skillpack; do
 done
 # whole tree sudo-free (updater was the only needs_sudo package)
 ! grep -rl '"needs_sudo": *true' /home/adom/project/adom_modules/*/*/package.json 2>/dev/null | grep -q . || { echo "SUDO package in tree"; exit 1; }
+fi  # FAT-ONLY module tree
 # no private-infra phone-home: no gallia checkout, no check-updates.sh hook
 ! test -e /home/adom/gallia || { echo "GALLIA checkout present"; exit 1; }
 ! find /home/adom/.claude -name "check-updates.sh" 2>/dev/null | grep -q . || { echo "PRIVATE check-updates.sh hook present"; exit 1; }
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked skills
 test -f /home/adom/.claude/skills/adom/SKILL.md || { echo "MISSING adom skills hub"; exit 1; }
 # v20: the `definitions` skill must ship — adom/core used to NOT depend on it (fixed:
 # core@4.13.4 declares adom/definitions), but assert it so a future core that drops
 # the dep FAILS the bake instead of silently shipping an image without definitions.
 test -f /home/adom/.claude/skills/definitions/SKILL.md || { echo "MISSING definitions skill (adom/core must depend on adom/definitions)"; exit 1; }
+fi  # FAT-ONLY skills
 # v20: python parity libs must import (installed via apt, not pip — no PEP-668 dance)
 for m in requests yaml bs4 lxml PIL; do
     python3 -c "import ${m}" 2>/dev/null || { echo "PYTHON: 'import ${m}' failed — parity lib missing from the apt baseline"; exit 1; }
 done
 echo "python parity libs: requests+yaml+bs4+lxml+PIL all import ✓"
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked content (skills, settings seeds, extensions, CLIs)
 N=$(ls -d /home/adom/.claude/skills/hd-* 2>/dev/null | wc -l); echo "hd-* skills deployed: ${N}"
 [ "${N}" -ge 45 ] || { echo "too few hd-* skills (${N}; expect 38 generic + 11 wsl2)"; exit 1; }
 # spot-check bundled skills incl. the hydrogen-workspace-updater→hd-staying-current rename
@@ -419,6 +452,7 @@ printf '%s\n%s\n' "0.5.12" "$ACLI_V" | sort -V -C || { echo "ADOM-CLI: ${ACLI_V}
 # though the literal is present (verified 2026-07-19: grep -a / strings both match).
 LC_ALL=C grep -qa 'hd-proxy-url' /usr/local/bin/adom-cli || { echo "ADOM-CLI: 'hd-proxy-url' string ABSENT from the binary — the base-url fallback is not compiled in"; exit 1; }
 echo "adom-cli: >=0.5.12 + hd-proxy-url fallback present ✓"
+fi  # FAT-ONLY baked content
 test -x /usr/lib/systemd/systemd && test -e /sbin/init || { echo "MISSING systemd"; exit 1; }
 test -e /var/lib/systemd/linger/adom || { echo "MISSING adom linger"; exit 1; }
 # v21: the container manages its own services — units present AND enabled, cron alive.
@@ -428,10 +462,12 @@ for u in code-server adom-relay adom-shotlog; do
 done
 dpkg -l cron 2>/dev/null | grep -q '^ii' || { echo "MISSING cron package"; exit 1; }
 test -x /usr/bin/crontab || { echo "MISSING crontab"; exit 1; }
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: shotlog is delivered by the bootstrap install
 # adom-shotlog: registry-tracked (hydrogen-windows-bootstrap>=0.2.9 dependency), binary + alias.
 test -d /home/adom/project/adom_modules/adom/adom-shotlog || { echo "MISSING module adom/adom-shotlog (bootstrap dep not resolved?)"; exit 1; }
 test -x /home/adom/.local/bin/adom-shotlog || { echo "MISSING adom-shotlog binary"; exit 1; }
 test -e /home/adom/.local/bin/shotlog || { echo "MISSING shotlog alias"; exit 1; }
+fi  # FAT-ONLY shotlog
 test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak: $(find /home/adom ! -user adom -print -quit)"; exit 1; }
 # v15: confirm the build toolchain really is gone (it was dead weight in v1..v14)
 ! dpkg -l gcc-13 g++-13 cmake build-essential 2>/dev/null | grep -q '^ii' || { echo "TOOLCHAIN still present"; exit 1; }
@@ -440,6 +476,7 @@ test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak
 # Match font BINARIES only. `-iname 'Satoshi*'` also matched the package's docs dir
 # fonts/satoshi/ (a README pointing at Fontshare, zero font bytes) = false positive.
 ! find /home/adom -type f \( -iname 'Satoshi*.woff2' -o -iname 'Satoshi*.woff' -o -iname 'Satoshi*.otf' -o -iname 'Satoshi*.ttf' \) 2>/dev/null | grep -q . || { echo "LICENSE VIOLATION: Satoshi font binaries in the image (public tarball) — bake with ADOM_THEME_SKIP_SATOSHI=1"; exit 1; }
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: theme pack ships via the bake-time installs
 # theme pack actually landed (its install.sh SILENTLY skips if the extensions dir is missing)
 ls -d /home/adom/.local/share/code-server/extensions/adom.adom-theme-* >/dev/null 2>&1 || { echo "MISSING Adom theme pack (install ran before code-server extensions dir existed?)"; exit 1; }
 # the pre-2026-08-02 id must be GONE, or the picker doubles every theme
@@ -454,6 +491,7 @@ jq -e '[.[] | select(.identifier.id == "adom.adom-theme")] | length == 1' \
 jq -e '."workbench.colorTheme" == "Adom Studio"' /home/adom/.local/share/code-server/User/settings.json >/dev/null || { echo "THEME: default colorTheme is not 'Adom Studio'"; exit 1; }
 # OFL compliance: the license text must travel beside the fonts we DO ship
 test -e /home/adom/.local/share/fonts/adom-theme/JetBrainsMono-OFL.txt || { echo "OFL: JetBrains Mono license text missing beside the fonts"; exit 1; }
+fi  # FAT-ONLY theme pack
 # standard folder contract (seeded, adom-owned)
 for d in project project/downloads project/screenshots; do
     test -d "/home/adom/${d}" || { echo "MISSING seeded folder ~/${d}"; exit 1; }
@@ -462,14 +500,16 @@ done
 # compare the BASENAME: /lib is a symlink to /usr/lib (usr-merge), so `readlink -f`
 # returns /usr/lib/... and a literal /lib/... comparison always fails.
 test "$(basename "$(readlink -f /etc/systemd/system/default.target)")" = "multi-user.target" || { echo "default.target is not multi-user (got $(readlink -f /etc/systemd/system/default.target))"; exit 1; }
-echo "v21: theme pack + Adom Studio + OFL ok, no Satoshi, folder contract seeded ✓"
+[ "$GOLDEN_PROFILE" = "thin" ] || echo "v21: theme pack + Adom Studio + OFL ok, no Satoshi, folder contract seeded ✓"
 # ── v22 GATES (theme standard v2 + hd-wsl2-image#1 unit fixes) ────────────────
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: theme standard v2 gates
 PACK_DIR="$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-theme-* | head -1)"
 # exactly five themes contributed
 test "$(jq '.contributes.themes | length' "$PACK_DIR/package.json")" = "5" || { echo "THEME: pack does not contribute exactly five themes"; exit 1; }
 # the NEW Adom Studio (Dark-2026-derived): #1f2125 is the 2026 chrome value and does not
 # exist in the old template projection — its presence proves gen-adom-studio-v2 output.
 grep -q '#1f2125' "$PACK_DIR/themes/adom-studio-color-theme.json" || { echo "THEME: adom-studio-color-theme.json lacks #1f2125 — this is the OLD Studio, need adom-theme >= 2.0.0"; exit 1; }
+fi  # FAT-ONLY theme standard v2
 # unit opens W, not $HOME (field report item 2)
 grep -q 'ExecStart=.*code-server.*/home/adom/project$' /etc/systemd/system/code-server.service || { echo "UNIT: code-server ExecStart does not open /home/adom/project"; exit 1; }
 # parking directives present in every unit (field report item 1)
@@ -483,11 +523,16 @@ test -L /etc/systemd/system/multi-user.target.wants/adom-distro-id.service || { 
 # not ship (every import would share it). Clear it now; the gate then guards regressions.
 rm -f /etc/adom-distro-id
 test ! -e /etc/adom-distro-id || { echo "IDENTITY: /etc/adom-distro-id must NOT be baked (would be shared by every import)"; exit 1; }
-echo "v22: five themes + new Studio (#1f2125) + unit parking 900/4 + W root + distro-id generator ✓"
+if [ "$GOLDEN_PROFILE" = "thin" ]; then
+    echo "v22 (thin): unit parking 900/4 + W root + distro-id generator ✓ (theme gates are fat-only)"
+else
+    echo "v22: five themes + new Studio (#1f2125) + unit parking 900/4 + W root + distro-id generator ✓"
+fi
 # ── v23 GATES (fresh adom-vscode) ─────────────────────────────────────────────
 # adom-vscode < 1.0.17 bundled its own contributes.themes, which puts DUPLICATE
 # "Adom Studio" entries in the picker beside the real adom-themes pack (hit live
 # 2026-07-27). 1.0.16+ also serves POST /exec on :8821 (the HD dock launch path).
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: adom-vscode ships via the bootstrap install
 AVX_DIR="$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-vscode-* | sort -V | tail -1)"
 AVX_VER="$(jq -r .version "$AVX_DIR/package.json")"
 printf '%s\n%s\n' "1.0.17" "$AVX_VER" | sort -V -C || { echo "ADOM-VSCODE too old: $AVX_VER < 1.0.17 (need adom/adom-vscode >= 4.0.11)"; exit 1; }
@@ -495,6 +540,19 @@ test "$(jq '.contributes.themes | length' "$AVX_DIR/package.json" 2>/dev/null ||
 # only ONE adom-vscode extension dir may ship (two = duplicate everything)
 test "$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-vscode-* | wc -l)" = "1" || { echo "MULTIPLE adom-vscode extension dirs baked"; exit 1; }
 echo "v23: adom-vscode $AVX_VER (>=1.0.17, no bundled themes) ✓"
+fi  # FAT-ONLY adom-vscode
+# ── THIN-ONLY GATES: the thin image must ship ZERO Adom content ───────────────
+# Everything below is delivered later by the setup cascade running
+# `adom-wiki pkg install adom/hydrogen-windows-bootstrap`; if any of it is present
+# at bake time, the image is not actually thin.
+if [ "$GOLDEN_PROFILE" = "thin" ]; then
+    ! test -e /home/adom/project/adom_modules || { echo "THIN: adom_modules exists under ~/project — thin image must bake no packages"; exit 1; }
+    if [ -d /home/adom/.claude/skills ]; then
+        [ -z "$(ls -A /home/adom/.claude/skills 2>/dev/null)" ] || { echo "THIN: ~/.claude/skills is non-empty — thin image must bake no skills"; exit 1; }
+    fi
+    ! ls -d /home/adom/.local/share/code-server/extensions/adom.* /home/adom/.local/share/code-server/extensions/anthropic.* >/dev/null 2>&1 || { echo "THIN: adom.*/anthropic.* extension baked — thin image must ship none"; exit 1; }
+    echo "thin: no adom_modules, no baked skills, no adom/anthropic extensions ✓"
+fi
 echo SMOKE-OK
 
 # ── 10. cleanup + slim pass ───────────────────────────────────────────────────
@@ -517,4 +575,4 @@ find /usr/share/locale -mindepth 1 -maxdepth 1 -type d ! -name 'en*' -exec rm -r
 # adompkg never left one, so the slim pass didn't clean it; drop it (measured v20).
 rm -rf /home/adom/project/adom_modules/.cache 2>/dev/null || true
 rm -rf /var/cache/apt/* /var/log/* /tmp/* 2>/dev/null || true
-log "bake done (${VER})"
+log "bake done (${VER}, profile=${GOLDEN_PROFILE})"
