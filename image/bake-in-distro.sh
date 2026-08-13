@@ -239,7 +239,8 @@ After=network-online.target
 Wants=network-online.target
 # THIN image: adom-desktop is installed by the setup cascade, not baked — until the
 # binary exists, skip quietly instead of burning the start-limit budget before setup.
-ConditionPathExists=/home/adom/.local/bin/adom-desktop
+ConditionPathExists=|/home/adom/.local/bin/adom-bridge
+ConditionPathExists=|/home/adom/.local/bin/adom-desktop
 # 900s window / 4 attempts: the field report (hd-wsl2-image#1) measured a unit
 # restart-looping every ~2 min for 15h (NRestarts=435) — a 60s window never trips
 # when the failure cycle is slower than window/burst. 4 failures inside 15 min
@@ -252,7 +253,7 @@ Type=exec
 User=adom
 Environment=HOME=/home/adom
 WorkingDirectory=/home/adom
-ExecStart=/bin/bash -lc 'exec adom-desktop serve'
+ExecStart=/bin/bash -lc 'command -v adom-bridge >/dev/null && exec adom-bridge serve || exec adom-desktop serve'
 # on-failure, NOT always: these services deliberately exit 0 when they detect a peer
 # already holding their port (a second workspace on the same host sees the production
 # instance through WSL2 mirrored networking and defers). Restart=always turned that clean
