@@ -114,6 +114,36 @@ behaviour from Web Hydrogen, it is almost certainly wrong.
 When in doubt about ANY of the above, VERIFY empirically against a re-imported image
 (boot code-server, test the actual behaviour) before changing the bake — do not guess.
 
+## ⭐ THE THIN FLIP (2026-08-13) — thin IS the shipped profile now
+
+John's call: "simple golden image; setup steps configure everything." Since
+**v24-thin** (pinned in ah 1.0.42+), the SHIPPED image is `GOLDEN_PROFILE=thin`:
+OS baseline + code-server + systemd units + the adom-wiki CLI seed, and NOTHING
+else — no packages, no skills, no extensions. The setup cascade's
+update-packages step performs the full first install
+(`adom-wiki pkg install adom/hydrogen-windows-bootstrap`, ~7 min measured,
+delivers ~150 skills / 22 pkgs / all 3 editor extensions). `fat` remains the
+script's default env value for compatibility but is LEGACY — bake thin unless
+John says otherwise. Invariants above still hold where applicable; the
+"registry install" invariant now executes at SETUP time, not bake time.
+
+Traps this flip surfaced (all found live on John's v22→v24-thin migration):
+
+- **Restore ≠ reinstall.** Image migration restores user FILES, but package
+  install-time SYSTEM EFFECTS (~/.local/bin binaries, /etc/profile.d/hd-env.sh,
+  editor extensions) exist only if install scripts ran on THIS rootfs. ah
+  1.0.44's `post_migration_provision()` re-runs them after every migration —
+  never remove that.
+- **ConditionPathExists units are boot-order sensitive**: systemd evaluates
+  conditions at boot; binaries restored/installed later don't wake the unit.
+  Explicit `systemctl restart` after provisioning is required (1.0.44 does it).
+- **The relay unit's binary renamed**: exec prefers `adom-bridge serve`
+  (fallback `adom-desktop serve`), dual `ConditionPathExists=|`. The fat era hid
+  this because the old binary was baked. Fixed in the bake AND self-healed by ah.
+- **WSL_WEDGED can eat provisioning**: env stamps attempted during a wedge are
+  suppressed; ah re-stamps on wedge-clear (1.0.44). If a fresh import shows
+  missing env, check the wedge log lines first.
+
 ## What this builds
 
 A flat WSL2 rootfs that HD `wsl --import`s. The OS "hardware" (apt baseline,
@@ -233,6 +263,7 @@ have re-installed the retired daemon into a clean image).
 
 | ver | change |
 |---|---|
+| v24-thin | THE THIN FLIP (shipped in ah 1.0.42): GOLDEN_PROFILE=thin — OS baseline + code-server + adom-wiki seed only; 322,670,230 B (v23 was 447MB); setup installs the toolchain live (~7 min). Relay unit renamed to adom-bridge (fallback adom-desktop) + dual conditions. tar.gz sha db985e24…c5d34 |
 | v15 | dropped the ~246 MB C/C++ toolchain + stripped docs/man/locales (626→400 MB) |
 | v16 | clean first-load editor (per-workspace sidebar-collapse seed, no welcome/tabs/panel) |
 | v17 | Web Hydrogen port parity: `autoForwardPortsSource: hybrid` (kills the >20-ports popup) |
