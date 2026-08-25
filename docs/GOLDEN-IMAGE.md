@@ -56,9 +56,25 @@ editor, and the surface the AI Threads panel drives.
 This is what runs in a terminal tab, what TUI threads use, and what agents shell out to.
 
 Together that is **758 MiB, about 38 percent of the uncompressed rootfs**, which makes
-Claude Code by a wide margin the largest thing in the image. The two payloads are largely
-the same native build carried twice. Deduplicating them is the single biggest size win
-available and is not attempted yet.
+Claude Code by a wide margin the largest thing in the image.
+
+They are not merely similar. They are **byte-identical**: both are a single file of
+391,948,592 bytes with the same sha256 (`16ad2b94deaf7b29...`). The CLI tree is nothing but
+that file, and the extension is that file plus about 10 MiB of JS, webview and manifests.
+
+Which means the second install is avoidable, and this was verified on the build distro:
+the extension's own copy runs standalone. `claude --version` answers 2.1.245 straight out of
+`resources/native-binary/`, works with a clean HOME and no `~/.local/share/claude` present,
+and `claude doctor` reports `Running: native (2.1.245)` with its Path inside the extension.
+It links only against libc, librt and libpthread. The extension has been shipping a
+complete, usable CLI all along; it was simply never on PATH.
+
+The catch is that the extension's directory is version-stamped
+(`anthropic.claude-code-2.1.245-linux-x64`), so PATH cannot point at it directly. A tiny
+wrapper in `~/.local/bin/claude` that resolves the newest extension directory and execs the
+binary solves that without a symlink. Before adopting it, check what the bundled binary's
+`Auto-updates: enabled` actually does when it decides to update itself, since its
+`Config install method` reads `not set`.
 
 Neither is version pinned. The bake installs whatever is newest that day (2.1.245 here)
 and the CLI self-updates afterward.
@@ -165,6 +181,56 @@ tab NAMES are the stable handle and tab ids should never be cached.
 
 The port is registered `onAutoForward: silent` so it never raises a notification, and the
 setup cascade keeps a verification sliver whose only job is to confirm :8821 came alive.
+
+## How ah runs commands inside the container
+
+There are two transports, and which one is used decides whether WSL wedges.
+
+**wsl.exe, the bootstrap transport.** ah spawns
+`wsl.exe -d Adom-Workspace -u adom -- bash -lc <cmd>` on the Windows host. It is the only
+way in before anything is running inside the distro, so the import, the systemd boot, and
+starting code-server must use it. It is also the origin of nearly every "WSL is flaky"
+incident, and the defenses in the code say so out loud:
+
+- **One global mutex serializes every wsl.exe call**, because a second call touching the
+  distro mid-boot corrupts it PERMANENTLY into `Wsl/Service/E_UNEXPECTED`. Proven on a test
+  VM: an undisturbed import boots and execs in 20 seconds, but overlapping health, status
+  and version execs landing in that window corrupt it, after which the import appears to
+  succeed and every later exec returns -1.
+- That lock had to be **moved into the shared crate** because while it lived in the app
+  crate it guarded only half the callers, so ah could still race itself into the corruption
+  the lock existed to prevent.
+- **A wedge watchdog** flips the runtime to `WSL_WEDGED` after three consecutive timeouts,
+  and a self-heal runs `wsl --shutdown` and retries once when it sees `E_UNEXPECTED`,
+  `Catastrophic failure`, or `HCS_E_CONNECTION_TIMEOUT`.
+- **A choke-point guard** refuses execs while the user has the workspace stopped, because
+  any exec into a terminated distro silently auto-starts it.
+
+**The adom-vscode exec API, the native transport.** Once the editor is up, the container
+exposes `POST /exec` (buffered) and `POST /exec/stream` (SSE) on the adom-vscode port,
+normally 8821. The extension host runs the command itself, inside the container, as `adom`,
+through a login shell, which is the same shape wsl.exe provided. Login matters: tools need
+the workspace environment from `/etc/profile.d/`, and a bare `-c` shell runs them env-less
+so they fail with nothing on stdout.
+
+Because mirrored networking puts the distro's loopback on the Windows host, ah can reach
+that port directly. No wsl.exe, no global lock, no boot-overlap window, no accidental
+distro start. The exec verbs are HD-local by policy: a cloud container answers
+`exec_disabled_on_cloud` (403) and omits them from `/health`, because an arbitrary-shell
+verb on an internet-facing container is exposure nobody needs.
+
+**The routing rule** is therefore: bootstrap on wsl.exe because there is no alternative,
+everything after the editor proves `:8821` is answering on the native path, and fall back
+to wsl.exe whenever the native route is not usable (editor not up, cloud container,
+output past the 64 KB buffered cap). A routing miss must never become a command failure.
+
+Two details worth keeping in mind if you touch this. The port is **discovered, not
+assumed**: adom-vscode prefers 8821 but moves up when it is taken, publishes the result in
+`~/.local/share/adom-vscode/port.json`, and ah verifies by TCP connect rather than trusting
+the file, after an incident where the extension sat healthy on 8822 while ah hammered 8821
+and every editor command hung. And availability must be probed with a plain loopback
+connect first, because resolving the port can itself fall back to a wsl.exe read, which
+would inject a new exec into exactly the boot window that corrupts distros.
 
 ## adom-theme
 
