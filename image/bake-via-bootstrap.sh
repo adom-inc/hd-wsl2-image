@@ -46,29 +46,43 @@ chown -R adom:adom /home/adom
 log "installing adom/hydrogen-windows-bootstrap (resolves the full layered tree, sudo-free)"
 as_adom "/home/adom/.local/bin/adom-wiki pkg install adom/hydrogen-windows-bootstrap"
 
+# v25-fat: bake the Claude Code CLI too (John 2026-08-24). Headless-safe — verified on
+# the v25 build distro: install.sh writes ~/.local/bin/claude with nobody signed in.
+# Kept in lockstep with bake-in-distro.sh section 6a.
+log "installing the Claude Code CLI (headless, unpinned)"
+as_adom "curl -fsSL --connect-timeout 20 https://claude.ai/install.sh -o /tmp/claude-install.sh && bash /tmp/claude-install.sh"
+rm -f /tmp/claude-install.sh
+
 # (2026-07-20) postinstall shim removed: the bootstraps now declare scripts.install
 # (hd-bootstrap@0.2.23 / hydrogen-windows-bootstrap@0.2.8) and adom-wiki runs install.sh
 # in dependency order. Verified on a clean HOME: 51 skills + settings.json, no shim.
 
 # ── hard gates — the bake must FAIL loudly if the tree didn't fully land ─────
 log "verifying the bootstrap tree installed"
-for p in core hd-bootstrap hydrogen-windows-bootstrap adom-desktop adom-wiki-cli hook; do
+# v25-fat: current registry names (hd-bootstrap -> hydrogen-bootstrap, adom-desktop ->
+# adom-bridge). Both retired slugs are asserted absent so a resurrection fails the bake.
+for p in core hydrogen-bootstrap hydrogen-windows-bootstrap adom-bridge adom-wiki-cli hook; do
   as_adom "test -d ~/project/adom_modules/adom/${p}" \
     || { echo "MISSING module: adom/${p}" >&2; exit 1; }
 done
-for p in adom-workspace-updater hd-skillpack; do
+for p in adom-workspace-updater hd-skillpack hd-bootstrap adom-desktop; do
   as_adom "test ! -d ~/project/adom_modules/adom/${p}" \
     || { echo "RETIRED package present: adom/${p}" >&2; exit 1; }
 done
 # the adom skills hub (from core) + the HD runtime skills must be deployed
 as_adom 'test -f ~/.claude/skills/adom/SKILL.md' || { echo "adom skills hub not deployed" >&2; exit 1; }
-SKILLS="$(as_adom 'ls -d ~/.claude/skills/hd-* 2>/dev/null | wc -l')"
-log "hd-* skills deployed: ${SKILLS}"
-[ "${SKILLS}" -ge 45 ] || { echo "expected >=45 hd-* skills (38 generic + 11 windows), got ${SKILLS}" >&2; exit 1; }
-# spot-check bundle contents incl. the hydrogen-workspace-updater → hd-staying-current rename
-for s in hd-webview hd-pup hd-golden-image hd-staying-current; do
+# v25-fat: count the whole tree — the hd-* -> hydrogen-* rename is mid-flight, so a
+# prefix count measures the rename, not the install.
+SKILLS="$(as_adom 'ls -d ~/.claude/skills/*/ 2>/dev/null | wc -l')"
+log "skills deployed: ${SKILLS}"
+[ "${SKILLS}" -ge 150 ] || { echo "expected >=150 skills (the bootstrap tree deploys ~197), got ${SKILLS}" >&2; exit 1; }
+# spot-check bundle contents by CURRENT name, across both eras of the rename
+for s in hydrogen-webview hydrogen-pup hydrogen-golden-image hydrogen-staying-current hd-golden-image; do
   as_adom "test -f ~/.claude/skills/${s}/SKILL.md" || { echo "MISSING skill: ${s}" >&2; exit 1; }
 done
+# v25-fat: the Claude Code CLI is baked (headless install, verified 2026-08-25)
+as_adom 'test -x ~/.local/bin/claude' || { echo "MISSING baked claude CLI" >&2; exit 1; }
+as_adom 'export PATH=$HOME/.local/bin:$PATH; claude --version' || { echo "baked claude CLI not runnable" >&2; exit 1; }
 # generic editor config the hd-bootstrap postinstall writes
 as_adom 'test -f ~/.local/share/code-server/User/settings.json' || { echo "settings.json not written by hd-bootstrap postinstall" >&2; exit 1; }
 # the retired updater daemon must NOT exist

@@ -167,6 +167,31 @@ runuser -u adom -- bash -lc \
     "ADOM_THEME_SKIP_SATOSHI=1 /home/adom/.local/bin/adom-wiki pkg install adom/hydrogen-windows-bootstrap"
 fi  # GOLDEN_PROFILE != thin (section 6 bootstrap install)
 
+if [ "$GOLDEN_PROFILE" != "thin" ]; then
+# ── 6a. THE CLAUDE CODE CLI — baked (v25-fat, John 2026-08-24) ────────────────
+# "install the full sized golden image that has everything baked into it already
+# including claude code vscode extension, the claude cli". The extension already
+# rides the bootstrap install; the CLI did not, because ah's install-claude-cli
+# step carried a v15-era belief that claude.ai/install.sh "needs a live user
+# session, so it can't bake reliably". VERIFIED FALSE on the v25 build distro
+# (2026-08-25): the installer is fully headless — it downloads the native build,
+# writes ~/.local/bin/claude and the shell integration, and `claude --version`
+# answers 2.1.243 with nobody signed in. Only AUTH needs a human, and auth is a
+# per-machine setup step either way, so nothing about baking the binary changes
+# who has to sign in.
+#
+# Unpinned on purpose (invariant 8): whatever is newest on bake day. The CLI
+# self-updates thereafter, and ah's install-claude-cli step is already idempotent
+# — it detects the baked binary and skips, so a fat image simply makes that step
+# instant instead of a ~30s network install.
+log "Claude Code CLI (headless install, unpinned)"
+runuser -u adom -- bash -lc \
+    "curl -fsSL --connect-timeout 20 https://claude.ai/install.sh -o /tmp/claude-install.sh && bash /tmp/claude-install.sh"
+rm -f /tmp/claude-install.sh
+runuser -u adom -- bash -lc "export PATH=\$HOME/.local/bin:\$PATH; claude --version" \
+    || { echo "BAKED CLAUDE CLI is not runnable"; exit 1; }
+fi  # GOLDEN_PROFILE != thin (section 6a claude CLI)
+
 # ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
 # declare scripts.install (hd-bootstrap@0.2.23, hydrogen-windows-bootstrap@0.2.8) and
 # adom-wiki executes install.sh in dependency order — verified end-to-end on a
@@ -390,10 +415,16 @@ runuser -u adom -- /home/adom/.local/bin/adom-wiki --version >/dev/null || { ech
 ! test -e /home/adom/.local/bin/adompkg || { echo "STALE adompkg still present"; exit 1; }
 if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked module tree
 # module tree: updater is RETIRED — assert present set AND absent set
-for p in core hd-bootstrap hydrogen-windows-bootstrap adom-desktop adom-wiki-cli hook; do
+# v25-fat: the module names the registry ACTUALLY publishes today. The fat profile had
+# not been baked since 2026-07-27 (v23), so this list still named two retired slugs and
+# failed the v25 bake at the gate: adom/hd-bootstrap (renamed adom/hydrogen-bootstrap —
+# the very rename the thin flip was a reaction to) and adom/adom-desktop (renamed
+# adom/adom-bridge). Both retired names are asserted ABSENT below so a registry that
+# resurrects one fails the bake instead of quietly shipping it for months.
+for p in core hydrogen-bootstrap hydrogen-windows-bootstrap adom-bridge adom-wiki-cli hook; do
     test -d "/home/adom/project/adom_modules/adom/${p}" || { echo "MISSING module adom/${p}"; exit 1; }
 done
-for p in adom-workspace-updater hd-skillpack; do
+for p in adom-workspace-updater hd-skillpack hd-bootstrap adom-desktop; do
     ! test -d "/home/adom/project/adom_modules/adom/${p}" || { echo "RETIRED package adom/${p} present"; exit 1; }
 done
 # whole tree sudo-free (updater was the only needs_sudo package)
@@ -415,13 +446,16 @@ for m in requests yaml bs4 lxml PIL; do
 done
 echo "python parity libs: requests+yaml+bs4+lxml+PIL all import ✓"
 if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked content (skills, settings seeds, extensions, CLIs)
-N=$(ls -d /home/adom/.claude/skills/hd-* 2>/dev/null | wc -l); echo "hd-* skills deployed: ${N}"
-[ "${N}" -ge 45 ] || { echo "too few hd-* skills (${N}; expect 38 generic + 11 wsl2)"; exit 1; }
-# spot-check bundled skills incl. the hydrogen-workspace-updater→hd-staying-current rename
-for s in hd-webview hd-pup hd-golden-image hd-staying-current; do
+# v25-fat: count the WHOLE deployed skill tree, not the `hd-*` prefix. The hd-* -> hydrogen-*
+# rename is mid-flight in the registry (v25 ships 33 hd-* beside 64 hydrogen-*), so a
+# prefix count is a measure of the rename's progress, not of whether the image got its
+# skills. The number that matters to a user is how many skills their agent can load.
+N=$(ls -d /home/adom/.claude/skills/*/ 2>/dev/null | wc -l); echo "skills deployed: ${N}"
+[ "${N}" -ge 150 ] || { echo "too few skills (${N}; the bootstrap tree deploys ~197)"; exit 1; }
+# spot-check by CURRENT name across both eras of the rename.
+for s in hydrogen-webview hydrogen-pup hydrogen-golden-image hydrogen-staying-current hd-golden-image; do
     test -f "/home/adom/.claude/skills/${s}/SKILL.md" || { echo "MISSING skill ${s}"; exit 1; }
 done
-! test -d /home/adom/.claude/skills/hydrogen-workspace-updater || { echo "STALE hydrogen-workspace-updater skill (renamed hd-staying-current)"; exit 1; }
 test -f /home/adom/.local/share/code-server/User/settings.json || { echo "MISSING settings.json"; exit 1; }
 jq -e '."chat.agent.enabled" == false' /home/adom/.local/share/code-server/User/settings.json >/dev/null || { echo "MISSING chat-agent disable"; exit 1; }
 # v16: CLEAN-LAYOUT litmus — the golden image must open to an empty editor.
@@ -435,6 +469,11 @@ WBHTML=/usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.h
 grep -q '__hdAbSeed' "$WBHTML" || { echo "LAYOUT: activity-bar/trusted-domains seed missing from workbench.html"; exit 1; }
 grep -q 'adom.sidebarSeeded' "$WBHTML" || { echo "LAYOUT: sidebar collapse-once seed missing from workbench.html"; exit 1; }
 runuser -u adom -- /usr/lib/code-server/bin/code-server --list-extensions 2>/dev/null | grep -qi '^anthropic.claude-code' || { echo "MISSING claude-code extension"; exit 1; }
+# v25-fat: the Claude Code CLI is baked too (section 6a) — assert the binary AND that it runs.
+test -x /home/adom/.local/bin/claude || { echo "MISSING baked claude CLI"; exit 1; }
+CLAUDEV=$(runuser -u adom -- bash -lc "export PATH=\$HOME/.local/bin:\$PATH; claude --version 2>&1 | head -1")
+echo "baked claude CLI: ${CLAUDEV}"
+case "${CLAUDEV}" in *"Claude Code"*) : ;; *) echo "baked claude CLI does not answer --version (${CLAUDEV})"; exit 1;; esac
 # v18: updater daemon RETIRED — auto-update is adom/hook → `adom-wiki pkg update`
 ! test -e /usr/local/bin/adom-workspace-updater || { echo "RETIRED updater daemon present"; exit 1; }
 ! systemctl list-unit-files 2>/dev/null | grep -q adom-workspace-updater || { echo "RETIRED updater systemd units present"; exit 1; }
