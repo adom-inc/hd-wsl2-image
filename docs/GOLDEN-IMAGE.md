@@ -273,6 +273,50 @@ plain grep false-negatives on this binary in a UTF-8 locale. That fallback is wh
 adom-cli reach carbon from an env-less non-login shell; without it, it 404s. A registry
 regression to 0.5.11 fails the bake rather than shipping broken.
 
+## PATH, and the four shell shapes
+
+A human typing in a terminal never needs `export PATH`. Anything programmatic does. That
+split is measured, not assumed:
+
+| Shell shape | `~/.local/bin` on PATH | `claude`, `adom-wiki`, `adom-bridge`, `shotlog` |
+|---|---|---|
+| Login (`bash -lc`), a real terminal tab | yes, via `~/.profile` | found |
+| Interactive non-login (`bash -ic`) | yes, via `~/.bashrc` | found |
+| **Non-login non-interactive (`bash -c`)** | **no** | **not found** |
+| `adom-cli` (any shape) | n/a, it lives in `/usr/local/bin` | always found |
+
+`~/.bashrc` returns early for non-interactive shells (`case $- in *i*) ;; *) return;;`) and
+`~/.profile` is not read at all, so a plain `bash -c` gets only the PATH from
+`/etc/environment`, which does not include `~/.local/bin`. That is why ah's code and this
+bake carry an explicit `export PATH="$HOME/.local/bin:$PATH"` before every `claude` and
+`adom-wiki` call. It is load-bearing, not defensive habit.
+
+The blast radius is every non-interactive caller: cron jobs, systemd units, scripts, and
+agent tool calls that shell out. Any of them reaching for `claude` by bare name fails with
+"command not found" on a fresh image.
+
+### The four symlinks in ~/.local/bin
+
+```
+shotlog          -> /home/adom/.local/bin/adom-shotlog
+claude           -> /home/adom/.local/share/claude/versions/2.1.245
+adom-bridge      -> /home/adom/project/adom_modules/adom/adom-bridge/dist/linux/adom-bridge
+adom-bridge-cli  -> /home/adom/project/adom_modules/adom/adom-bridge/dist/linux/adom-bridge
+```
+
+The first two are the installers' own shapes. `claude` pointing at a versioned directory is
+how its self-update swings the pointer without touching PATH, so replacing it with a copy
+would break updates.
+
+The last two deserve attention: a binary on PATH pointing INTO the workspace root. The
+workspace is documented above as symlink-free, and this is a link crossing into it, which
+makes a PATH binary depend on the package tree staying exactly where it is. Clear
+`adom_modules` to force a reinstall and `adom-bridge` dies as a dangling link rather than
+reporting itself cleanly missing, and the relay unit's `ConditionPathExists` on that same
+path stops waking. The fix belongs in `adom/adom-bridge`'s install script: install the
+binary into `~/.local/bin` the way every other Adom CLI does, rather than linking to its
+package payload.
+
 ## The daemons
 
 Four systemd units are baked into `/etc/systemd/system/`:
@@ -286,10 +330,21 @@ Four systemd units are baked into `/etc/systemd/system/`:
 
 Two details that have bitten before, both now encoded in the units themselves.
 
-The relay's binary was renamed from `adom-desktop` to `adom-bridge`, so its ExecStart
-prefers `adom-bridge serve` and falls back to `adom-desktop serve`, with a dual
-`ConditionPathExists=|`. The fat era hid this class of bug because the old binary was
-always baked.
+The relay's binary was renamed from `adom-desktop` to `adom-bridge`, and the unit still
+carries a fallback to the retired name: a `bash -lc` ExecStart that runs
+`adom-bridge serve` or else `adom-desktop serve`, plus a dual `ConditionPathExists=|`.
+
+That fallback is wrong and is being removed. It is unreachable, because the only machine
+that could take it has the new unit and the old binary, and any image carrying the unit
+also carries `adom-bridge`. It converts a clean failure into a restart loop: when the real
+binary is missing, the `||` runs a command that does not exist, the unit fails, and
+`Restart=on-failure` retries forever instead of saying "not installed". The `|` makes it
+worse, since that is an OR, so a machine holding only the retired binary satisfies the
+condition and starts the stale one, reviving a name we retired instead of letting the
+updater converge it. And it drags a login shell into a service start purely to run a
+`command -v` the condition already answered. The honest unit is one ExecStart, one
+`ConditionPathExists`, no shell: a missing binary then leaves the unit inactive with
+"condition failed", which is the truth and is one line in `systemctl status`.
 
 `ConditionPathExists` is evaluated by systemd **at boot**. A binary that arrives later,
 through a migration or a package install, does not wake the unit on its own. Anything that
@@ -323,6 +378,44 @@ So services and CLIs read a stable, predictable path (`/run/adom/api-key`, also 
 carries the machinery but never a credential. The key arrives during setup, via ah's
 `inject-api-key` step, after you sign in with your Adom account. On a fresh image
 `/run/adom` exists and is empty, which is correct, not a fault.
+
+## What the agent is allowed to do
+
+The image ships a Claude Code configuration, and today it is thinner than anyone assumes.
+`~/.claude/settings.json` carries the update hook, the `opus[1m]` model default, and
+exactly one permission rule:
+
+```json
+"permissions": { "allow": ["Bash(adom-wiki:*)"] }
+```
+
+Everything else, every `adom-bridge` verb, every `gh`, every `python3`, falls through to
+auto mode's classifier on every call. No package in the tree writes `permissions` at all;
+that single rule is unowned and hand-seeded.
+
+The cost is visible in any long-lived workspace as a growing pile of hyper-specific one-off
+allow rules, because `Bash(...)` rules are prefix matches on the literal command string and
+our CLIs put flags before the verb (`adom-bridge --target X --ai-thread Y <verb>`). No
+prefix can express "allow these verbs, not those", so approvals accumulate one command at a
+time and never generalize.
+
+The right lever is `autoMode`, a top-level settings key whose `allow`, `soft_deny`,
+`hard_deny` and `environment` lists are natural language the classifier reads, and where
+`"$defaults"` inherits the built-in rules rather than discarding them. The entry that
+matters most is environment, because it supplies the fact the classifier cannot know: a
+command here usually drives a machine the user owns, through a bridge that runs its own
+approval gate, refusing any call without caller identity, demanding a per-call reason for
+gated verbs, and showing both in the user's Activity Log. There are two gates; only the
+container-side one is blind.
+
+That configuration belongs in `adom/hook`, which every Adom user already installs through
+`adom/core` and which already owns this file, so it converges to cloud and HD alike rather
+than living only in the image.
+
+One related editor setting: `claudeCode.initialPermissionMode` is `auto`, which is the
+right default, while `claudeCode.allowDangerouslySkipPermissions` is `false`, which is what
+removes Bypass permissions from the editor's Modes menu. Adom users are power users and the
+row should be there for the ones who want it, with Auto still the default.
 
 ## Everything else that is configured
 
