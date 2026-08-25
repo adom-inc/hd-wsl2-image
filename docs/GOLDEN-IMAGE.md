@@ -106,6 +106,50 @@ different places.
 No symlinks in the workspace. Symlinks cause loops in `find`, ripgrep, build tools and file
 watchers, and a link into `~/.local` drags the extension tree into the search index.
 
+## The activity bar
+
+The rail you see on the left is deliberately short. VS Code ships five default viewlets;
+the image hides three of them.
+
+| Icon | State | Why |
+|---|---|---|
+| Explorer | kept | you still browse files |
+| Search | **hidden** | you ask the agent, and its grep beats the UI's |
+| Source Control | **hidden** | the agent runs git in the terminal; the SCM viewlet is a GUI for a workflow it already owns |
+| Run and Debug | **hidden** | launch configurations are a pre-AI ritual; the agent runs the thing and reads the output |
+| Extensions | kept | you install and inspect extensions |
+| Adom | added | adom-vscode |
+| Claude | added | the Claude Code panel |
+
+The point is not tidiness. Three of VS Code's five defaults are UI for jobs the agent now
+does better from the terminal, and every icon left on that rail is a claim that clicking it
+is the best way to do something. Hiding them is the honest position.
+
+**How it is done.** Not through settings.json, because there is no setting for viewlet
+visibility. VS Code stores it in IndexedDB, so the seed is a script injected into
+code-server's `workbench.html` that opens the `vscode-web-state-db-global` database and
+writes `workbench.activity.pinnedViewlets2` with `workbench.view.search`,
+`workbench.view.scm` and `workbench.view.debug` marked `visible: false`. The same script
+sets `http.linkProtectionTrustedDomains` to `["*"]`, which is what suppresses the "do you
+want to open this external website?" dialog.
+
+**It is a default, not a policy.** The write is guarded by an `adom.activityBarSeeded` key
+and runs once per profile. Right-click the rail and turn Search back on and it stays on,
+forever. We are choosing the starting position, not taking the icons away.
+
+A sibling seed, `adom.sidebarSeeded`, collapses the primary sidebar once, so first load is
+the rail and the editor with no panel open. Two settings finish the shape:
+`workbench.activityBar.location: default` keeps the rail visible (an earlier era hid the
+whole bar, which was too far), and `workbench.activityBar.iconClickBehavior: toggle` makes
+clicking the active icon collapse the sidebar instead of doing nothing.
+
+**Three layers apply it**, because it silently failed once. The seed is baked into
+`workbench.html` in the image and the bake fails if the `__hdAbSeed` and
+`adom.sidebarSeeded` markers are missing. ah's `configure-vscode` step re-patches
+`workbench.html` if it finds the seed absent, backstopping a bake gap. And the `welcome`
+step re-asserts the hide after the workbench has actually loaded, where a failure is
+logged as cosmetic rather than fatal.
+
 ## adom-vscode
 
 The extension is under 1 MiB (`adom.adom-vscode-1.1.20`) and its CLI is 2.4 MiB at
@@ -235,6 +279,58 @@ carries the machinery but never a credential. The key arrives during setup, via 
   auth, no model pins, no shared telemetry id. All smoke-gated.
 - **The whole package tree is sudo-free.** The updater daemon was the only package that
   needed sudo and it is retired, so a `needs_sudo` package sneaking back in fails the bake.
+
+---
+
+## What the image does to setup
+
+Hydrogen's setup cascade is 20 steps. The golden image does not remove steps, it empties
+them. A step that used to do work becomes a step that verifies the work is already done,
+which is why setup stays honest: every gate still runs, it just passes instantly.
+
+| # | Step | On a full image |
+|---:|---|---|
+| 1 | `ensure-workspace` | **Unchanged.** Downloads the tarball, verifies its sha256, `wsl --import`s it, pins the default user to uid 1001, starts the distro. This is the step the image IS. |
+| 2 | `wait-codeserver` | **Baked.** The unit is in the image, so this is a boot wait, not an install. Also signature-checks that the listener really is code-server via `/healthz` rather than trusting an open port. |
+| 3 | `update-packages` | **Converges instead of installs.** The whole point of v25-full. Finds `adom_modules` present and runs `adom-wiki pkg update`, seconds. On a thin image this same step is the 5 to 9 minute full install. Still gates on the artifact: hydrogen-bootstrap's installed version must equal the registry's latest. |
+| 4 | `install-adom-vscode` | **Baked, verifies activation.** Installs nothing. Waits for your Adom sign-in, reloads the editor, and proves the :8821 control API answers. Every later editor action depends on it. |
+| 5 | `set-env-vars` | **Per machine.** Writes `ADOM_CARBON_URL`, `ADOM_HYDROGEN_URL`, `VSCODE_PROXY_URI`. Cannot be baked: they name this workspace's live proxy. |
+| 6 | `inject-api-key` | **Per user, never baked.** Writes your Adom session token to `~/.adom/api-key`, which tmpfiles then re-materializes at `/run/adom/api-key` on every boot. See the API key section above. |
+| 7 | `configure-vscode` | **Mostly baked.** settings.json and trusted domains ship in the image; what remains is the runtime layout hides (sidebars, bottom panel, the Search / Source Control / Run and Debug activity-bar icons). |
+| 8 | `ensure-adom-bridge-cli` | **Windows side.** Verifies the Adom Bridge companion app is running on the host. Nothing in the rootfs can satisfy this. |
+| 9 | `install-brand-fonts` | **Deliberately not baked.** Installs Satoshi, JetBrains Mono and Familjen Grotesk into Windows per-user through Bridge's `font_ensure_brand`. Satoshi cannot ship in a public tarball, and the Claude chat webview cannot use container-served webfonts anyway. A font that fails is a warning, not a failure. |
+| 10 | `start-relay` | **Baked unit, started here.** `adom-relay.service` is in the image; this starts it and confirms 8765/8766. |
+| 11 | `test-direct-connect` | **Per machine.** Proves the fast container to desktop path works. |
+| 12 | `test-relay` | **Per machine.** Registers the relay with Bridge for file streaming. |
+| 13 | `test-adom-cli` | **Per machine gate.** Checks three route classes: carbon (api-key plus proxy to cloud), hydrogen-proxy reachability, and the AI-shell env that non-login agent shells inherit. That third channel was silently broken once, letting agent `adom-cli` calls escape to the real cloud, which is why it is gated separately. |
+| 14 | `install-claude-cli` | **Baked as of v25-full.** Now an instant no-op that only acts if the binary is missing. See the Claude Code section for the v15-era belief this corrected. |
+| 15 | `claude-auth` | **The one human moment.** Restores saved credentials if still valid, otherwise drives the in-editor sign-in and waits for you to click Authorize. Credentials can never be baked. |
+| 16 | `ensure-sse` | **Per session gate.** The editor's live link to ah must be connected or the Welcome page's webview-open silently 409s. |
+| 17 | `verify-workspace` | **Per session gate.** SSE connected is not enough: the frontend must push its rendered layout into the proxy's workspace state, or every panelId lookup 404s. |
+| 18 | `welcome` | **Per user.** Opens Claude Code and sends the first prompt. |
+| 19 | `verify-setup` | **Independent end-to-end gate.** Re-checks every artifact and trusts no prior step's self-report: the distro execs as the pinned image, code-server serves, :8821 answers, adom-cli authenticates, the Claude CLI runs, Claude is authenticated and its panel is at the chat box, the layout is synced. This is what makes a false "setup complete" impossible. |
+| 20 | `open-welcome` | **The final hard gate.** Opens the "your workspace is ready" page, but only after 19 passed, so "ready" is never premature. |
+
+Read down the right column and the shape of the image falls out. **Nine of the twenty steps
+cannot be baked no matter how full the image gets**, because they are per-machine, per-user,
+or per-session: your API key, your Claude credentials, your fonts on Windows, the URLs of
+your live proxy, the relay handshake with your desktop, and the session gates that prove
+the editor is actually talking to ah. A golden image is by definition the part of a
+workspace that is identical for everyone. Everything that makes it YOUR workspace arrives
+in these steps.
+
+What v25-full actually bought is steps 3 and 14: the seven minute toolchain install becomes
+a seconds-long converge, and the Claude CLI install disappears.
+
+### Two step descriptions were stale
+
+Both were user-visible text in the setup panel and both are now corrected:
+
+- `update-packages` was labelled "Install Adom toolchain (first run: several minutes)",
+  which would be a lie on a full image where it takes seconds. Now "Converge Adom
+  toolchain", and the description explains both cases and how the step tells them apart.
+- `install-claude-cli` claimed golden images "no longer bake the CLI (its self-setup needs
+  a live user session)". False, and now the reason the CLI IS baked.
 
 ---
 
