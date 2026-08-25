@@ -515,13 +515,18 @@ case "${CLAUDEV}" in *"Claude Code"*) : ;; *) echo "baked claude CLI does not an
 test -x /home/adom/.local/bin/adom-bridge || test -x /home/adom/.local/bin/adom-desktop \
     || { echo "MISSING adom-bridge CLI (nor the legacy adom-desktop)"; exit 1; }
 # v25-full: PATH must reach a NON-LOGIN NON-INTERACTIVE shell, the shape a cron job, a
-# systemd unit, a script, or an agent tool call actually gets. Assert the shape that was
-# broken, not the two that always worked.
-for b in claude adom-wiki adom-bridge; do
-    runuser -u adom -- bash -c "command -v ${b} >/dev/null" \
-        || { echo "PATH: '${b}' is not resolvable from a non-login non-interactive shell"; exit 1; }
-done
-echo "PATH: claude + adom-wiki + adom-bridge resolve in a bare 'bash -c' ✓"
+# systemd unit, a script, or an agent tool call actually gets.
+#
+# Assert the CONFIG here, not the behaviour. The first version of this gate ran
+# `runuser -u adom -- bash -c 'command -v adom-wiki'` and failed the bake, but runuser
+# inherits the CALLER's environment instead of re-reading /etc/environment, so it was
+# testing the bake's own root shell rather than the shape we care about. The shape that
+# matters is `wsl -d <distro> -u adom -- bash -c`, which only exists once the image is
+# imported on a host, so its BEHAVIOUR is verified in the post-import test (see the
+# golden-image-test skill: assert config at bake time, rendered behaviour separately).
+grep -q '^PATH="/home/adom/.local/bin:' /etc/environment \
+    || { echo "PATH: /etc/environment does not lead with /home/adom/.local/bin"; exit 1; }
+echo "PATH: /etc/environment leads with ~/.local/bin ✓ (behaviour verified post-import)"
 # v25-full: the agent's permission posture ships WITH the image (hydrogen-bootstrap 0.4.1+),
 # so a fresh workspace does not meet the auto-mode classifier blind.
 runuser -u adom -- python3 -c "
