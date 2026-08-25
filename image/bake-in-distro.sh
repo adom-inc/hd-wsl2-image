@@ -209,12 +209,49 @@ if [ "$GOLDEN_PROFILE" != "thin" ]; then
 # self-updates thereafter, and ah's install-claude-cli step is already idempotent
 # — it detects the baked binary and skips, so a fat image simply makes that step
 # instant instead of a ~30s network install.
-log "Claude Code CLI (headless install, unpinned)"
-runuser -u adom -- bash -lc \
-    "curl -fsSL --connect-timeout 20 https://claude.ai/install.sh -o /tmp/claude-install.sh && bash /tmp/claude-install.sh"
-rm -f /tmp/claude-install.sh
-runuser -u adom -- bash -lc "export PATH=\$HOME/.local/bin:\$PATH; claude --version" \
-    || { echo "BAKED CLAUDE CLI is not runnable"; exit 1; }
+# DEDUP (John 2026-08-25): do NOT install the CLI separately. The anthropic.claude-code
+# extension already ships it, and not merely something like it: the extension's
+# resources/native-binary/claude and the standalone CLI are BYTE-IDENTICAL, 391,948,592
+# bytes with the same sha256. Installing both put 374 MiB of the same file in the image
+# twice, about 38% of the rootfs between them, and ran two independent updaters for one
+# binary so the panel and the terminal could drift to different versions.
+#
+# Measured before adopting this, because the risk is that the binary re-materializes its
+# own copy and undoes the saving:
+#   claude --version / --help / -p    -> 1 MB, nothing written. SAFE.
+#   claude update                     -> writes ~/.local/share/claude/versions/<v> (374 MB)
+#                                        and replaces ~/.local/bin/claude with its own
+#                                        symlink. DISABLE_AUTOUPDATER=1 does not stop it,
+#                                        nor does autoUpdates:false in ~/.claude.json.
+# So normal use never duplicates, and an explicit `claude update` degrades to exactly the
+# old two-copy layout rather than breaking. The image is a cache; that is an acceptable
+# way to lose a saving.
+#
+# A WRAPPER, NOT A LINK. The extension directory is version-stamped
+# (anthropic.claude-code-<ver>-linux-x64) and VS Code removes the old one when it updates,
+# so any symlink into it dangles at the first extension update. Resolving the newest
+# directory at exec time survives that, and it also makes the extension the single source
+# of the version, which is what removes the panel/terminal skew.
+log "Claude Code CLI (wrapper onto the extension's bundled binary, no second copy)"
+install -d -m 0755 /home/adom/.local/bin
+cat > /home/adom/.local/bin/claude <<'CLAUDEW'
+#!/bin/sh
+# Adom golden image: `claude` is the binary the Claude Code VS Code extension already
+# ships. Resolved fresh on every run so an extension update cannot leave this dangling.
+# If you run `claude update`, the CLI installs its own standalone copy and replaces this
+# file; that is supported, it just costs ~374 MB of disk.
+b=$(ls -d "$HOME"/.local/share/code-server/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | sort -V | tail -1)
+if [ -z "$b" ]; then
+  echo "claude: no anthropic.claude-code extension found under ~/.local/share/code-server/extensions" >&2
+  echo "        reinstall it, or run: curl -fsSL https://claude.ai/install.sh | bash" >&2
+  exit 127
+fi
+exec "$b" "$@"
+CLAUDEW
+chmod 0755 /home/adom/.local/bin/claude
+chown adom:adom /home/adom/.local/bin/claude
+runuser -u adom -- bash -lc "claude --version" \
+    || { echo "CLAUDE WRAPPER is not runnable"; exit 1; }
 fi  # GOLDEN_PROFILE != thin (section 6a claude CLI)
 
 # ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
@@ -501,8 +538,15 @@ WBHTML=/usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.h
 grep -q '__hdAbSeed' "$WBHTML" || { echo "LAYOUT: activity-bar/trusted-domains seed missing from workbench.html"; exit 1; }
 grep -q 'adom.sidebarSeeded' "$WBHTML" || { echo "LAYOUT: sidebar collapse-once seed missing from workbench.html"; exit 1; }
 runuser -u adom -- /usr/lib/code-server/bin/code-server --list-extensions 2>/dev/null | grep -qi '^anthropic.claude-code' || { echo "MISSING claude-code extension"; exit 1; }
-# v25-full: the Claude Code CLI is baked too (section 6a) — assert the binary AND that it runs.
-test -x /home/adom/.local/bin/claude || { echo "MISSING baked claude CLI"; exit 1; }
+# v25-full: `claude` is a WRAPPER onto the extension's bundled binary (section 6a), not a
+# second 374 MiB copy. Assert all three properties, because each has its own failure mode:
+# the wrapper exists and runs, it is a regular file (a symlink here means something
+# re-installed the standalone CLI over it), and the standalone tree is genuinely absent.
+test -x /home/adom/.local/bin/claude || { echo "MISSING claude wrapper"; exit 1; }
+test -f /home/adom/.local/bin/claude && ! test -L /home/adom/.local/bin/claude \
+    || { echo "DEDUP: ~/.local/bin/claude is a symlink, so the standalone CLI was installed over the wrapper"; exit 1; }
+! test -d /home/adom/.local/share/claude/versions \
+    || { echo "DEDUP: ~/.local/share/claude/versions exists, the image is carrying Claude Code twice"; exit 1; }
 CLAUDEV=$(runuser -u adom -- bash -lc "export PATH=\$HOME/.local/bin:\$PATH; claude --version 2>&1 | head -1")
 echo "baked claude CLI: ${CLAUDEV}"
 case "${CLAUDEV}" in *"Claude Code"*) : ;; *) echo "baked claude CLI does not answer --version (${CLAUDEV})"; exit 1;; esac
