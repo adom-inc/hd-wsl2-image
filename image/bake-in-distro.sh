@@ -24,12 +24,23 @@ set -euo pipefail
 trap 'echo "[bake-in-distro] FAILED at line ${LINENO} (exit $?)" >&2' ERR
 VER="${GOLDEN_VERSION:-v23}"
 # GOLDEN_PROFILE selects what gets baked:
-#   fat  (default) — today's full bake, byte-for-byte the same behavior as before.
+#   full (default) — everything baked: the whole bootstrap tree (~197 skills, 22
+#                    packages, the 8 Adom CLIs), all three editor extensions, the
+#                    Claude Code CLI, and the editor config. Setup then only has to
+#                    CONVERGE (`adom-wiki pkg update`), which is seconds on a fresh
+#                    image, so the ~7-minute live install disappears from first run.
 #   thin           — OS baseline + code-server + adom-wiki CLI ONLY. NO Adom packages/
 #                    skills/extensions are baked; the setup cascade installs everything
 #                    later via `adom-wiki pkg install adom/hydrogen-windows-bootstrap`.
 #                    ("Simple golden image; setup steps configure everything.")
-GOLDEN_PROFILE="${GOLDEN_PROFILE:-fat}"
+#
+# NAMING (John 2026-08-25): the profile is "full", not "fat". `fat` is accepted as a
+# legacy alias so an old script or a stale skill can't silently bake something else,
+# and it normalizes to full below.
+GOLDEN_PROFILE="${GOLDEN_PROFILE:-full}"
+# `if`, NOT `[ ... ] && ...` — under `set -e` a false one-liner test is the script's
+# last command status and kills the bake before it starts.
+if [ "$GOLDEN_PROFILE" = "fat" ]; then GOLDEN_PROFILE="full"; fi
 CSV="${CODE_SERVER_VERSION:-4.124.2}"
 CTX="${CTX:-/tmp/ctx}"
 export DEBIAN_FRONTEND=noninteractive
@@ -116,6 +127,20 @@ done; true
 
 # ── 3. WSL config + per-boot host alias + non-fatal bootstrap updater ─────────
 log "configs"
+# PATH: put ~/.local/bin where EVERY shell shape can see it (John 2026-08-25).
+# Measured on v25-full before this: a login shell (bash -lc, a real terminal tab) and an
+# interactive shell both resolve claude / adom-wiki / adom-bridge, because ~/.profile and
+# ~/.bashrc each prepend ~/.local/bin. A NON-LOGIN NON-INTERACTIVE shell (plain `bash -c`,
+# which is what a cron job, a systemd unit, a script, or an agent tool call gets) resolved
+# NONE of them: ~/.bashrc returns early for non-interactive shells and ~/.profile is never
+# read, so all that survived was /etc/environment, which did not list it. That is why ah's
+# code carries an explicit `export PATH="$HOME/.local/bin:$PATH"` before every claude and
+# adom-wiki call; it is load-bearing, not defensive habit.
+#
+# /etc/environment is the one place all four shapes read. The literal path is safe here
+# precisely because this image has exactly one user at a locked uid and the folder contract
+# is fixed; the file is not a shell script, so $HOME would not expand anyway.
+printf '%s\n' 'PATH="/home/adom/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games"' > /etc/environment
 install -m 0644 "${CTX}/wsl.conf" /etc/wsl.conf
 install -m 0755 "${CTX}/init-host-internal.sh" /etc/init-host-internal.sh
 install -D -m 0755 "${CTX}/bootstrap.sh" /opt/adom/bootstrap.sh
@@ -168,7 +193,7 @@ runuser -u adom -- bash -lc \
 fi  # GOLDEN_PROFILE != thin (section 6 bootstrap install)
 
 if [ "$GOLDEN_PROFILE" != "thin" ]; then
-# ── 6a. THE CLAUDE CODE CLI — baked (v25-fat, John 2026-08-24) ────────────────
+# ── 6a. THE CLAUDE CODE CLI — baked (v25-full, John 2026-08-24) ────────────────
 # "install the full sized golden image that has everything baked into it already
 # including claude code vscode extension, the claude cli". The extension already
 # rides the bootstrap install; the CLI did not, because ah's install-claude-cli
@@ -259,13 +284,18 @@ WantedBy=multi-user.target
 UNIT
 cat > /etc/systemd/system/adom-relay.service <<'UNIT'
 [Unit]
-Description=Adom Desktop relay (adom-desktop serve) - the bridge AD/HD connect back to
+Description=Adom Bridge relay (adom-bridge serve) - the bridge AD/HD connect back to
 After=network-online.target
 Wants=network-online.target
-# THIN image: adom-desktop is installed by the setup cascade, not baked — until the
-# binary exists, skip quietly instead of burning the start-limit budget before setup.
-ConditionPathExists=|/home/adom/.local/bin/adom-bridge
-ConditionPathExists=|/home/adom/.local/bin/adom-desktop
+# One condition, on the CURRENT binary name. The retired adom-desktop fallback that used
+# to sit here was removed (John 2026-08-25): it was unreachable (the only machine that
+# could take it has the new unit and the old binary, and any image carrying this unit
+# also carries adom-bridge), the `|` made it an OR so a machine holding only the retired
+# name would start the stale one instead of converging, and it turned a clean failure
+# into a restart loop because the fallback command does not exist. With one condition, a
+# missing binary leaves the unit inactive with "condition failed", which is the truth and
+# is one line in systemctl status.
+ConditionPathExists=/home/adom/.local/bin/adom-bridge
 # 900s window / 4 attempts: the field report (hd-wsl2-image#1) measured a unit
 # restart-looping every ~2 min for 15h (NRestarts=435) — a 60s window never trips
 # when the failure cycle is slower than window/burst. 4 failures inside 15 min
@@ -278,7 +308,9 @@ Type=exec
 User=adom
 Environment=HOME=/home/adom
 WorkingDirectory=/home/adom
-ExecStart=/bin/bash -lc 'command -v adom-bridge >/dev/null && exec adom-bridge serve || exec adom-desktop serve'
+# No shell: the condition above already proved the binary is there, and a login shell in a
+# service start bought nothing but a `command -v` we did not need.
+ExecStart=/home/adom/.local/bin/adom-bridge serve
 # on-failure, NOT always: these services deliberately exit 0 when they detect a peer
 # already holding their port (a second workspace on the same host sees the production
 # instance through WSL2 mirrored networking and defers). Restart=always turned that clean
@@ -413,9 +445,9 @@ id adom | grep -q uid=1001
 test -x /home/adom/.local/bin/adom-wiki || { echo "MISSING adom-wiki CLI"; exit 1; }
 runuser -u adom -- /home/adom/.local/bin/adom-wiki --version >/dev/null || { echo "adom-wiki --version failed"; exit 1; }
 ! test -e /home/adom/.local/bin/adompkg || { echo "STALE adompkg still present"; exit 1; }
-if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked module tree
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: baked module tree
 # module tree: updater is RETIRED — assert present set AND absent set
-# v25-fat: the module names the registry ACTUALLY publishes today. The fat profile had
+# v25-full: the module names the registry ACTUALLY publishes today. The fat profile had
 # not been baked since 2026-07-27 (v23), so this list still named two retired slugs and
 # failed the v25 bake at the gate: adom/hd-bootstrap (renamed adom/hydrogen-bootstrap —
 # the very rename the thin flip was a reaction to) and adom/adom-desktop (renamed
@@ -429,24 +461,24 @@ for p in adom-workspace-updater hd-skillpack hd-bootstrap adom-desktop; do
 done
 # whole tree sudo-free (updater was the only needs_sudo package)
 ! grep -rl '"needs_sudo": *true' /home/adom/project/adom_modules/*/*/package.json 2>/dev/null | grep -q . || { echo "SUDO package in tree"; exit 1; }
-fi  # FAT-ONLY module tree
+fi  # FULL-ONLY module tree
 # no private-infra phone-home: no gallia checkout, no check-updates.sh hook
 ! test -e /home/adom/gallia || { echo "GALLIA checkout present"; exit 1; }
 ! find /home/adom/.claude -name "check-updates.sh" 2>/dev/null | grep -q . || { echo "PRIVATE check-updates.sh hook present"; exit 1; }
-if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked skills
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: baked skills
 test -f /home/adom/.claude/skills/adom/SKILL.md || { echo "MISSING adom skills hub"; exit 1; }
 # v20: the `definitions` skill must ship — adom/core used to NOT depend on it (fixed:
 # core@4.13.4 declares adom/definitions), but assert it so a future core that drops
 # the dep FAILS the bake instead of silently shipping an image without definitions.
 test -f /home/adom/.claude/skills/definitions/SKILL.md || { echo "MISSING definitions skill (adom/core must depend on adom/definitions)"; exit 1; }
-fi  # FAT-ONLY skills
+fi  # FULL-ONLY skills
 # v20: python parity libs must import (installed via apt, not pip — no PEP-668 dance)
 for m in requests yaml bs4 lxml PIL; do
     python3 -c "import ${m}" 2>/dev/null || { echo "PYTHON: 'import ${m}' failed — parity lib missing from the apt baseline"; exit 1; }
 done
 echo "python parity libs: requests+yaml+bs4+lxml+PIL all import ✓"
-if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: baked content (skills, settings seeds, extensions, CLIs)
-# v25-fat: count the WHOLE deployed skill tree, not the `hd-*` prefix. The hd-* -> hydrogen-*
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: baked content (skills, settings seeds, extensions, CLIs)
+# v25-full: count the WHOLE deployed skill tree, not the `hd-*` prefix. The hd-* -> hydrogen-*
 # rename is mid-flight in the registry (v25 ships 33 hd-* beside 64 hydrogen-*), so a
 # prefix count is a measure of the rename's progress, not of whether the image got its
 # skills. The number that matters to a user is how many skills their agent can load.
@@ -469,7 +501,7 @@ WBHTML=/usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.h
 grep -q '__hdAbSeed' "$WBHTML" || { echo "LAYOUT: activity-bar/trusted-domains seed missing from workbench.html"; exit 1; }
 grep -q 'adom.sidebarSeeded' "$WBHTML" || { echo "LAYOUT: sidebar collapse-once seed missing from workbench.html"; exit 1; }
 runuser -u adom -- /usr/lib/code-server/bin/code-server --list-extensions 2>/dev/null | grep -qi '^anthropic.claude-code' || { echo "MISSING claude-code extension"; exit 1; }
-# v25-fat: the Claude Code CLI is baked too (section 6a) — assert the binary AND that it runs.
+# v25-full: the Claude Code CLI is baked too (section 6a) — assert the binary AND that it runs.
 test -x /home/adom/.local/bin/claude || { echo "MISSING baked claude CLI"; exit 1; }
 CLAUDEV=$(runuser -u adom -- bash -lc "export PATH=\$HOME/.local/bin:\$PATH; claude --version 2>&1 | head -1")
 echo "baked claude CLI: ${CLAUDEV}"
@@ -477,7 +509,39 @@ case "${CLAUDEV}" in *"Claude Code"*) : ;; *) echo "baked claude CLI does not an
 # v18: updater daemon RETIRED — auto-update is adom/hook → `adom-wiki pkg update`
 ! test -e /usr/local/bin/adom-workspace-updater || { echo "RETIRED updater daemon present"; exit 1; }
 ! systemctl list-unit-files 2>/dev/null | grep -q adom-workspace-updater || { echo "RETIRED updater systemd units present"; exit 1; }
-test -x /home/adom/.local/bin/adom-desktop || { echo "MISSING adom-desktop CLI"; exit 1; }
+# v25-full: the bridge CLI was renamed adom-desktop -> adom-bridge. Accept the current
+# name, keep the legacy one as a fallback so an older tree still passes, and fail if
+# NEITHER is present.
+test -x /home/adom/.local/bin/adom-bridge || test -x /home/adom/.local/bin/adom-desktop \
+    || { echo "MISSING adom-bridge CLI (nor the legacy adom-desktop)"; exit 1; }
+# v25-full: PATH must reach a NON-LOGIN NON-INTERACTIVE shell, the shape a cron job, a
+# systemd unit, a script, or an agent tool call actually gets. Assert the shape that was
+# broken, not the two that always worked.
+for b in claude adom-wiki adom-bridge; do
+    runuser -u adom -- bash -c "command -v ${b} >/dev/null" \
+        || { echo "PATH: '${b}' is not resolvable from a non-login non-interactive shell"; exit 1; }
+done
+echo "PATH: claude + adom-wiki + adom-bridge resolve in a bare 'bash -c' ✓"
+# v25-full: the agent's permission posture ships WITH the image (hydrogen-bootstrap 0.4.1+),
+# so a fresh workspace does not meet the auto-mode classifier blind.
+runuser -u adom -- python3 -c "
+import json
+d = json.load(open('/home/adom/.claude/settings.json'))
+am = d.get('autoMode') or {}
+allow = am.get('allow') or []
+assert allow, 'autoMode.allow missing'
+assert allow[0] == '\$defaults', 'autoMode.allow must inherit \$defaults first'
+assert any('adom-bridge' in x for x in allow), 'autoMode.allow does not mention adom-bridge'
+assert any('golden-build' in x for x in allow + (am.get('soft_deny') or [])), 'throwaway-distro rule missing'
+assert (d.get('_adom_managed') or {}).get('autoMode'), 'managed marker missing'
+" || { echo "PERMISSIONS: autoMode posture not seeded into ~/.claude/settings.json"; exit 1; }
+echo "auto-mode classifier posture seeded ✓"
+# v25-full: Bypass permissions must be SELECTABLE in the editor's Modes menu, with Auto
+# still the default. John: Adom users are power users and that choice is theirs to make.
+jq -e '."claudeCode.allowDangerouslySkipPermissions" == true' /home/adom/.local/share/code-server/User/settings.json >/dev/null \
+    || { echo "MODES: Bypass permissions is hidden (claudeCode.allowDangerouslySkipPermissions != true)"; exit 1; }
+jq -e '."claudeCode.initialPermissionMode" == "auto"' /home/adom/.local/share/code-server/User/settings.json >/dev/null \
+    || { echo "MODES: initialPermissionMode is not auto"; exit 1; }
 # ── adom-cli LITMUS: must carry the HD-local proxy fallback (≥0.5.12) ──────────
 # (1) version >= 0.5.12, (2) the fallback is really compiled into the binary.
 # As of v20 this validates the REGISTRY binary (adom/adom-cli@4.0.5 ships 0.5.12);
@@ -492,7 +556,7 @@ printf '%s\n%s\n' "0.5.12" "$ACLI_V" | sort -V -C || { echo "ADOM-CLI: ${ACLI_V}
 # though the literal is present (verified 2026-07-19: grep -a / strings both match).
 LC_ALL=C grep -qa 'hd-proxy-url' /usr/local/bin/adom-cli || { echo "ADOM-CLI: 'hd-proxy-url' string ABSENT from the binary — the base-url fallback is not compiled in"; exit 1; }
 echo "adom-cli: >=0.5.12 + hd-proxy-url fallback present ✓"
-fi  # FAT-ONLY baked content
+fi  # FULL-ONLY baked content
 test -x /usr/lib/systemd/systemd && test -e /sbin/init || { echo "MISSING systemd"; exit 1; }
 test -e /var/lib/systemd/linger/adom || { echo "MISSING adom linger"; exit 1; }
 # v21: the container manages its own services — units present AND enabled, cron alive.
@@ -502,12 +566,12 @@ for u in code-server adom-relay adom-shotlog; do
 done
 dpkg -l cron 2>/dev/null | grep -q '^ii' || { echo "MISSING cron package"; exit 1; }
 test -x /usr/bin/crontab || { echo "MISSING crontab"; exit 1; }
-if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: shotlog is delivered by the bootstrap install
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: shotlog is delivered by the bootstrap install
 # adom-shotlog: registry-tracked (hydrogen-windows-bootstrap>=0.2.9 dependency), binary + alias.
 test -d /home/adom/project/adom_modules/adom/adom-shotlog || { echo "MISSING module adom/adom-shotlog (bootstrap dep not resolved?)"; exit 1; }
 test -x /home/adom/.local/bin/adom-shotlog || { echo "MISSING adom-shotlog binary"; exit 1; }
 test -e /home/adom/.local/bin/shotlog || { echo "MISSING shotlog alias"; exit 1; }
-fi  # FAT-ONLY shotlog
+fi  # FULL-ONLY shotlog
 test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak: $(find /home/adom ! -user adom -print -quit)"; exit 1; }
 # v15: confirm the build toolchain really is gone (it was dead weight in v1..v14)
 ! dpkg -l gcc-13 g++-13 cmake build-essential 2>/dev/null | grep -q '^ii' || { echo "TOOLCHAIN still present"; exit 1; }
@@ -516,7 +580,7 @@ test -z "$(find /home/adom ! -user adom -print -quit)" || { echo "OWNERSHIP leak
 # Match font BINARIES only. `-iname 'Satoshi*'` also matched the package's docs dir
 # fonts/satoshi/ (a README pointing at Fontshare, zero font bytes) = false positive.
 ! find /home/adom -type f \( -iname 'Satoshi*.woff2' -o -iname 'Satoshi*.woff' -o -iname 'Satoshi*.otf' -o -iname 'Satoshi*.ttf' \) 2>/dev/null | grep -q . || { echo "LICENSE VIOLATION: Satoshi font binaries in the image (public tarball) — bake with ADOM_THEME_SKIP_SATOSHI=1"; exit 1; }
-if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: theme pack ships via the bake-time installs
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: theme pack ships via the bake-time installs
 # theme pack actually landed (its install.sh SILENTLY skips if the extensions dir is missing)
 ls -d /home/adom/.local/share/code-server/extensions/adom.adom-theme-* >/dev/null 2>&1 || { echo "MISSING Adom theme pack (install ran before code-server extensions dir existed?)"; exit 1; }
 # the pre-2026-08-02 id must be GONE, or the picker doubles every theme
@@ -531,7 +595,7 @@ jq -e '[.[] | select(.identifier.id == "adom.adom-theme")] | length == 1' \
 jq -e '."workbench.colorTheme" == "Adom Studio"' /home/adom/.local/share/code-server/User/settings.json >/dev/null || { echo "THEME: default colorTheme is not 'Adom Studio'"; exit 1; }
 # OFL compliance: the license text must travel beside the fonts we DO ship
 test -e /home/adom/.local/share/fonts/adom-theme/JetBrainsMono-OFL.txt || { echo "OFL: JetBrains Mono license text missing beside the fonts"; exit 1; }
-fi  # FAT-ONLY theme pack
+fi  # FULL-ONLY theme pack
 # standard folder contract (seeded, adom-owned)
 for d in project project/downloads project/screenshots; do
     test -d "/home/adom/${d}" || { echo "MISSING seeded folder ~/${d}"; exit 1; }
@@ -542,14 +606,14 @@ done
 test "$(basename "$(readlink -f /etc/systemd/system/default.target)")" = "multi-user.target" || { echo "default.target is not multi-user (got $(readlink -f /etc/systemd/system/default.target))"; exit 1; }
 [ "$GOLDEN_PROFILE" = "thin" ] || echo "v21: theme pack + Adom Studio + OFL ok, no Satoshi, folder contract seeded ✓"
 # ── v22 GATES (theme standard v2 + hd-wsl2-image#1 unit fixes) ────────────────
-if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: theme standard v2 gates
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: theme standard v2 gates
 PACK_DIR="$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-theme-* | head -1)"
 # exactly five themes contributed
 test "$(jq '.contributes.themes | length' "$PACK_DIR/package.json")" = "5" || { echo "THEME: pack does not contribute exactly five themes"; exit 1; }
 # the NEW Adom Studio (Dark-2026-derived): #1f2125 is the 2026 chrome value and does not
 # exist in the old template projection — its presence proves gen-adom-studio-v2 output.
 grep -q '#1f2125' "$PACK_DIR/themes/adom-studio-color-theme.json" || { echo "THEME: adom-studio-color-theme.json lacks #1f2125 — this is the OLD Studio, need adom-theme >= 2.0.0"; exit 1; }
-fi  # FAT-ONLY theme standard v2
+fi  # FULL-ONLY theme standard v2
 # unit opens W, not $HOME (field report item 2)
 grep -q 'ExecStart=.*code-server.*/home/adom/project$' /etc/systemd/system/code-server.service || { echo "UNIT: code-server ExecStart does not open /home/adom/project"; exit 1; }
 # parking directives present in every unit (field report item 1)
@@ -572,7 +636,7 @@ fi
 # adom-vscode < 1.0.17 bundled its own contributes.themes, which puts DUPLICATE
 # "Adom Studio" entries in the picker beside the real adom-themes pack (hit live
 # 2026-07-27). 1.0.16+ also serves POST /exec on :8821 (the HD dock launch path).
-if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FAT-ONLY: adom-vscode ships via the bootstrap install
+if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: adom-vscode ships via the bootstrap install
 AVX_DIR="$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-vscode-* | sort -V | tail -1)"
 AVX_VER="$(jq -r .version "$AVX_DIR/package.json")"
 printf '%s\n%s\n' "1.0.17" "$AVX_VER" | sort -V -C || { echo "ADOM-VSCODE too old: $AVX_VER < 1.0.17 (need adom/adom-vscode >= 4.0.11)"; exit 1; }
@@ -580,7 +644,7 @@ test "$(jq '.contributes.themes | length' "$AVX_DIR/package.json" 2>/dev/null ||
 # only ONE adom-vscode extension dir may ship (two = duplicate everything)
 test "$(ls -d /home/adom/.local/share/code-server/extensions/adom.adom-vscode-* | wc -l)" = "1" || { echo "MULTIPLE adom-vscode extension dirs baked"; exit 1; }
 echo "v23: adom-vscode $AVX_VER (>=1.0.17, no bundled themes) ✓"
-fi  # FAT-ONLY adom-vscode
+fi  # FULL-ONLY adom-vscode
 # ── THIN-ONLY GATES: the thin image must ship ZERO Adom content ───────────────
 # Everything below is delivered later by the setup cascade running
 # `adom-wiki pkg install adom/hydrogen-windows-bootstrap`; if any of it is present

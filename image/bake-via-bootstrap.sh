@@ -46,7 +46,7 @@ chown -R adom:adom /home/adom
 log "installing adom/hydrogen-windows-bootstrap (resolves the full layered tree, sudo-free)"
 as_adom "/home/adom/.local/bin/adom-wiki pkg install adom/hydrogen-windows-bootstrap"
 
-# v25-fat: bake the Claude Code CLI too (John 2026-08-24). Headless-safe — verified on
+# v25-full: bake the Claude Code CLI too (John 2026-08-24). Headless-safe — verified on
 # the v25 build distro: install.sh writes ~/.local/bin/claude with nobody signed in.
 # Kept in lockstep with bake-in-distro.sh section 6a.
 log "installing the Claude Code CLI (headless, unpinned)"
@@ -59,7 +59,7 @@ rm -f /tmp/claude-install.sh
 
 # ── hard gates — the bake must FAIL loudly if the tree didn't fully land ─────
 log "verifying the bootstrap tree installed"
-# v25-fat: current registry names (hd-bootstrap -> hydrogen-bootstrap, adom-desktop ->
+# v25-full: current registry names (hd-bootstrap -> hydrogen-bootstrap, adom-desktop ->
 # adom-bridge). Both retired slugs are asserted absent so a resurrection fails the bake.
 for p in core hydrogen-bootstrap hydrogen-windows-bootstrap adom-bridge adom-wiki-cli hook; do
   as_adom "test -d ~/project/adom_modules/adom/${p}" \
@@ -71,7 +71,7 @@ for p in adom-workspace-updater hd-skillpack hd-bootstrap adom-desktop; do
 done
 # the adom skills hub (from core) + the HD runtime skills must be deployed
 as_adom 'test -f ~/.claude/skills/adom/SKILL.md' || { echo "adom skills hub not deployed" >&2; exit 1; }
-# v25-fat: count the whole tree — the hd-* -> hydrogen-* rename is mid-flight, so a
+# v25-full: count the whole tree — the hd-* -> hydrogen-* rename is mid-flight, so a
 # prefix count measures the rename, not the install.
 SKILLS="$(as_adom 'ls -d ~/.claude/skills/*/ 2>/dev/null | wc -l')"
 log "skills deployed: ${SKILLS}"
@@ -80,7 +80,7 @@ log "skills deployed: ${SKILLS}"
 for s in hydrogen-webview hydrogen-pup hydrogen-golden-image hydrogen-staying-current hd-golden-image; do
   as_adom "test -f ~/.claude/skills/${s}/SKILL.md" || { echo "MISSING skill: ${s}" >&2; exit 1; }
 done
-# v25-fat: the Claude Code CLI is baked (headless install, verified 2026-08-25)
+# v25-full: the Claude Code CLI is baked (headless install, verified 2026-08-25)
 as_adom 'test -x ~/.local/bin/claude' || { echo "MISSING baked claude CLI" >&2; exit 1; }
 as_adom 'export PATH=$HOME/.local/bin:$PATH; claude --version' || { echo "baked claude CLI not runnable" >&2; exit 1; }
 # generic editor config the hd-bootstrap postinstall writes
