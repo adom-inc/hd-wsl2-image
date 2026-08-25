@@ -69,12 +69,46 @@ and `claude doctor` reports `Running: native (2.1.245)` with its Path inside the
 It links only against libc, librt and libpthread. The extension has been shipping a
 complete, usable CLI all along; it was simply never on PATH.
 
-The catch is that the extension's directory is version-stamped
-(`anthropic.claude-code-2.1.245-linux-x64`), so PATH cannot point at it directly. A tiny
-wrapper in `~/.local/bin/claude` that resolves the newest extension directory and execs the
-binary solves that without a symlink. Before adopting it, check what the bundled binary's
-`Auto-updates: enabled` actually does when it decides to update itself, since its
-`Config install method` reads `not set`.
+So the image ships ONE copy. `~/.local/bin/claude` is a 719 byte wrapper:
+
+```sh
+b=$(ls -d "$HOME"/.local/share/code-server/extensions/anthropic.claude-code-*/resources/native-binary/claude \
+     2>/dev/null | sort -V | tail -1)
+[ -n "$b" ] || { echo "claude: no anthropic.claude-code extension found" >&2; exit 127; }
+exec "$b" "$@"
+```
+
+A wrapper, not a link, and that distinction is the whole point. The extension directory is
+version stamped, and VS Code REMOVES the old one when it updates, so a symlink would dangle
+at the first update. The wrapper reglobs on every run, `sort -V` picks the highest version,
+and an update needs no migration step at all. `exec` means argv, stdin, exit codes and
+signals pass straight through, so callers cannot tell it from the binary. A missing
+extension exits 127, the command-not-found convention, naming the directory it searched.
+
+**Measured before adopting, because the risk was that the binary re-materializes itself:**
+
+| invocation | result |
+|---|---|
+| `claude --version` / `--help` / `-p` | 1 MB, nothing written. Safe. |
+| `claude update` | writes `~/.local/share/claude/versions/<v>` (374 MB) AND replaces the wrapper with its own symlink |
+
+Neither `DISABLE_AUTOUPDATER=1` nor `autoUpdates:false` in `~/.claude.json` prevents the
+second row. So normal use never duplicates, and an explicit update degrades to the old two
+copy layout rather than breaking: you spend the disk back, nothing else changes. Three smoke
+gates hold the line: the wrapper runs, it is still a REGULAR FILE (a symlink means the
+standalone CLI was installed over it), and `~/.local/share/claude/versions` does not exist.
+
+**The bigger win is not disk, it is version skew.** Two copies meant two independent
+updaters, so the editor panel and the terminal could drift to different Claude Code
+versions in one workspace. One binary and one updater makes that impossible. The tradeoff:
+`claude`'s version is whatever the extension ships, and moves when it moves.
+
+**Auth is unaffected**, which matters because the CLI is what signs you in. Credentials live
+in `~/.claude/.credentials.json`, keyed to the user's home, not to where the binary sits.
+Verified against this image: the cascade's own gate command,
+`claude auth status --json 2>&1`, returns clean parseable JSON (`loggedIn:false`,
+`authMethod:"none"`) with nothing on stderr. That last part matters, since the command merges
+stderr and any stray warning would fail the parse and make setup conclude auth was broken.
 
 Neither is version pinned. The bake installs whatever is newest that day (2.1.245 here)
 and the CLI self-updates afterward.
@@ -148,6 +182,24 @@ writes `workbench.activity.pinnedViewlets2` with `workbench.view.search`,
 `workbench.view.scm` and `workbench.view.debug` marked `visible: false`. The same script
 sets `http.linkProtectionTrustedDomains` to `["*"]`, which is what suppresses the "do you
 want to open this external website?" dialog.
+
+**The write alone does nothing, and this cost a full debugging cycle to learn.** Two traps:
+
+- `pinned` is the field that hides an icon. `visible` is NOT: in a live image every entry
+  carries `visible:false`, including Explorer and Extensions, which are plainly on the rail.
+- The write must be followed by a forced RE-READ. The running workbench persists
+  `pinnedViewlets2` from its own live UI state, so a write that is not immediately followed
+  by a reload gets reverted by its owner. The symptom is maddening: the guard key lands, the
+  write reports success, and the icons are still there.
+
+ah's `/demo/run hide-activitybar` has always done both, write then reload. The seed now does
+the same, and self-reloads only when it is the top-level document (`window.top === window`),
+so a bare browser fixes itself while inside ah the iframe reload stays ah's job and no user
+ever meets a "Reload site?" prompt on first run.
+
+Verified on v25-full: the rail went from
+`Explorer, Search, SCM, Debug, Extensions, Adom, Claude` to
+`Explorer, Extensions, Adom, Claude Code, Accounts, Manage`.
 
 **It is a default, not a policy.** The write is guarded by an `adom.activityBarSeeded` key
 and runs once per profile. Right-click the rail and turn Search back on and it stays on,
@@ -286,14 +338,24 @@ split is measured, not assumed:
 | `adom-cli` (any shape) | n/a, it lives in `/usr/local/bin` | always found |
 
 `~/.bashrc` returns early for non-interactive shells (`case $- in *i*) ;; *) return;;`) and
-`~/.profile` is not read at all, so a plain `bash -c` gets only the PATH from
-`/etc/environment`, which does not include `~/.local/bin`. That is why ah's code and this
-bake carry an explicit `export PATH="$HOME/.local/bin:$PATH"` before every `claude` and
-`adom-wiki` call. It is load-bearing, not defensive habit.
+`~/.profile` is not read at all, so a plain `bash -c` used to get only the PATH from
+`/etc/environment`, which did not list `~/.local/bin`. The blast radius was every
+non-interactive caller: cron jobs, systemd units, scripts, and agent tool calls that shell
+out, any of which reaching for `claude` by bare name got "command not found".
 
-The blast radius is every non-interactive caller: cron jobs, systemd units, scripts, and
-agent tool calls that shell out. Any of them reaching for `claude` by bare name fails with
-"command not found" on a fresh image.
+**Fixed in v25-full**: the bake writes `/home/adom/.local/bin` into `/etc/environment`, the
+one file all four shapes read. The literal path is safe precisely because this image has one
+user at a locked uid and the folder contract is fixed; the file is not a shell script, so
+`$HOME` would not expand anyway. The bake asserts the config and the post-import test
+asserts the behaviour, since `runuser` inherits the caller's environment and cannot
+reproduce the shape that matters.
+
+**A related cleanup this made possible.** ah's cascade used to prefix every `claude` call
+with `export PATH="$HOME/.local/bin:$PATH"`. That was cargo cult twice over: `dexec` runs
+`bash -lc`, a LOGIN shell, so `~/.profile` had already prepended the directory on every
+image including v24-thin, and now `/etc/environment` covers the non-login case too. Those
+prefixes are gone. They would still be required under `dexec_root`, since root's profile has
+no reason to add the adom user's bin dir.
 
 ### The four symlinks in ~/.local/bin
 
