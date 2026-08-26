@@ -1,4 +1,24 @@
 #!/usr/bin/env bash
+#
+# ############################################################################
+# RETIRED (recorded 2026-08-26). NOTHING REFERENCES THIS FILE.
+#
+# Kept for history like the other retired pieces, but read the warning first:
+# the workspace-updater section below still installs adom-workspace-updater,
+# which was RETIRED 2026-07-16 and which the LIVE bake now actively refuses to
+# ship (bake-in-distro.sh asserts the binary and its systemd units are absent,
+# and purges the package). Running this would fail those gates.
+#
+# Its comments are stale in a way that misleads: they state "Codex is NOT baked
+# — the daemon adds it at runtime", which has been false since the daemon was
+# retired. That sentence cost real time on 2026-08-26: it was read as current,
+# and the daemon's absence from a fresh image was reported as a gap rather than
+# as the invariant the bake enforces.
+#
+# Current mechanism: registry-native updates (adom-wiki pkg update via
+# adom/hook), skills via adom/hd-skillpack. See hd-auto-updates.
+# ############################################################################
+#
 # bake-hydrogen-setup.sh — pre-run HD's setup cascade at IMAGE BUILD time.
 #
 # Run as root inside the rootfs (chroot or docker RUN). Each section names

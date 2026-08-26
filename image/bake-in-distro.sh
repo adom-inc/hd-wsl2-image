@@ -254,6 +254,43 @@ runuser -u adom -- bash -lc "claude --version" \
     || { echo "CLAUDE WRAPPER is not runnable"; exit 1; }
 fi  # GOLDEN_PROFILE != thin (section 6a claude CLI)
 
+# ── 6a-2. CODEX — baked (John + Kyle 2026-08-26) ──────────────────────────────
+# "we will ship the golden image with codex pre-installed".
+#
+# It was NOT installed at all before this. The runtime path everyone assumed was
+# the adom-workspace-updater daemon, and that was RETIRED 2026-07-16 (this bake
+# asserts its absence and purges the package, see the gates at the end of this
+# file). So a shipped image had ~/.codex/hooks.json and nothing to use it.
+#
+# Two artifacts, matching what ah's own doctor installs and verifies, so a repair
+# from the doctor converges on exactly what the image already has:
+#   the CLI        npm -g --prefix ~/.local @openai/codex  ->  ~/.local/bin/codex
+#   the extension  openai.chatgpt (platform-specific build)
+#
+# MEASURED in the live v25-full image before baking (ConfRoomROG, 2026-08-26):
+# installs clean in 121s on the image's own node v18.19.1 (no node bump needed,
+# which was the risk worth checking), giving codex-cli 0.150.0 and
+# openai.chatgpt-26.820.60940-linux-x64. It costs ~318 MB uncompressed.
+if [ "${GOLDEN_PROFILE:-full}" != "thin" ]; then
+    log "Codex CLI + openai.chatgpt extension (baked, not runtime)"
+    runuser -u adom -- bash -lc '
+        set -e
+        npm config set prefix "$HOME/.local" --location=user
+        mkdir -p "$HOME/.local"
+        npm install -g --prefix "$HOME/.local" @openai/codex
+    ' || { echo "CODEX CLI install failed"; exit 1; }
+    runuser -u adom -- bash -lc '
+        /usr/lib/code-server/bin/code-server --install-extension openai.chatgpt --force
+    ' || { echo "CODEX extension install failed"; exit 1; }
+
+    # GATE both halves the way the Claude wrapper is gated: a bake that silently
+    # produced a Codex-less image is exactly the failure this section exists to end.
+    runuser -u adom -- bash -lc 'export PATH="$HOME/.local/bin:$PATH"; codex --version' \
+        || { echo "CODEX CLI is not runnable"; exit 1; }
+    runuser -u adom -- bash -lc 'ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-* >/dev/null' \
+        || { echo "CODEX extension missing after install"; exit 1; }
+fi  # GOLDEN_PROFILE != thin (section 6a-2 codex)
+
 # ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
 # declare scripts.install (hd-bootstrap@0.2.23, hydrogen-windows-bootstrap@0.2.8) and
 # adom-wiki executes install.sh in dependency order — verified end-to-end on a
@@ -569,6 +606,16 @@ test -f /home/adom/.local/bin/claude && ! test -L /home/adom/.local/bin/claude \
 CLAUDEV=$(runuser -u adom -- bash -lc "export PATH=\$HOME/.local/bin:\$PATH; claude --version 2>&1 | head -1")
 echo "baked claude CLI: ${CLAUDEV}"
 case "${CLAUDEV}" in *"Claude Code"*) : ;; *) echo "baked claude CLI does not answer --version (${CLAUDEV})"; exit 1;; esac
+# v26: CODEX baked (see 6a-2). Gated on BOTH halves, because the image shipped with
+# ~/.codex/hooks.json and no Codex at all until this: the CLI and the extension are what
+# make that config mean anything.
+if [ "${GOLDEN_PROFILE:-full}" != "thin" ]; then
+  CODEXV=$(runuser -u adom -- bash -lc "export PATH=\$HOME/.local/bin:\$PATH; codex --version 2>&1 | head -1")
+  echo "baked codex CLI: ${CODEXV}"
+  case "${CODEXV}" in *codex*) : ;; *) echo "baked codex CLI does not answer --version (${CODEXV})"; exit 1;; esac
+  runuser -u adom -- bash -lc 'ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-* >/dev/null 2>&1' \
+      || { echo "MISSING openai.chatgpt extension in the baked image"; exit 1; }
+fi
 # v18: updater daemon RETIRED — auto-update is adom/hook → `adom-wiki pkg update`
 ! test -e /usr/local/bin/adom-workspace-updater || { echo "RETIRED updater daemon present"; exit 1; }
 ! systemctl list-unit-files 2>/dev/null | grep -q adom-workspace-updater || { echo "RETIRED updater systemd units present"; exit 1; }
