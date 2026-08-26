@@ -404,6 +404,25 @@ for u in code-server adom-relay adom-shotlog; do
     ln -sf "/etc/systemd/system/${u}.service" "/etc/systemd/system/multi-user.target.wants/${u}.service"
 done
 
+# cron, explicitly (John 2026-08-26). The user's agent installs and runs cron jobs in
+# this container -- a live one already runs the daily wiki digest -- so cron starting on
+# boot is a product requirement, not an apt detail. Debian's postinst normally enables it
+# via deb-systemd-helper even with systemd not PID 1, but "normally" is not something the
+# smoke gate could check: the gate below used to assert only the package and the crontab
+# binary while its own comment claimed "cron alive", so an image where cron never started
+# would have passed. Enable it ourselves, the same symlink shape as the three units above,
+# and assert it. The unit ships in /usr/lib (Debian) with /lib as the older location.
+cron_unit=""
+for c in /usr/lib/systemd/system/cron.service /lib/systemd/system/cron.service; do
+    [ -f "$c" ] && { cron_unit="$c"; break; }
+done
+if [ -n "$cron_unit" ]; then
+    ln -sf "$cron_unit" /etc/systemd/system/multi-user.target.wants/cron.service
+else
+    echo "FATAL: cron.service unit not found after installing the cron package" >&2
+    exit 1
+fi
+
 # ── 6d-bis. per-import distro identity (v22, hd-wsl2-image#1 item 4) ─────────────
 # /etc/adom-distro-id must be UNIQUE PER IMPORT, so it CANNOT be baked into the tar
 # (every import would share it). A oneshot generates it on first boot; the cleanup
@@ -615,6 +634,9 @@ for u in code-server adom-relay adom-shotlog; do
 done
 dpkg -l cron 2>/dev/null | grep -q '^ii' || { echo "MISSING cron package"; exit 1; }
 test -x /usr/bin/crontab || { echo "MISSING crontab"; exit 1; }
+# The assertion the old gate was missing: installed is not the same as starts on boot.
+test -L /etc/systemd/system/multi-user.target.wants/cron.service || { echo "UNIT cron not enabled"; exit 1; }
+test -e /etc/systemd/system/multi-user.target.wants/cron.service || { echo "UNIT cron enabled but dangling"; exit 1; }
 if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: shotlog is delivered by the bootstrap install
 # adom-shotlog: registry-tracked (hydrogen-windows-bootstrap>=0.2.9 dependency), binary + alias.
 test -d /home/adom/project/adom_modules/adom/adom-shotlog || { echo "MISSING module adom/adom-shotlog (bootstrap dep not resolved?)"; exit 1; }

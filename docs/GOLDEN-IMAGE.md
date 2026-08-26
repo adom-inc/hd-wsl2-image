@@ -381,7 +381,8 @@ package payload.
 
 ## The daemons
 
-Four systemd units are baked into `/etc/systemd/system/`:
+Four systemd units are baked into `/etc/systemd/system/`, and one more that the distro
+provides is enabled alongside them:
 
 | Unit | What it does | Port |
 |---|---|---|
@@ -389,6 +390,24 @@ Four systemd units are baked into `/etc/systemd/system/`:
 | `adom-relay.service` | `adom-bridge serve`, the relay ah and Adom Bridge connect back to | 8765 / 8766 |
 | `adom-shotlog.service` | the screenshot log server | 8820 |
 | `adom-distro-id.service` | first-boot oneshot, mints `/etc/adom-distro-id` | n/a |
+| `cron.service` | the distro's own cron, enabled by us so scheduled work survives a reboot | n/a |
+
+### cron
+
+The agent in this container schedules its own recurring work, so cron running on boot is a
+product requirement rather than an apt detail. A real Adom container already carries a live
+crontab driving the daily wiki digest at 6am Central.
+
+The bake installs the `cron` package, then enables it with the same symlink shape as the
+four units above, because systemd is not PID 1 inside the bake distro and `systemctl enable`
+cannot run there. Debian's postinst normally does this itself through `deb-systemd-helper`,
+but doing it explicitly is what gives the smoke gate something it can assert.
+
+That assertion was missing until 2026-08-26. The gate checked the package and the `crontab`
+binary while its own comment claimed "cron alive", so an image where cron never started
+would have passed clean. It now asserts the `multi-user.target.wants/cron.service` symlink
+exists **and** resolves, exactly as it does for the other units. Installed is not the same
+as starts on boot, and only one of those is what the user gets.
 
 Two details that have bitten before, both now encoded in the units themselves.
 
@@ -396,7 +415,8 @@ The relay's binary was renamed from `adom-desktop` to `adom-bridge`, and the uni
 carries a fallback to the retired name: a `bash -lc` ExecStart that runs
 `adom-bridge serve` or else `adom-desktop serve`, plus a dual `ConditionPathExists=|`.
 
-That fallback is wrong and is being removed. It is unreachable, because the only machine
+That fallback was wrong and has been removed; the unit now carries one `ExecStart` and a
+single `ConditionPathExists`. It was unreachable, because the only machine
 that could take it has the new unit and the old binary, and any image carrying the unit
 also carries `adom-bridge`. It converts a clean failure into a restart loop: when the real
 binary is missing, the `||` runs a command that does not exist, the unit fails, and
