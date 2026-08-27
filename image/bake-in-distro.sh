@@ -71,7 +71,8 @@ apt-get install -y --no-install-recommends \
     sudo locales \
     nodejs npm python3 python3-pip \
     python3-requests python3-yaml python3-bs4 python3-lxml python3-pil \
-    systemd systemd-sysv cron
+    systemd systemd-sysv cron \
+    ripgrep
 log "github cli"
 curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300 https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -629,6 +630,13 @@ if [ "${GOLDEN_PROFILE:-full}" != "thin" ]; then
   case "${CODEXV}" in *codex*) : ;; *) echo "baked codex CLI does not answer --version (${CODEXV})"; exit 1;; esac
   runuser -u adom -- bash -lc 'ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-* >/dev/null 2>&1' \
       || { echo "MISSING openai.chatgpt extension in the baked image"; exit 1; }
+  # ripgrep: `codex doctor` reports "search command could not be verified - Install
+  # ripgrep" without it, and Claude Code reaches for rg too. Found on the v26 bake by
+  # actually RUNNING codex doctor in the image rather than trusting that it was fine.
+  # A missing rg does not fail anything loudly, it just makes every codebase search in
+  # both agents worse, which is exactly the kind of gap a gate is for.
+  command -v rg >/dev/null \
+      || { echo "MISSING ripgrep (rg): the coding agents' search is degraded without it"; exit 1; }
   # DEDUP, the same shape as the Claude one above. The npm package duplicates the binary
   # the extension already ships and cost +318 MB extracted on the first v26 bake.
   ! test -e /home/adom/.local/lib/node_modules/@openai/codex \
