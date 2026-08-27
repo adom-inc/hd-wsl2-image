@@ -254,41 +254,55 @@ runuser -u adom -- bash -lc "claude --version" \
     || { echo "CLAUDE WRAPPER is not runnable"; exit 1; }
 fi  # GOLDEN_PROFILE != thin (section 6a claude CLI)
 
-# ── 6a-2. CODEX — baked (John + Kyle 2026-08-26) ──────────────────────────────
+# ── 6a-2. CODEX — baked, ONE COPY (John + Kyle 2026-08-26) ────────────────────
 # "we will ship the golden image with codex pre-installed".
 #
-# It was NOT installed at all before this. The runtime path everyone assumed was
-# the adom-workspace-updater daemon, and that was RETIRED 2026-07-16 (this bake
-# asserts its absence and purges the package, see the gates at the end of this
-# file). So a shipped image had ~/.codex/hooks.json and nothing to use it.
+# It was not installed at all before this. The runtime path everyone assumed was the
+# adom-workspace-updater daemon, RETIRED 2026-07-16 (this bake asserts its absence and
+# purges the package). So a shipped image carried ~/.codex/hooks.json and nothing to use.
 #
-# Two artifacts, matching what ah's own doctor installs and verifies, so a repair
-# from the doctor converges on exactly what the image already has:
-#   the CLI        npm -g --prefix ~/.local @openai/codex  ->  ~/.local/bin/codex
-#   the extension  openai.chatgpt (platform-specific build)
+# WRAPPER, NOT A SECOND COPY — the same call section 6a makes for Claude, and for the
+# same reason. MEASURED on the first v26 bake, which installed both halves:
+#   openai.chatgpt extension   557 MB   (320 MB bin + 235 MB webview)
+#   @openai/codex via npm      318 MB
+# That took the compressed image from 483,948,834 B (v25) to 947,033,051 B: +96%, i.e.
+# every new user's first-run download nearly doubled. The extension ALREADY ships a
+# working codex at bin/linux-x86_64/codex, so the npm copy is 318 MB of duplicate.
 #
-# MEASURED in the live v25-full image before baking (ConfRoomROG, 2026-08-26):
-# installs clean in 121s on the image's own node v18.19.1 (no node bump needed,
-# which was the risk worth checking), giving codex-cli 0.150.0 and
-# openai.chatgpt-26.820.60940-linux-x64. It costs ~318 MB uncompressed.
+# HONEST CAVEAT, so nobody is surprised later: unlike Claude (where the extension's
+# binary and the standalone CLI are byte-identical), these differ. The extension bundles
+# 0.150.0-alpha.8 (gnu) and npm ships 0.150.1 (musl) at coincidentally the same byte
+# size but different hashes. John's call 2026-08-26, told the tradeoff: take the
+# extension's build and save the 318 MB. A user who needs the stable channel can run
+# `npm install -g --prefix ~/.local @openai/codex`, which replaces this wrapper exactly
+# the way `claude update` replaces its own.
 if [ "${GOLDEN_PROFILE:-full}" != "thin" ]; then
-    log "Codex CLI + openai.chatgpt extension (baked, not runtime)"
-    runuser -u adom -- bash -lc '
-        set -e
-        npm config set prefix "$HOME/.local" --location=user
-        mkdir -p "$HOME/.local"
-        npm install -g --prefix "$HOME/.local" @openai/codex
-    ' || { echo "CODEX CLI install failed"; exit 1; }
+    log "Codex extension + a wrapper onto its bundled binary (no second copy)"
     runuser -u adom -- bash -lc '
         /usr/lib/code-server/bin/code-server --install-extension openai.chatgpt --force
     ' || { echo "CODEX extension install failed"; exit 1; }
 
-    # GATE both halves the way the Claude wrapper is gated: a bake that silently
-    # produced a Codex-less image is exactly the failure this section exists to end.
-    runuser -u adom -- bash -lc 'export PATH="$HOME/.local/bin:$PATH"; codex --version' \
-        || { echo "CODEX CLI is not runnable"; exit 1; }
-    runuser -u adom -- bash -lc 'ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-* >/dev/null' \
-        || { echo "CODEX extension missing after install"; exit 1; }
+    install -d -m 0755 /home/adom/.local/bin
+    cat > /home/adom/.local/bin/codex <<'CODEXW'
+#!/bin/sh
+# Adom golden image: `codex` is the binary the Codex VS Code extension already ships.
+# Resolved fresh on every run so an extension update cannot leave this dangling (the
+# extension dir carries its version, and VS Code removes the old one when it updates).
+# To move to the stable npm channel instead:
+#   npm install -g --prefix "$HOME/.local" @openai/codex
+# which overwrites this file, the same way `claude update` replaces the claude wrapper.
+b=$(ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-*/bin/linux-x86_64/codex 2>/dev/null | sort -V | tail -1)
+if [ -z "$b" ]; then
+  echo "codex: no openai.chatgpt extension found under ~/.local/share/code-server/extensions" >&2
+  echo "       reinstall it, or run: npm install -g --prefix \"$HOME/.local\" @openai/codex" >&2
+  exit 127
+fi
+exec "$b" "$@"
+CODEXW
+    chmod 0755 /home/adom/.local/bin/codex
+    chown adom:adom /home/adom/.local/bin/codex
+    runuser -u adom -- bash -lc "codex --version" \
+        || { echo "CODEX WRAPPER is not runnable"; exit 1; }
 fi  # GOLDEN_PROFILE != thin (section 6a-2 codex)
 
 # ── 6b. (removed 2026-07-20) The postinstall shim is GONE. The bootstraps now
@@ -615,6 +629,10 @@ if [ "${GOLDEN_PROFILE:-full}" != "thin" ]; then
   case "${CODEXV}" in *codex*) : ;; *) echo "baked codex CLI does not answer --version (${CODEXV})"; exit 1;; esac
   runuser -u adom -- bash -lc 'ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-* >/dev/null 2>&1' \
       || { echo "MISSING openai.chatgpt extension in the baked image"; exit 1; }
+  # DEDUP, the same shape as the Claude one above. The npm package duplicates the binary
+  # the extension already ships and cost +318 MB extracted on the first v26 bake.
+  ! test -e /home/adom/.local/lib/node_modules/@openai/codex \
+      || { echo "DEDUP: node_modules/@openai/codex exists, the image is carrying Codex twice"; exit 1; }
 fi
 # v18: updater daemon RETIRED — auto-update is adom/hook → `adom-wiki pkg update`
 ! test -e /usr/local/bin/adom-workspace-updater || { echo "RETIRED updater daemon present"; exit 1; }
