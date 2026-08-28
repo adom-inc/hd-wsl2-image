@@ -344,6 +344,27 @@ fi  # GOLDEN_PROFILE != thin (section 6a-2 codex)
 # something is wrong. Found by the ralph sweep on 2026-08-27, where it was the ONLY thing
 # standing between the distro and a clean bill of health. Masked, not disabled: `static` units
 # cannot be disabled. HD also asserts this at launch so distros baked before this heal.
+# BASELINE MANIFEST for the migration audit. HD's pre-migration scan names what a user
+# installed OUTSIDE /home/adom (which does not survive a re-image: John 2026-08-28, "what if
+# they install the rust toolchain?"). To name it without crying wolf, the scan needs to know
+# what the IMAGE itself shipped -- /usr/local carries baked content (adom-cli), so a raw
+# listing would false-positive on every install. Recorded at the very end of the bake so it
+# reflects the finished image; images without this file fall back to apt-history parsing
+# (measured: the bake leaves apt history empty, so on old images any entry is user activity).
+log "recording the image baseline manifest (/etc/adom-image-baseline.json) for HD's migration audit"
+python3 - <<'BASELINEEOF'
+import json, subprocess
+def sh(c):
+    try: return subprocess.run(["bash","-lc",c],capture_output=True,text=True,timeout=60).stdout.split()
+    except Exception: return []
+json.dump({
+    "apt_manual": sorted(sh("apt-mark showmanual")),
+    "usr_local":  sorted(sh("find /usr/local -maxdepth 3 -type f -o -maxdepth 3 -type l 2>/dev/null")),
+    "opt":        sorted(sh("ls -1 /opt 2>/dev/null")),
+    "units":      sorted(sh("ls -1 /etc/systemd/system/*.service 2>/dev/null")),
+}, open("/etc/adom-image-baseline.json","w"), indent=1)
+BASELINEEOF
+
 log "masking kmod-static-nodes.service (203/EXEC in WSL2, keeps systemd permanently degraded)"
 systemctl mask kmod-static-nodes.service || true
 
@@ -815,6 +836,10 @@ fi
 # Every requirement gets a build-FAILING litmus, or it is not a requirement. This one exists
 # because a masked unit is one `apt install kmod` or one upstream unit change away from coming
 # back, and the symptom (systemd `degraded` forever) is silent until someone reads a health probe.
+if [ ! -s /etc/adom-image-baseline.json ]; then
+    echo "SMOKE-FAIL: /etc/adom-image-baseline.json missing or empty; the migration audit degrades to the apt-history fallback on this image" >&2
+    exit 2
+fi
 if [ ! -L /etc/systemd/system/kmod-static-nodes.service ]; then
     echo "SMOKE-FAIL: kmod-static-nodes.service is not masked; systemd will report degraded forever" >&2
     exit 2
