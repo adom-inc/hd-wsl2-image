@@ -336,6 +336,17 @@ fi  # GOLDEN_PROFILE != thin (section 6a-2 codex)
 # (~/.local/bin, /etc/profile.d/hd-env.sh), matching how code-server children behave.
 # WorkingDirectory is explicit: a service with no cwd once resolved shotlog's relative
 # data dir under a read-only mount (the 2026-07-24 broken-gallery bug).
+# MASK THE UNIT THAT CANNOT SUCCEED HERE. kmod-static-nodes.service runs `kmod static-nodes`
+# and fails 203/EXEC on every boot, because kmod is not installed: WSL2 loads no kernel modules,
+# so it was stripped with the rest of the unused baseline. One permanently-failed unit makes
+# `systemctl is-system-running` answer `degraded` forever, which is worse than useless: it
+# trains everyone (and every health probe) to ignore the single word that is supposed to mean
+# something is wrong. Found by the ralph sweep on 2026-08-27, where it was the ONLY thing
+# standing between the distro and a clean bill of health. Masked, not disabled: `static` units
+# cannot be disabled. HD also asserts this at launch so distros baked before this heal.
+log "masking kmod-static-nodes.service (203/EXEC in WSL2, keeps systemd permanently degraded)"
+systemctl mask kmod-static-nodes.service || true
+
 log "systemd units (code-server, adom-relay, adom-shotlog)"
 cat > /etc/systemd/system/code-server.service <<'UNIT'
 [Unit]
@@ -801,6 +812,14 @@ if [ "$GOLDEN_PROFILE" = "thin" ]; then
     ! ls -d /home/adom/.local/share/code-server/extensions/adom.* /home/adom/.local/share/code-server/extensions/anthropic.* >/dev/null 2>&1 || { echo "THIN: adom.*/anthropic.* extension baked — thin image must ship none"; exit 1; }
     echo "thin: no adom_modules, no baked skills, no adom/anthropic extensions ✓"
 fi
+# Every requirement gets a build-FAILING litmus, or it is not a requirement. This one exists
+# because a masked unit is one `apt install kmod` or one upstream unit change away from coming
+# back, and the symptom (systemd `degraded` forever) is silent until someone reads a health probe.
+if [ ! -L /etc/systemd/system/kmod-static-nodes.service ]; then
+    echo "SMOKE-FAIL: kmod-static-nodes.service is not masked; systemd will report degraded forever" >&2
+    exit 2
+fi
+
 echo SMOKE-OK
 
 # ── 10. cleanup + slim pass ───────────────────────────────────────────────────
