@@ -554,6 +554,15 @@ runuser -u adom -- bash -lc \
     "jq '.\"workbench.colorTheme\" = \"Adom Studio\"' '${SETTINGS}' > /tmp/s.json && mv /tmp/s.json '${SETTINGS}'"
 fi  # GOLDEN_PROFILE != thin (section 6e theme system)
 
+# LICENSE (v28): adom/adom-wiki-hero-image ships two Satoshi woff2 files in its skill assets,
+# and the bootstrap tree mirrors that skill into ~/.claude/skills and ~/.codex/skills. Legal on
+# a user's machine (the package fetches it for them), not in this public tarball. Strip every
+# Satoshi font binary the package layer left behind; the license gate below still runs, so a
+# new source of Satoshi bytes fails the bake instead of shipping. Filed as an issue on the
+# package (adom/adom-wiki-hero-image) so the bytes stop arriving in the first place.
+log "stripping Satoshi font binaries the package layer installed (public-tarball license)"
+find /home/adom -xdev -type f \( -iname 'satoshi*.woff2' -o -iname 'satoshi*.woff' -o -iname 'satoshi*.ttf' -o -iname 'satoshi*.otf' \) -print -delete 2>/dev/null | sed 's/^/  removed /' || true
+
 # Headless distro: boot straight to multi-user.target. Ubuntu's default.target symlinks
 # to graphical.target, which Wants= a display-manager that does not exist here; multi-user
 # is what our units are WantedBy and what cron already relies on.
