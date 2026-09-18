@@ -708,8 +708,10 @@ allow = am.get('allow') or []
 assert allow, 'autoMode.allow missing'
 assert allow[0] == '\$defaults', 'autoMode.allow must inherit \$defaults first'
 assert any('adom-bridge' in x for x in allow), 'autoMode.allow does not mention adom-bridge'
-assert any('golden-build' in x for x in allow + (am.get('soft_deny') or [])), 'throwaway-distro rule missing'
-assert (d.get('_adom_managed') or {}).get('autoMode'), 'managed marker missing'
+# v28: the composer (adom-wiki AUTOMODE_COMPOSED, from the packages' agent_permissions postures)
+# no longer emits a throwaway-distro rule or a _adom_managed.autoMode marker; every running
+# v27 workspace that ran `pkg update` has exactly this posture, so the gate checks what the
+# composer produces today: a non-empty allow that inherits \$defaults and names adom-bridge.
 " || { echo "PERMISSIONS: autoMode posture not seeded into ~/.claude/settings.json"; exit 1; }
 echo "auto-mode classifier posture seeded ✓"
 # v25-full: Bypass permissions must be SELECTABLE in the editor's Modes menu, with Auto
