@@ -72,7 +72,7 @@ apt-get install -y --no-install-recommends \
     nodejs npm python3 python3-pip \
     python3-requests python3-yaml python3-bs4 python3-lxml python3-pil \
     systemd systemd-sysv cron \
-    ripgrep
+    ripgrep xz-utils
 log "github cli"
 curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300 https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -669,6 +669,9 @@ if [ "${GOLDEN_PROFILE:-full}" != "thin" ]; then
   # both agents worse, which is exactly the kind of gap a gate is for.
   command -v rg >/dev/null \
       || { echo "MISSING ripgrep (rg): the coding agents' search is degraded without it"; exit 1; }
+  # xz-utils: adom-wiki unpacks .tar.xz releases (drone-rf's install died with "xz: Cannot
+  # exec" on v27, 2026-09-15); Hydrogen's update-packages step backfills it, the image bakes it.
+  command -v xz >/dev/null || { echo "MISSING xz (xz-utils): package installs that ship .tar.xz fail without it"; exit 1; }
   # DEDUP, the same shape as the Claude one above. The npm package duplicates the binary
   # the extension already ships and cost +318 MB extracted on the first v26 bake.
   ! test -e /home/adom/.local/lib/node_modules/@openai/codex \
