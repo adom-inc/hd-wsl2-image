@@ -30,13 +30,27 @@ code-server settings have no `claudeCode.selectedModel`).
 
 ## Build & release
 
-In an Adom cloud container (no docker — chroot-based):
+**Weekly, one command, from the cloud container against the laptop** (WSL2-native through
+adom-bridge; the chroot and docker paths are retired):
 
 ```bash
-GOLDEN_VERSION=vN ./scripts/build-rootfs.sh
+bash scripts/bake-weekly.sh v29-full            # --target AdomLapper is the default
 ```
 
-See `skills/golden-image-bake/SKILL.md` for the full monthly procedure.
+It stages `image/` to `C:\tmp\ctx`, imports a fresh throwaway `golden-build` distro from
+`C:\tmp\ubuntu-base.tar.gz`, runs `image/bake-in-distro.sh` in the bridge's HELD session
+(a detached bake dies when the distro restarts), requires `SMOKE-OK`, exports, gzips and hashes
+in the workspace, releases both assets with `gh` on the laptop, verifies the public download,
+and prints the pin. Then in hydrogen-desktop: `bash scripts/pin-golden.sh v29-full <sha> <bytes>`.
+
+**A weekly image never forces an upgrade.** It is the previous image with the current
+`adom-wiki pkg update` applied, which every running workspace already has; Hydrogen treats any
+install on v27 or later as current (`NO_FORCED_MIGRATION_FROM`), so the pin only changes what a
+fresh import downloads. Release notes per version live in `releases/`.
+
+When a smoke gate fails, it is usually the packages that drifted (v28: a retired skill name, a
+permissions marker the composer no longer writes, Satoshi font files a package started
+shipping). Fix the gate or the package, never skip the gate.
 In CI (once token scopes allow): `.github-pending/workflows/build.yml`
 runs the same recipe via `image/Dockerfile` + docker, publishes the
 release asset AND a single-layer image at `ghcr.io/adom-inc/hd-wsl2-image`.
