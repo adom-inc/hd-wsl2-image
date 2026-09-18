@@ -625,7 +625,7 @@ if [ "$GOLDEN_PROFILE" != "thin" ]; then  # FULL-ONLY: baked content (skills, se
 N=$(ls -d /home/adom/.claude/skills/*/ 2>/dev/null | wc -l); echo "skills deployed: ${N}"
 [ "${N}" -ge 150 ] || { echo "too few skills (${N}; the bootstrap tree deploys ~197)"; exit 1; }
 # spot-check by CURRENT name across both eras of the rename.
-for s in hydrogen-webview hydrogen-pup hydrogen-golden-image hydrogen-staying-current hd-golden-image; do
+for s in hydrogen-webview hydrogen-pup hydrogen-golden-image hydrogen-staying-current; do  # hd-golden-image retired (v28)
     test -f "/home/adom/.claude/skills/${s}/SKILL.md" || { echo "MISSING skill ${s}"; exit 1; }
 done
 test -f /home/adom/.local/share/code-server/User/settings.json || { echo "MISSING settings.json"; exit 1; }
