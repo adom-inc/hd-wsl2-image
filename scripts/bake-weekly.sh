@@ -32,7 +32,7 @@ import sys,json
 raw=sys.stdin.read()
 try: d=json.loads(raw[raw.index('{'):]); b=d.get('body') if 'body' in d else d; print((b.get('stdout') or '').rstrip())
 except Exception: print('WSX-RAW', raw[:200])"; }
-ps(){ local why=$1 script=$2; $AB run_script "$(python3 -c 'import json,sys,base64;print(json.dumps({"scriptB64":base64.b64encode(sys.argv[1].encode("utf-16-le")).decode(),"interpreter":"powershell","shell":"powershell","reason":sys.argv[2],"timeoutSeconds":600}))' "$script" "$why")" 2>&1; }
+ps(){ local why=$1 script=$2; $AB run_script "$(python3 -c 'import json,sys,base64;print(json.dumps({"scriptB64":base64.b64encode(sys.argv[1].encode("utf-8")).decode(),"interpreter":"powershell","shell":"powershell","reason":sys.argv[2],"timeoutSeconds":600}))' "$script" "$why")" 2>&1; }
 
 log "1/5 staging the bake context to C:\\tmp\\ctx on $TARGET"
 for f in bake-in-distro.sh bootstrap.sh init-host-internal.sh wsl.conf; do
