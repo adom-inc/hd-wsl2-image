@@ -146,6 +146,11 @@ install -m 0644 "${CTX}/wsl.conf" /etc/wsl.conf
 install -m 0755 "${CTX}/init-host-internal.sh" /etc/init-host-internal.sh
 install -D -m 0755 "${CTX}/bootstrap.sh" /opt/adom/bootstrap.sh
 chown -R adom:adom /opt/adom
+# Interactive shells make themselves killable again (adom/hydrogen#76): static, so it is baked
+# rather than written by Hydrogen's per-launch env refresh (v29). The `$-` is bash's own flag
+# string, evaluated by the interactive shell that sources this file.
+printf '%s\n' 'case $- in *i*) echo 0 > /proc/self/oom_score_adj 2>/dev/null || true ;; esac' > /etc/profile.d/hd-oom-reset.sh
+chmod 0644 /etc/profile.d/hd-oom-reset.sh
 
 # ── 4. adom-desktop — NOT baked. Its wiki package ships no binary, and HD
 # injects/refreshes the workspace's adom-desktop CLI at runtime (Claude Desktop
