@@ -39,6 +39,11 @@ fi
 #    System-owned file → sudo (adom has NOPASSWD sudo).
 WB=/usr/lib/code-server/lib/vscode/out/vs/code/browser/workbench/workbench.html
 if [ -f "$WB" ] && ! grep -q __hdAbSeed "$WB"; then
+  # The activity-bar part is NOT a once-only seed any more: it ran once behind an
+  # adom.activityBarSeeded flag and raced VS Code's own startup write of
+  # workbench.activity.pinnedViewlets2, so on a fresh profile the flag was set and the three
+  # views came back pinned (winvm 2026-09-19). Now every load re-unpins them only when they are
+  # pinned (no write when already right). Hydrogen also hides them by CSS after each paint.
   log "seeding WSL2 code-server workbench.html (trusted domains + activity bar + clean sidebar)"
   sudo python3 - "$WB" <<'PY'
 import sys
@@ -48,14 +53,14 @@ SCRIPT = ('<script>(function(){try{var r=indexedDB.open("vscode-web-state-db-glo
  'r.onsuccess=function(e){var d=e.target.result;'
  'try{var t=d.transaction("ItemTable","readwrite");t.objectStore("ItemTable").put(JSON.stringify(["*"]),"http.linkProtectionTrustedDomains")}catch(_){}'
  'try{var t1=d.transaction("ItemTable","readonly");var os1=t1.objectStore("ItemTable");'
- 'var sg=os1.get("adom.activityBarSeeded");sg.onsuccess=function(){if(sg.result)return;'
  'var pg=os1.get("workbench.activity.pinnedViewlets2");pg.onsuccess=function(){'
  'var arr=[];try{if(pg.result)arr=JSON.parse(pg.result)}catch(_){}'
- 'var ids=["workbench.view.search","workbench.view.scm","workbench.view.debug"];'
+ 'var ids=["workbench.view.search","workbench.view.scm","workbench.view.debug"];var dirty=false;'
  'ids.forEach(function(id){var f=null;for(var i=0;i<arr.length;i++){if(arr[i].id===id)f=arr[i]}'
- 'if(f){f.pinned=false}else{arr.push({id:id,pinned:false,visible:false})}});'
+ 'if(f){if(f.pinned){f.pinned=false;dirty=true}}else{arr.push({id:id,pinned:false,visible:false});dirty=true}});'
+ 'if(!dirty)return;'
  'try{var t2=d.transaction("ItemTable","readwrite");var o2=t2.objectStore("ItemTable");'
- 'o2.put(JSON.stringify(arr),"workbench.activity.pinnedViewlets2");o2.put("1","adom.activityBarSeeded")}catch(_){}}}}catch(_){}};'
+ 'o2.put(JSON.stringify(arr),"workbench.activity.pinnedViewlets2");o2.put("1","adom.activityBarSeeded")}catch(_){}}}catch(_){}};'
  'window.__hdTrustedDomains=1;window.__hdAbSeed=1}catch(_){}})();</script>'
  # Collapse the primary sidebar ONCE per profile so the golden image opens clean
  # (no Explorer panel). Guarded by a localStorage marker so it won't fight the
