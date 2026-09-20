@@ -1,0 +1,1 @@
+v30-full: weekly golden image, the current packages baked in (hydrogen-bootstrap 0.5.66 with the no-duplicates converge, adom-vscode 1.1.108, the claude wrapper with DISABLE_AUTOUPDATER). No base-layer change; installs on v27 or later are never asked to migrate.
