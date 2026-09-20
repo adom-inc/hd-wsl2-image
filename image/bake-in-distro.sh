@@ -246,6 +246,11 @@ cat > /home/adom/.local/bin/claude <<'CLAUDEW'
 # ships. Resolved fresh on every run so an extension update cannot leave this dangling.
 # If you run `claude update`, the CLI installs its own standalone copy and replaces this
 # file; that is supported, it just costs ~374 MB of disk.
+# The CLI's own background updater is OFF here: with installMethod "native" it downloads a
+# second 234 MB copy into ~/.local/share/claude/versions on an interactive launch even when
+# it is already current (arav-rog 2026-09-19, AdomLapper had four such copies, 825 MB).
+# The extension update brings the new binary; nothing else needs to.
+export DISABLE_AUTOUPDATER=1
 b=$(ls -d "$HOME"/.local/share/code-server/extensions/anthropic.claude-code-*/resources/native-binary/claude 2>/dev/null | sort -V | tail -1)
 if [ -z "$b" ]; then
   echo "claude: no anthropic.claude-code extension found under ~/.local/share/code-server/extensions" >&2
