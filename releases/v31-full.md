@@ -1,0 +1,1 @@
+v31-full: weekly golden image, the current packages baked in (adom-vscode 1.1.110 with exec children detached so dock servers survive editor reloads, hydrogen-bootstrap 0.5.66, the Claude wrapper without its self-updater). No base-layer change; installs on v27 or later are never asked to migrate.
