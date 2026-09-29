@@ -72,7 +72,7 @@ apt-get install -y --no-install-recommends \
     nodejs npm python3 python3-pip \
     python3-requests python3-yaml python3-bs4 python3-lxml python3-pil \
     systemd systemd-sysv cron \
-    ripgrep xz-utils
+    ripgrep xz-utils earlyoom
 log "github cli"
 curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300 https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -151,6 +151,17 @@ chown -R adom:adom /opt/adom
 # string, evaluated by the interactive shell that sources this file.
 printf '%s\n' 'case $- in *i*) echo 0 > /proc/self/oom_score_adj 2>/dev/null || true ;; esac' > /etc/profile.d/hd-oom-reset.sh
 chmod 0644 /etc/profile.d/hd-oom-reset.sh
+# Memory guardrails (John 2026-09-29; same as hydrogen-bootstrap 0.5.68 section 4g, baked so a
+# fresh install is protected before its first sweep). A workspace at WSL's memory cap thrashed
+# for hours instead of killing the runaway: earlyoom stops the largest non-essential process at
+# 8% available memory; code-server's -900 was inherited by everything it starts (the AI CLIs and
+# whatever they run), so it drops to 0 and the runaway, being the largest, is the one chosen;
+# swappiness 10 drops page cache before swapping working memory.
+printf '%s\n' 'EARLYOOM_ARGS="-m 8,4 -s 100,100 -r 3600 --avoid ^(claude|codex|kimi|agy|systemd|systemd-.*|init|sshd|earlyoom|dbus-daemon)$ --prefer ^(ffmpeg|python3?|chrome|chromium|headless_shell|cc1plus|rustc|ld|java)$ -n"' > /etc/default/earlyoom
+systemctl enable earlyoom >/dev/null 2>&1 || ln -sf /lib/systemd/system/earlyoom.service /etc/systemd/system/multi-user.target.wants/earlyoom.service
+mkdir -p /etc/systemd/system/code-server.service.d
+printf '[Service]\nOOMScoreAdjust=0\n' > /etc/systemd/system/code-server.service.d/90-adom-oom.conf
+echo 'vm.swappiness = 10' > /etc/sysctl.d/90-adom-memory.conf
 
 # ── 4. adom-desktop — NOT baked. Its wiki package ships no binary, and HD
 # injects/refreshes the workspace's adom-desktop CLI at runtime (Claude Desktop
