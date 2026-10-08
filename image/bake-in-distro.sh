@@ -85,6 +85,101 @@ dpkg -i /tmp/code-server.deb && rm -f /tmp/code-server.deb
 log "locale"
 sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
 
+# ── 1b. ARM64 ONLY: x86-64 emulation layer (Windows-on-ARM / Snapdragon hosts) ──
+# The OS, code-server, node, git, python, the Claude Code + Codex extensions are all
+# NATIVE arm64 (every one of them publishes arm64 builds). What is NOT is our own Rust
+# CLIs on wiki.adom.inc (adom-cli, adom-bridge, adom-vscode, adom-tts, shotlog, step2glb,
+# adom-ports...): most packages ship one linux x86-64 binary. Rather than gate the arm64
+# image on rebuilding every package, the image runs those x86-64 binaries transparently
+# through QEMU user-mode emulation registered with binfmt_misc.
+#
+# THE QEMU VERSION MATTERS (measured 2026-10-08 on an Azure arm64 Ubuntu 24.04 VM):
+# Ubuntu 24.04's qemu-user-static 8.2 dies with "QEMU internal SIGSEGV addr=0x20" the
+# moment a guest opens /proc/self/maps, which EVERY Rust binary does at startup. Debian's
+# qemu-user 11.1.2 runs all eight of our CLIs unmodified. So we take Debian's static-pie
+# qemu-x86_64 binary (no shared-lib deps, so it cannot conflict with Ubuntu's libs), pinned
+# by sha256, with snapshot.debian.org (permanent, content-addressed) as the fallback when
+# the pool drops the version. Pinned on purpose: invariant 8 is about OUR packages; an
+# emulator that silently changes under us is how 8.2 got in.
+#
+# x86-64 glibc programs also need the amd64 loader + libs: dpkg multiarch, with an amd64
+# apt source on archive.ubuntu.com (arm64 lives on ports.ubuntu.com, which has no amd64).
+# The lib set is what `ldd` reports across every ELF in a full cloud ~/.local/bin:
+# libc, libgcc_s, libm (libc6), libstdc++ (4 CLIs), libssl/libcrypto (3), zlib.
+#
+# binfmt registration happens at BOOT by our own oneshot (section 6d-arm), NOT by
+# systemd-binfmt: systemd-binfmt FLUSHES every registered format before applying its
+# config, and binfmt_misc is one table for the whole WSL2 VM, so it would also wipe WSL's
+# own WSLInterop entry and any other distro's entries (Docker Desktop registers QEMU on
+# ARM hosts). Our unit only adds its own entry, and only if it is missing.
+ARCH="$(dpkg --print-architecture)"
+QEMU_DEB="qemu-user_11.1.2+ds-2_arm64.deb"
+QEMU_DEB_SHA256="e01d96ac7bc1d7f55045794d1c36cc666b1825dc9ea39f89bc6dc3564bdc9a76"
+QEMU_DEB_SHA1="014ffca9f6c207e57803c3a65ade950ec0577ba5"   # snapshot.debian.org/file/<sha1>
+QEMU_DIR=/usr/local/lib/adom-qemu
+if [ "$ARCH" = "arm64" ]; then
+    log "arm64: amd64 multiarch libs (archive.ubuntu.com) for emulated x86-64 CLIs"
+    # Pin the existing (ports) sources to arm64, then add an amd64-only source.
+    if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+        grep -q '^Architectures:' /etc/apt/sources.list.d/ubuntu.sources \
+            || sed -i '/^Types:/a Architectures: arm64' /etc/apt/sources.list.d/ubuntu.sources
+    fi
+    cat > /etc/apt/sources.list.d/ubuntu-amd64.sources <<'SRC'
+Types: deb
+URIs: http://archive.ubuntu.com/ubuntu/
+Suites: noble noble-updates
+Components: main restricted universe multiverse
+Architectures: amd64
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: http://security.ubuntu.com/ubuntu/
+Suites: noble-security
+Components: main restricted universe multiverse
+Architectures: amd64
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+SRC
+    dpkg --add-architecture amd64
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        libc6:amd64 libgcc-s1:amd64 libstdc++6:amd64 libssl3t64:amd64 zlib1g:amd64
+    # x86-64 binaries hardcode the loader as /lib64/ld-linux-x86-64.so.2. On Ubuntu's arm64
+    # base, /lib64 is a base-files symlink to usr/lib/aarch64-linux-gnu (NOT usr/lib64, where
+    # libc6:amd64 puts its loader link), so every x86-64 program failed with "Could not open
+    # '/lib64/ld-linux-x86-64.so.2'" (first arm64 bake, 2026-10-08). Add just the loader link
+    # in the directory /lib64 resolves to; repointing /lib64 itself would fight base-files'
+    # usrmerge diversion.
+    LIB64DIR="$(readlink -f /lib64)"
+    [ -e "${LIB64DIR}/ld-linux-x86-64.so.2" ] \
+        || ln -s /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "${LIB64DIR}/ld-linux-x86-64.so.2"
+    test -e /lib64/ld-linux-x86-64.so.2 || { echo "amd64 loader not reachable at /lib64"; exit 1; }
+
+    log "arm64: QEMU 11 qemu-x86_64 (Debian ${QEMU_DEB}, sha256-pinned)"
+    qtmp="$(mktemp -d)"
+    curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 600 \
+        "https://deb.debian.org/debian/pool/main/q/qemu/${QEMU_DEB}" -o "${qtmp}/q.deb" \
+      || curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 600 \
+        "https://snapshot.debian.org/file/${QEMU_DEB_SHA1}" -o "${qtmp}/q.deb"
+    echo "${QEMU_DEB_SHA256}  ${qtmp}/q.deb" | sha256sum -c - || { echo "QEMU deb sha256 mismatch"; exit 1; }
+    dpkg-deb -x "${qtmp}/q.deb" "${qtmp}/x"
+    install -D -m 0755 "${qtmp}/x/usr/bin/qemu-x86_64" "${QEMU_DIR}/qemu-x86_64"
+    # GPL-2 compliance for a binary we redistribute in a public tarball: ship Debian's
+    # copyright file and say exactly where the corresponding source lives.
+    install -D -m 0644 "${qtmp}/x/usr/share/doc/qemu-user/copyright" "${QEMU_DIR}/copyright"
+    cat > "${QEMU_DIR}/README" <<EOF
+qemu-x86_64 (QEMU user-mode emulator, GPL-2.0) runs the x86-64 Adom CLIs on arm64.
+Unmodified binary from Debian package ${QEMU_DEB} (sha256 ${QEMU_DEB_SHA256}).
+Corresponding source: Debian source package qemu 1:11.1.2+ds-2,
+  https://snapshot.debian.org/package/qemu/1:11.1.2+ds-2/
+Registered with binfmt_misc at boot by adom-binfmt-x86_64.service (flags POF).
+EOF
+    # The "-binfmt-P" name is the Debian convention for the preserve-argv0 entry point.
+    ln -sf qemu-x86_64 "${QEMU_DIR}/x86_64-binfmt-P"
+    ln -sf "${QEMU_DIR}/qemu-x86_64" /usr/local/bin/qemu-x86_64
+    rm -rf "${qtmp}"
+    "${QEMU_DIR}/qemu-x86_64" --version | head -1
+fi
+
 # ── 2. adom user (uid/gid 1001 = cloud parity) + linger + pam fix ─────────────
 log "adom user"
 groupadd -g 1001 adom
@@ -182,7 +277,7 @@ log "adom-wiki CLI (fetching current release)"
 install -d -o adom -g adom -m 0755 /home/adom/.local /home/adom/.local/bin
 AWV="$(curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300 https://wiki.adom.inc/api/v1/packages/adom-wiki-cli/manifest | jq -r .version)"
 AWURL="$(curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300 "https://wiki.adom.inc/api/packages/adom-wiki-cli/${AWV}/assets" \
-    | jq -r '[.assets[] | select(.platform=="linux" and (.arch=="x64" or .arch=="x86_64" or .arch=="amd64"))][0].download_url')"
+    | jq -r --arg a "$(dpkg --print-architecture)" '[.assets[] | select(.platform=="linux" and (if $a=="arm64" then (.arch=="arm64" or .arch=="aarch64") else (.arch=="x64" or .arch=="x86_64" or .arch=="amd64") end))][0].download_url')"
 case "$AWURL" in http*) ;; *) AWURL="https://wiki.adom.inc${AWURL}";; esac
 curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300 "$AWURL" -o /home/adom/.local/bin/adom-wiki
 chmod 0755 /home/adom/.local/bin/adom-wiki && chown adom:adom /home/adom/.local/bin/adom-wiki
@@ -313,7 +408,7 @@ if [ "${GOLDEN_PROFILE:-full}" != "thin" ]; then
 # To move to the stable npm channel instead:
 #   npm install -g --prefix "$HOME/.local" @openai/codex
 # which overwrites this file, the same way `claude update` replaces the claude wrapper.
-b=$(ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-*/bin/linux-x86_64/codex 2>/dev/null | sort -V | tail -1)
+b=$(ls -d "$HOME"/.local/share/code-server/extensions/openai.chatgpt-*/bin/linux-$(uname -m)/codex 2>/dev/null | sort -V | tail -1)
 if [ -z "$b" ]; then
   echo "codex: no openai.chatgpt extension found under ~/.local/share/code-server/extensions" >&2
   echo "       reinstall it, or run: npm install -g --prefix \"$HOME/.local\" @openai/codex" >&2
@@ -548,6 +643,82 @@ ExecStart=/bin/sh -c 'cat /proc/sys/kernel/random/uuid > /etc/adom-distro-id && 
 WantedBy=multi-user.target
 UNIT
 ln -sf /etc/systemd/system/adom-distro-id.service /etc/systemd/system/multi-user.target.wants/adom-distro-id.service
+
+# ── 6d-arm. ARM64 ONLY: register qemu-x86_64 with binfmt_misc at boot ────────────
+# See section 1b for why this is our own oneshot and not systemd-binfmt. Properties:
+#  - ADDITIVE ONLY: writes one entry, never flushes, never touches WSLInterop.
+#  - IDEMPOTENT: binfmt_misc is shared by every distro in the WSL2 VM and survives a
+#    distro restart while the VM lives, so "already registered" is the common case.
+#  - F (fix-binary) flag: the kernel opens the interpreter at registration, so the entry
+#    keeps working from any mount namespace (other distros, chroots, containers).
+#  - Ordered After systemd-binfmt (which flushes, if anything ever enables it) and Before
+#    the services whose binaries are x86-64 (adom-relay, adom-shotlog).
+if [ "$ARCH" = "arm64" ]; then
+    log "arm64: adom-binfmt-x86_64.service"
+    cat > /usr/local/lib/adom-qemu/register-binfmt.sh <<'REG'
+#!/bin/sh
+# Register Adom's qemu-x86_64 with binfmt_misc (additive, idempotent). Safe to run by hand.
+set -e
+B=/proc/sys/fs/binfmt_misc
+[ -e "$B/register" ] || mount -t binfmt_misc binfmt_misc "$B" 2>/dev/null || true
+[ -e "$B/register" ] || { echo "binfmt_misc unavailable in this kernel" >&2; exit 1; }
+[ -e "$B/adom-qemu-x86_64" ] && { echo 1 > "$B/adom-qemu-x86_64"; exit 0; }
+printf '%s' ':adom-qemu-x86_64:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x3e\x00:\xff\xff\xff\xff\xff\xfe\xfe\xfc\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/local/lib/adom-qemu/x86_64-binfmt-P:POF' > "$B/register"
+REG
+    chmod 0755 /usr/local/lib/adom-qemu/register-binfmt.sh
+    cat > /etc/systemd/system/adom-binfmt-x86_64.service <<'UNIT'
+[Unit]
+Description=Run x86-64 Adom CLIs on arm64 (QEMU user-mode via binfmt_misc)
+ConditionArchitecture=arm64
+DefaultDependencies=no
+After=proc-sys-fs-binfmt_misc.mount systemd-binfmt.service
+Before=sysinit.target code-server.service adom-relay.service adom-shotlog.service cron.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/adom-qemu/register-binfmt.sh
+
+[Install]
+WantedBy=sysinit.target
+UNIT
+    mkdir -p /etc/systemd/system/sysinit.target.wants
+    ln -sf /etc/systemd/system/adom-binfmt-x86_64.service /etc/systemd/system/sysinit.target.wants/adom-binfmt-x86_64.service
+    # RE-ASSERT EVERY MINUTE. binfmt_misc is ONE table for the whole WSL2 VM (WSL's kernel
+    # is 6.6, before per-namespace binfmt_misc), and stock systemd FLUSHES it: systemd-binfmt
+    # flushes on start and `--unregister`s everything on stop, and a container's shutdown
+    # does the same once binfmt_misc is mounted in it (measured 2026-10-08: powering off a
+    # booted nspawn of this image wiped every entry on the host). So any OTHER systemd distro
+    # starting or stopping on the user's machine can silently delete our entry while this
+    # workspace is running, and every x86-64 CLI would then fail "Exec format error". The
+    # register script is a no-op when the entry exists, so a 60 s timer costs nothing.
+    cat > /etc/systemd/system/adom-binfmt-x86_64.timer <<'UNIT'
+[Unit]
+Description=Re-assert the x86-64 binfmt entry (another distro's systemd can flush the shared table)
+ConditionArchitecture=arm64
+
+[Timer]
+# A separate oneshot: the boot unit is RemainAfterExit=yes, so a timer would never re-run it.
+Unit=adom-binfmt-x86_64-reassert.service
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+UNIT
+    cat > /etc/systemd/system/adom-binfmt-x86_64-reassert.service <<'UNIT'
+[Unit]
+Description=Re-assert the x86-64 binfmt entry (no-op when present)
+ConditionArchitecture=arm64
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/adom-qemu/register-binfmt.sh
+UNIT
+    mkdir -p /etc/systemd/system/timers.target.wants
+    ln -sf /etc/systemd/system/adom-binfmt-x86_64.timer /etc/systemd/system/timers.target.wants/adom-binfmt-x86_64.timer
+fi
 
 # THIN PROFILE: the theme system rides the setup cascade too (it needs the extensions
 # dir the bootstrap install creates, which thin does not bake) — skip the whole of 6e.
@@ -878,6 +1049,25 @@ fi
 if [ ! -L /etc/systemd/system/kmod-static-nodes.service ]; then
     echo "SMOKE-FAIL: kmod-static-nodes.service is not masked; systemd will report degraded forever" >&2
     exit 2
+fi
+
+# ── ARM64 GATES: native toolchain + the x86-64 emulation layer ─────────────────
+if [ "$ARCH" = "arm64" ]; then
+    # code-server's bundled node is the editor runtime: it must be arm64, not emulated.
+    file_arch() { od -An -tx1 -j18 -N2 "$1" | tr -d ' \n'; }   # e_machine: b700=aarch64, 3e00=x86-64
+    test "$(file_arch /usr/lib/code-server/lib/node)" = "b700" || { echo "ARM64: code-server's node is not aarch64"; exit 1; }
+    test "$(file_arch "$(readlink -f /usr/bin/node)")" = "b700" || { echo "ARM64: system node is not aarch64"; exit 1; }
+    test -x /usr/local/lib/adom-qemu/qemu-x86_64 || { echo "ARM64: qemu-x86_64 missing"; exit 1; }
+    /usr/local/lib/adom-qemu/qemu-x86_64 --version | grep -q 'version 11\.' || { echo "ARM64: qemu-x86_64 is not QEMU 11 (8.2 segfaults on /proc/self/maps)"; exit 1; }
+    test -e /lib64/ld-linux-x86-64.so.2 || { echo "ARM64: amd64 loader missing (libc6:amd64)"; exit 1; }
+    test -L /etc/systemd/system/sysinit.target.wants/adom-binfmt-x86_64.service || { echo "ARM64: adom-binfmt-x86_64 not enabled"; exit 1; }
+    test -L /etc/systemd/system/timers.target.wants/adom-binfmt-x86_64.timer || { echo "ARM64: adom-binfmt-x86_64.timer (re-assert) not enabled"; exit 1; }
+    ! ls /etc/binfmt.d/*.conf >/dev/null 2>&1 || { echo "ARM64: /etc/binfmt.d is non-empty, systemd-binfmt would flush WSLInterop"; exit 1; }
+    # The real litmus: an x86-64 Rust CLI (opens /proc/self/maps at startup) runs. adom-cli
+    # is x86-64 from the registry; the adom-cli litmus above already executed it once.
+    test "$(file_arch /usr/local/bin/adom-cli)" = "3e00" && /usr/local/bin/adom-cli --version >/dev/null \
+        || { echo "ARM64: x86-64 adom-cli does not run through binfmt"; exit 1; }
+    echo "arm64: native code-server/node, QEMU 11 binfmt + amd64 libs, x86-64 adom-cli runs ✓"
 fi
 
 echo SMOKE-OK
