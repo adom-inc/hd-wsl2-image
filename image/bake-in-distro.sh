@@ -483,6 +483,12 @@ BASELINEEOF
 
 log "masking kmod-static-nodes.service (203/EXEC in WSL2, keeps systemd permanently degraded)"
 systemctl mask kmod-static-nodes.service || true
+# systemd-binfmt.service: current WSL mounts /proc/sys/fs/binfmt_misc/status read-only, so its
+# flush fails and the unit exits 1 every boot (systemd degraded; ralph on a fresh v31-full install,
+# 2026-10-09). It must never run in WSL2 anyway: the flush would wipe WSL's WSLInterop entry and
+# the ARM image's QEMU entry (section 1b). Masked; HD asserts the same at launch.
+log "masking systemd-binfmt.service (flush fails read-only in WSL2, and would wipe WSLInterop)"
+systemctl mask systemd-binfmt.service || true
 
 log "systemd units (code-server, adom-relay, adom-shotlog)"
 cat > /etc/systemd/system/code-server.service <<'UNIT'
