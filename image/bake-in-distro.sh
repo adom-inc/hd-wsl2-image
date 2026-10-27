@@ -66,16 +66,13 @@ log "apt baseline (runtime, no build toolchain)"
 # curl, one mid apt fetch). Make every downloader retry instead of dying on a blip.
 printf '%s\n' 'Acquire::Retries "5";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' > /etc/apt/apt.conf.d/80-adom-retries
 apt-get update
-# bubblewrap: Codex 26.1021+ sandboxes commands with it and warns at every start
-# without it ("Codex could not find bubblewrap on PATH"), measured 2026-10-27.
 apt-get install -y --no-install-recommends \
     ca-certificates curl wget git jq unzip zip tar gnupg openssh-client \
     sudo locales \
     nodejs npm python3 python3-pip \
     python3-requests python3-yaml python3-bs4 python3-lxml python3-pil \
     systemd systemd-sysv cron \
-    ripgrep xz-utils earlyoom \
-    bubblewrap
+    ripgrep xz-utils earlyoom
 log "github cli"
 curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors --connect-timeout 15 --max-time 300 https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
