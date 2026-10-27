@@ -1,5 +1,10 @@
 # hd-wsl2-image — golden WSL2 rootfs for Hydrogen
 
+> **The golden image is frozen (John, 2026-10-27): do not change the bake or cut a new image.**
+> Rebaking is too risky for every new user. Anything a workspace needs goes into the wiki packages
+> that update running workspaces (adom/hydrogen-bootstrap, adom/codex, ...), never into this bake.
+> Example: bubblewrap for Codex ships from adom/codex 0.1.28, not from here.
+
 Builds the **golden image** that Hydrogen imports via
 `wsl --import Adom-Workspace <dir> adom-golden-<ver>.tar.gz`.
 
